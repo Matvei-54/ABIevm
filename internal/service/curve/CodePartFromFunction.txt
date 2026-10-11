@@ -1,0 +1,174 @@
+ - filterPoolAndGetMetaDataPool
+//var calls []rpc.BatchElem
+//
+//for _, pool := range pools {
+//	calls = append(calls, rpc.BatchElem{
+//		Method: "eth_call",
+//		Args:   []interface{}{},
+//		Result: &result,
+//	})
+	//}
+	//
+	//err := BlockchainClientS.Client().BatchCallContext(ctx, calls)
+	//if err != nil {
+	//	return err
+//}
+
+
+ - addPoolToResultSlice
+
+for _, value := range poolsStaticMap {
+    go func(pool *PoolStaticMeta) {
+                //if _, exists := GlobalCurvePoolMap.Load(pool); exists {
+     			//	return
+     			//}
+
+     			//gauge, err := registry.GetGauge(opts, pool)
+     			//if err != nil || gauge == (common.Address{}) {
+     			//	return
+     			//}
+     			//
+     			//gaugeContract, err := crv.NewLiquidityGauge(gauge, blockchainClient)
+     			//if err != nil {
+     			//	return
+     			//}
+
+     			//killed, err := gaugeContract.IsKilled(opts)
+     			//if err == nil && killed {
+     			//	return
+     			//}
+
+     			//totalSupply, err := value.GaugeContract.TotalSupply(opts)
+               	//if err != nil {
+               	//	return
+               	//}
+               	//tvl := new(big.Int).Mul(totalSupply, CurvePoolDynamicMeta[value.Address.Hex()].VirtualPrice)
+
+
+               	//coins, err := registry.GetCoins(opts, pool)
+                //if err != nil {
+                //	return
+                //}
+                //
+                //decimals, _ := registry.GetDecimals(opts, pool)
+                //balances, _ := registry.GetBalances(opts, pool)
+
+                			//name, err := registry.GetPoolName(opts, pool)
+                			//if err != nil || name == "" {
+                			//	return
+                			//}
+
+                			//if len(coins) != len(decimals) || len(coins) != len(balances) {
+                			//	return
+                //}
+
+     			feesAPR := getPoolFeeARP(pool.Address, tvlUSD, value.Registry) //награда от комиссий обменов
+     			//lp, err := registry.GetLpToken(opts, pool.Address)
+     			//if err != nil {
+     			//	return
+     			//}
+     			//virtualPrice, err := registry.GetVirtualPriceFromLpToken(opts, lp) //не понятно, раньше вместо pool передавали адрес lp-token
+     			//if err != nil {
+     			//	return
+     			//}
+    }
+}
+
+
+
+ - main PullCurvePools
+
+//for _, addr := range registryAddrs {
+//
+//	if (addr == common.Address{}) {
+//		continue
+//	}
+	//
+	//	registry, err := crv.NewUipool(addr, blockchainClient)
+	//	if err != nil {
+	//		log.Println("Error NewUipool ", err.Error())
+	//		//return nil, err
+	//	}
+	//
+	//	poolAddrs, _ := getCountPoolAndList(registry) // узнали адреса все пулов из всех 3 регистров
+	//	err = filterPoolAndGetMetaDataPool(poolAddrs, registry)
+	//	if err != nil {
+	//		log.Println("Error filterPoolAndGetMetaDataPool", err.Error())
+	//	}
+	//	load24hVolumeUSD(CurvePoolStaticMeta)
+	//	res, err := addPoolToResultSlice(CurvePoolStaticMeta, CurvePoolDynamicMeta, registry, gaugeController, crvPrice)
+	//	if err != nil {
+	//		log.Println("Error addPoolToResultSlice ", err.Error())
+	//	}
+	//
+	//	for _, res := range res {
+	//		fmt.Printf(
+	//			"POOL: %-30s | APY: %8s%% | TVL: %12s$\n",
+	//			res.Name,
+	//			res.Apr.StringFixed(2),
+	//			res.Tvl.StringFixed(0),
+//		)
+//	}
+//
+//	fmt.Println(time.Now().Sub(timeBegin))
+//}
+
+
+    load24hVolumeUSD
+//код без chunk
+////вынести отдельно
+//query := ethereum.FilterQuery{
+//	FromBlock: big.NewInt(int64(fromBlock)),
+	//	ToBlock:   big.NewInt(int64(latestBlock)),
+	//	Addresses: poolAddress,
+	//	Topics:    [][]common.Hash{{tokenExchangeEventSig, tokenExchangeUnderlyingEventSig}},
+	//}
+	//
+	//logs, err := BlockchainClientS.FilterLogs(ctx, query)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//combined := make(map[string]float64, len(poolsMap))
+	//
+	//for _, vlog := range logs {
+	//	poolAddr := strings.ToLower(vlog.Address.Hex())
+	//
+	//	meta := poolsMap[poolAddr]
+	//	if meta == nil {
+	//		continue
+	//	}
+	//
+	//	if len(vlog.Data) < 64 {
+	//		continue
+	//	}
+	//
+	//	soldID := int(binary.BigEndian.Uint64(vlog.Data[24:32]))
+	//	if soldID < 0 || soldID >= len(meta.Coins) {
+	//		continue
+	//	}
+	//
+	//	tokenSold := new(big.Int).SetBytes(vlog.Data[32:64])
+	//	//tokenBought := new(big.Int).SetBytes(vlog.Data[96:128])
+	//	//boughtId := int(binary.BigEndian.Uint64(vlog.Data[64:96]))
+	//
+	//	tokenAddress := meta.Coins[soldID]
+	//	if tokenAddress == (common.Address{}) || meta.Decimals[soldID] == nil {
+	//		continue
+	//	}
+	//
+	//	decimals := int(meta.Decimals[soldID].Int64())
+	//	if decimals == 0 {
+	//		continue
+	//	}
+	//	//decimalsBought := int(meta.Decimals[boughtId].Int64())
+	//
+	//	amount := normalize(tokenSold, decimals)
+	//	//BoughtAmount := normalize(tokenBought, decimalsBought)
+	//
+//	price := getTokenPriceUSD(tokenAddress)
+//	//priceBought := getTokenPriceUSD(nil, tokenBought)
+//
+//	combined[poolAddr] += amount * price //volumeUSD map
+//	//combined[poolAddr] += (soldUSD + boughtUSD) / 2
+//}

@@ -1,0 +1,103 @@
+info:
+  contact: {}
+paths:
+  /reservesAave/{network}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает полный список резервов с параметрами (LTV, ликвидность,
+        цены и т.д.)
+      parameters:
+      - description: 'Название сети: ethereum | arbitrum | polygon | optimism | base'
+        in: path
+        name: network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema: {}
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить данные всех резервов Aave V3
+      tags:
+      - Aave V3
+  /reservesCurve/{network}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает полный список резервов с параметрами (LTV, ликвидность,
+        цены и т.д.)
+      parameters:
+      - description: 'Название сети: ethereum | arbitrum | polygon | optimism | base'
+        in: path
+        name: network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema: {}
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить данные всех резервов Curve V3
+      tags:
+      - Curve V3
+  /reservesStakedao/{network}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает полный список резервов с параметрами (LTV, ликвидность,
+        цены и т.д.)
+      parameters:
+      - description: 'Название сети: ethereum | arbitrum | polygon | optimism | base'
+        in: path
+        name: network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema: {}
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить данные всех резервов StakeDao
+      tags:
+      - StakeDao
+swagger: "2.0"

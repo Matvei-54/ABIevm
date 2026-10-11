@@ -1,0 +1,90 @@
+http server started on [::]:8081
+ - from HandleGetCurveReserves, before PullCurvePools 
+ - from PullCurvePools, before all
+2026/04/05 11:08:34  -- After allPools
+2026/04/05 11:10:00  -- [filter] done. skipped: 131
+2026/04/05 11:10:00  -- allPools count: 207
+2026/04/05 11:10:00  -- CurvePoolStaticMeta count: 43
+2026/04/05 11:13:04 -- load24hVolumeUSD skipped Meta 0
+2026/04/05 11:13:04 -- load24hVolumeUSD skippedByte128 0
+2026/04/05 11:13:04  --load24hVolumeUSD skippedSanity 3
+2026/04/05 11:13:04  --load24hVolumeUSD skippedBadEvent 0
+2026/04/05 11:13:04  --load24hVolumeUSD skippedBadIndex 0
+2026/04/05 11:13:04  -- Count combined: 16
+2026/04/05 11:13:04  -- Count CurveDay24HFeeMap: 16
+2026/04/05 11:13:04  -- [DEBUG] addPoolToResultSlice input pools: 43
+ ---getPoolFeeARP Volume NOT FOUND for: 0xeb16ae0052ed37f479f7fe63849198df1765a733
+ ---getPoolFeeARP Volume NOT FOUND for: 0x87650d7bbfc3a9f10587d7778206671719d9910d
+ ---getPoolFeeARP Volume NOT FOUND for: 0x6d8ff88973b15df3e2dc6abb9af29cad8c2b5ef5
+ ---getPoolFeeARP Volume NOT FOUND for: 0xaa5a67c256e27a5d80712c51971408db3370927d
+ ---getPoolFeeARP Volume NOT FOUND for: 0xcbd5cc53c5b846671c6434ab301ad4d210c21184
+ ---getPoolFeeARP Volume NOT FOUND for: 0xa5407eae9ba41422680e2e00537571bcc53efbfd
+ ---getPoolFeeARP Volume NOT FOUND for: 0x45f783cce6b7ff23b2ab2d70e416cdb7d6055f51
+ ---getPoolFeeARP Volume NOT FOUND for: 0x42d7025938bec20b69cbae5a77421082407f053a
+ ---getPoolFeeARP Volume NOT FOUND for: 0xfb9a265b5a1f52d97838ec7274a0b1442efacc87
+ ---getPoolFeeARP Volume NOT FOUND for: 0x79a8c46dea5ada233abaffd40f3a0a2b1e5a4f27
+ ---getPoolFeeARP Volume NOT FOUND for: 0xc18cc39da8b11da8c3541c598ee022258f9744da
+ ---getPoolFeeARP Volume NOT FOUND for: 0x3e01dd8a5e1fb3481f0f589056b428fc308af0fb
+ ---getPoolFeeARP Volume NOT FOUND for: 0xf9440930043eb3997fc70e1339dbb11f341de7a8
+ ---getPoolFeeARP Volume NOT FOUND for: 0xae34574ac03a15cd58a92dc79de7b1a0800f1ce3
+ ---getPoolFeeARP Volume NOT FOUND for: 0xdebf20617708857ebe4f679508e7b7863a8a8eee
+ ---getPoolFeeARP Volume NOT FOUND for: 0xecd5e75afb02efa118af914515d6521aabd189f1
+ ---getPoolFeeARP Volume NOT FOUND for: 0x1033812efec8716bbae0c19e5678698d25e26edf
+ ---getPoolFeeARP Volume NOT FOUND for: 0x447ddd4960d9fdbf6af9a790560d0af76795cb08
+ ---getPoolFeeARP Volume NOT FOUND for: 0x8c524635d52bd7b1bd55e062303177a7d916c046
+ ---getPoolFeeARP Volume NOT FOUND for: 0x4ca9b3063ec5866a4b82e437059d2c43d1be596f
+ ---getPoolFeeARP Volume NOT FOUND for: 0x8038c01a0390a8c547446a0b2c18fc9aefecc10c
+ ---getPoolFeeARP Volume NOT FOUND for: 0xbcb91e689114b9cc865ad7871845c95241df4105
+ ---getPoolFeeARP Volume NOT FOUND for: 0x04c90c198b2eff55716079bc06d7ccc4aa4d7512
+ ---getPoolFeeARP Volume NOT FOUND for: 0xa2b47e3d5c44877cca798226b7b8118f9bfb7a56
+ ---getPoolFeeARP Volume NOT FOUND for: 0x6a274de3e2462c7614702474d64d376729831dca
+ ---getPoolFeeARP Volume NOT FOUND for: 0x8474ddbe98f5aa3179b3b3f5942d724afcdec9f6
+ ---getPoolFeeARP Volume NOT FOUND for: 0x0fafafd3c393ead5f5129cfc7e0e12367088c473
+POOL: aDAI/aSUSD                     | APY:     0.00% | TVL:       279848$
+POOL: OUSD/3Crv                      | APY:     0.00% | TVL:    163082504$
+POOL: XIM/3Crv                       | APY:     0.00% | TVL:    163038240$
+POOL: FRAX/USDC                      | APY:     0.21% | TVL:     12324084$
+POOL: MIM/3Crv                       | APY:     5.11% | TVL:    180637681$
+POOL: DOLA/3Crv                      | APY:     0.00% | TVL:    163046772$
+POOL: ZARP/ibZAR                     | APY:     0.00% | TVL:            1$
+POOL: 0xEeee/ankrETH                 | APY:     0.01% | TVL:       234929$
+POOL: DAI/USDC/USDT/sUSD             | APY:     0.00% | TVL:  31167783630$
+POOL: USDP/3Crv                      | APY:     0.00% | TVL:    163043251$
+POOL: yDAI/yUSDC/yUSDT/yTUSD         | APY:     0.00% | TVL:          874$
+POOL: DAI/USDC/USDT                  | APY:     0.02% | TVL:    326074852$
+POOL: GUSD/3Crv                      | APY:     0.00% | TVL:    165511262$
+POOL: 0xEeee/frxETH                  | APY:     0.00% | TVL:      8258282$
+POOL: ycDAI/ycUSDC/ycUSDT/USDP       | APY:     0.01% | TVL:        26714$
+POOL: 0xEeee/aETHb                   | APY:     0.00% | TVL:           77$
+POOL: USDP/3Crv                      | APY:     0.00% | TVL:    163044687$
+POOL: yDAI/yUSDC/yUSDT/yBUSD         | APY:     0.00% | TVL:        64953$
+POOL: cDAI/cUSDC/USDT                | APY:     0.00% | TVL:       104549$
+POOL: RSV/3Crv                       | APY:     0.00% | TVL:    163037510$
+POOL: USDK/3Crv                      | APY:     0.00% | TVL:    163170792$
+POOL: 0xEeee/rETH                    | APY:     0.00% | TVL:       167123$
+POOL: FRAX/USDP                      | APY:     0.00% | TVL:        22588$
+POOL: alUSD/3Crv                     | APY:     0.00% | TVL:    163475535$
+POOL: CRV/cvxCRV                     | APY:     0.01% | TVL:       285570$
+POOL: aDAI/aUSDC/aUSDT               | APY:     0.00% | TVL:      4791738$
+POOL: renBTC/WBTC/sBTC               | APY:     0.21% | TVL:       279202$
+POOL: TUSD/3Crv                      | APY:     0.00% | TVL:    163047705$
+POOL: XSTUSD/3Crv                    | APY:     0.00% | TVL:    163094712$
+POOL: rETH/wstETH                    | APY:     0.00% | TVL:       305820$
+POOL: FXS/sdFXS                      | APY:     0.00% | TVL:          308$
+POOL: HBTC/WBTC                      | APY:     0.00% | TVL:         5519$
+POOL: renBTC/WBTC                    | APY:     1.18% | TVL:       936720$
+POOL: 0xEeee/stETH                   | APY:     0.00% | TVL:    174418416$
+POOL: DUSD/3Crv                      | APY:     0.00% | TVL:    163037519$
+POOL: PWRD/3Crv                      | APY:     0.00% | TVL:    165168942$
+POOL: CVX/bveCVX                     | APY:     0.00% | TVL:         6425$
+POOL: cDAI/cUSDC                     | APY:     0.02% | TVL:      1136917$
+POOL: aUSDC/aDAI                     | APY:     0.00% | TVL:          473$
+POOL: mUSD/3Crv                      | APY:     0.00% | TVL:    163349223$
+POOL: BaoUSD/3Crv                    | APY:     0.00% | TVL:    163037470$
+POOL: LUSD/3Crv                      | APY:     0.00% | TVL:    177797884$
+POOL: FRAX/3Crv                      | APY:     0.00% | TVL:    164240123$
+5m19.4561759s
+ - after Curve CallContract in CurveService
+ - after Curve CallContract
+2026/04/05 11:13:24  -- [DEBUG] addPoolToResultSlice output pools: 43
+2026/04/05 11:13:24  -- After addPoolToResultSlice

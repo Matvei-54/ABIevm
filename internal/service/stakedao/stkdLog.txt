@@ -1,0 +1,32 @@
+first result 20.06.26
+
+http server started on [::]:8081
+ - from HandleGetStakeDaoReserves, before PoolStakeDaoPools
+ -- Before -for- gauges
+ -- After -for- gauges
+Stake DAO avUSD/evaUSDC Vault 0
+Stake DAO evaUSDC/evaUSDT Vault 0
+Stake DAO frxUSD/scrvUSD Vault 0
+Stake DAO sdUSD/OUSD Vault 0
+Stake DAO frxUSD/ebUSD Vault 0
+Stake DAO AZND/frxUSD Vault 0
+Stake DAO frxUSD/USP Vault 0
+Stake DAO muBOND/frxUSD Vault 0
+Stake DAO OBUSD/USDC Vault 0
+Stake DAO srRoyUSDC/frxUSD Vault 0
+Stake DAO CRV LlamaLend Recovery Vault 0
+Stake DAO BOLD/USDC Pool Vault 0
+Stake DAO evaETH/frxETH Vault 0
+Stake DAO frxUSD/sDOLA Vault 0
+Stake DAO frxUSD/sUSDat Vault 0
+Stake DAO frxUSD/USPC Vault 0
+Stake DAO frxUSD/evaUSDT Vault 0
+Stake DAO KRWQ/frxUSD Vault 0
+Stake DAO iREET/pmUSD Vault 0
+Stake DAO alUSD/frxUSD Vault 0
+Stake DAO alUSD/USDC Vault 0
+Stake DAO Balancer Aave Lido wETH-wstETH Vault 0
+Stake DAO 80% ixEdel / 20% USDC Vault 0
+Stake DAO Balancer 80TREE-20AavePrimeWETH Vault 0
+Stake DAO Infinifi msUSD-iUSD Vault 0
+ - after StakeDao CallContract

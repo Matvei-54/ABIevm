@@ -1,0 +1,45 @@
+[
+  {
+    "inputs": [
+      { "internalType": "contract IPoolAddressesProvider", "name": "provider", "type": "address" }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      { "internalType": "contract IPool", "name": "pool", "type": "address" }
+    ],
+    "name": "getReservesData",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "address", "name": "underlyingAsset", "type": "address" },
+          { "internalType": "string", "name": "name", "type": "string" },
+          { "internalType": "string", "name": "symbol", "type": "string" },
+          { "internalType": "uint8", "name": "decimals", "type": "uint8" },
+          { "internalType": "address", "name": "aTokenAddress", "type": "address" },
+          { "internalType": "address", "name": "stableDebtTokenAddress", "type": "address" },
+          { "internalType": "address", "name": "variableDebtTokenAddress", "type": "address" },
+          { "internalType": "address", "name": "interestRateStrategyAddress", "type": "address" },
+          { "internalType": "uint256", "name": "availableLiquidity", "type": "uint256" },
+          { "internalType": "uint256", "name": "totalStableDebt", "type": "uint256" },
+          { "internalType": "uint256", "name": "totalVariableDebt", "type": "uint256" },
+          { "internalType": "uint256", "name": "liquidityRate", "type": "uint256" },
+          { "internalType": "uint256", "name": "variableBorrowRate", "type": "uint256" },
+          { "internalType": "uint256", "name": "stableBorrowRate", "type": "uint256" },
+          { "internalType": "uint256", "name": "averageStableRate", "type": "uint256" },
+          { "internalType": "uint256", "name": "liquidityIndex", "type": "uint256" },
+          { "internalType": "uint256", "name": "variableBorrowIndex", "type": "uint256" },
+          { "internalType": "uint40" , "name": "lastUpdateTimestamp", "type": "uint40" }
+        ],
+        "internalType": "struct IUiPoolDataProviderV3.AggregatedReserveData[]",
+        "name": "reservesData",
+        "type": "tuple[]"
+      },
+      { "internalType": "uint256", "name": "blockNumber", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

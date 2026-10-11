@@ -1,0 +1,152 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/reservesAave/{network}": {
+            "get": {
+                "description": "Возвращает полный список резервов с параметрами (LTV, ликвидность, цены и т.д.)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Aave V3"
+                ],
+                "summary": "Получить данные всех резервов Aave V3",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Название сети: ethereum | arbitrum | polygon | optimism | base",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {}
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/reservesCurve/{network}": {
+            "get": {
+                "description": "Возвращает полный список резервов с параметрами (LTV, ликвидность, цены и т.д.)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Curve V3"
+                ],
+                "summary": "Получить данные всех резервов Curve V3",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Название сети: ethereum | arbitrum | polygon | optimism | base",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {}
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/reservesStakedao/{network}": {
+            "get": {
+                "description": "Возвращает полный список резервов с параметрами (LTV, ликвидность, цены и т.д.)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "StakeDao"
+                ],
+                "summary": "Получить данные всех резервов StakeDao",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Название сети: ethereum | arbitrum | polygon | optimism | base",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {}
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

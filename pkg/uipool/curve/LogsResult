@@ -1,0 +1,218 @@
+http server started on [::]:8081
+ - from HandleGetCurveReserves, before PullCurvePools
+ - from PullCurvePools, before all
+2026/03/29 00:47:21  -- After allPools
+2026/03/29 00:48:12 Error filterPoolAndGetMetaDataPool execution reverted
+ -- Registry pool address: 0xd632f22692fac7611d2aa1c0d552930d43caed3b
+ ---getPoolFeeARP Searching volume for: 0xd632f22692fac7611d2aa1c0d552930d43caed3b 640734.0309002501
+---getPoolFeeARP Volume NOT FOUND for: 0xd632f22692fac7611d2aa1c0d552930d43caed3b
+ - addPoolToResultSlice poolname -  frax
+ - addPoolToResultSlice CRV APR: 0.0003869802314776976
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xdc24316b9ae028f1497c275eb9192a3ea0f67022
+ ---getPoolFeeARP Searching volume for: 0xdc24316b9ae028f1497c275eb9192a3ea0f67022 1.7232433790835312e+08
+---getPoolFeeARP Volume NOT FOUND for: 0xdc24316b9ae028f1497c275eb9192a3ea0f67022
+ - addPoolToResultSlice poolname -  steth
+ - addPoolToResultSlice CRV APR: 0.0015288797697941708
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xa2b47e3d5c44877cca798226b7b8118f9bfb7a56
+ ---getPoolFeeARP Searching volume for: 0xa2b47e3d5c44877cca798226b7b8118f9bfb7a56 1.1373784747953683e+06
+---getPoolFeeARP Volume NOT FOUND for: 0xa2b47e3d5c44877cca798226b7b8118f9bfb7a56
+ - addPoolToResultSlice poolname -  compound
+ - addPoolToResultSlice CRV APR: 0.01949708935767721
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xa96a65c051bf88b4095ee1f2451c2a9d43f53ae2
+ -- Registry pool address: 0x93054188d876f558f4a66b2ef1d97d16edf0895b
+ ---getPoolFeeARP Searching volume for: 0x93054188d876f558f4a66b2ef1d97d16edf0895b 687256.3697746254
+---getPoolFeeARP Volume NOT FOUND for: 0x93054188d876f558f4a66b2ef1d97d16edf0895b
+ - addPoolToResultSlice poolname -  ren
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ ---getPoolFeeARP Searching volume for: 0xa96a65c051bf88b4095ee1f2451c2a9d43f53ae2 230122.84711226338
+---getPoolFeeARP Volume NOT FOUND for: 0xa96a65c051bf88b4095ee1f2451c2a9d43f53ae2
+ - addPoolToResultSlice poolname -  aeth
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xdebf20617708857ebe4f679508e7b7863a8a8eee
+ ---getPoolFeeARP Searching volume for: 0xdebf20617708857ebe4f679508e7b7863a8a8eee 4.789686284897775e+06
+---getPoolFeeARP Volume NOT FOUND for: 0xdebf20617708857ebe4f679508e7b7863a8a8eee
+ - addPoolToResultSlice poolname -  aave
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x4f062658eaaf2c1ccf8c8e36d6824cdf41167956
+ ---getPoolFeeARP Searching volume for: 0x4f062658eaaf2c1ccf8c8e36d6824cdf41167956 1.6614383289758003e+08
+---getPoolFeeARP Volume NOT FOUND for: 0x4f062658eaaf2c1ccf8c8e36d6824cdf41167956
+ - addPoolToResultSlice poolname -  gusd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x06364f10b501e868329afbc005b3492902d6c763
+ ---getPoolFeeARP Searching volume for: 0x06364f10b501e868329afbc005b3492902d6c763 25336.624205469634
+---getPoolFeeARP Volume NOT FOUND for: 0x06364f10b501e868329afbc005b3492902d6c763
+ - addPoolToResultSlice poolname -  pax
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x79a8c46dea5ada233abaffd40f3a0a2b1e5a4f27
+ -- Registry pool address: 0x45f783cce6b7ff23b2ab2d70e416cdb7d6055f51
+ ---getPoolFeeARP Searching volume for: 0x45f783cce6b7ff23b2ab2d70e416cdb7d6055f51 852.3419725674751
+---getPoolFeeARP Volume NOT FOUND for: 0x45f783cce6b7ff23b2ab2d70e416cdb7d6055f51
+ ---getPoolFeeARP Searching volume for: 0x79a8c46dea5ada233abaffd40f3a0a2b1e5a4f27 64604.05697041076
+ - addPoolToResultSlice poolname -  y
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+---getPoolFeeARP Volume NOT FOUND for: 0x79a8c46dea5ada233abaffd40f3a0a2b1e5a4f27
+ - addPoolToResultSlice poolname -  busd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xf9440930043eb3997fc70e1339dbb11f341de7a8
+ ---getPoolFeeARP Searching volume for: 0xf9440930043eb3997fc70e1339dbb11f341de7a8 163778.28232741874
+---getPoolFeeARP Volume NOT FOUND for: 0xf9440930043eb3997fc70e1339dbb11f341de7a8
+ - addPoolToResultSlice poolname -  reth
+ - addPoolToResultSlice CRV APR: 61.351487392331784
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x43b4fdfd4ff969587185cdb6f0bd875c5fc83f8c
+ ---getPoolFeeARP Searching volume for: 0x43b4fdfd4ff969587185cdb6f0bd875c5fc83f8c 256667.34842769825
+---getPoolFeeARP Volume NOT FOUND for: 0x43b4fdfd4ff969587185cdb6f0bd875c5fc83f8c
+ - addPoolToResultSlice poolname -  alusd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xae34574ac03a15cd58a92dc79de7b1a0800f1ce3
+ ---getPoolFeeARP Searching volume for: 0xae34574ac03a15cd58a92dc79de7b1a0800f1ce3 22674.277527463906
+---getPoolFeeARP Volume NOT FOUND for: 0xae34574ac03a15cd58a92dc79de7b1a0800f1ce3
+ - addPoolToResultSlice poolname -  Curve.fi FRAX/USDP
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xa1f8a6807c402e4a15ef4eba36528a3fed24e577
+ ---getPoolFeeARP Searching volume for: 0xa1f8a6807c402e4a15ef4eba36528a3fed24e577 8.116720881636621e+06
+---getPoolFeeARP Volume NOT FOUND for: 0xa1f8a6807c402e4a15ef4eba36528a3fed24e577
+ - addPoolToResultSlice poolname -  Curve.fi ETH/frxETH
+ - addPoolToResultSlice CRV APR: 27.02972525982461
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xecd5e75afb02efa118af914515d6521aabd189f1
+ ---getPoolFeeARP Searching volume for: 0xecd5e75afb02efa118af914515d6521aabd189f1 6324.859183429948
+---getPoolFeeARP Volume NOT FOUND for: 0xecd5e75afb02efa118af914515d6521aabd189f1
+ - addPoolToResultSlice poolname -  tusd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x4ca9b3063ec5866a4b82e437059d2c43d1be596f
+ ---getPoolFeeARP Searching volume for: 0x4ca9b3063ec5866a4b82e437059d2c43d1be596f 6482.4275348170395
+---getPoolFeeARP Volume NOT FOUND for: 0x4ca9b3063ec5866a4b82e437059d2c43d1be596f
+ -- Registry pool address: 0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7
+ - addPoolToResultSlice poolname -  hbtc
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ ---getPoolFeeARP Searching volume for: 0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7 3.273812289022077e+08
+---getPoolFeeARP Volume NOT FOUND for: 0xbebc44782c7db0a1a60cb6fe97d0b483032ff1c7
+ - addPoolToResultSlice poolname -  3pool
+ - addPoolToResultSlice CRV APR: 8.057189095879354e-05
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x42d7025938bec20b69cbae5a77421082407f053a
+ ---getPoolFeeARP Searching volume for: 0x42d7025938bec20b69cbae5a77421082407f053a 1.6369644278740063e+08
+---getPoolFeeARP Volume NOT FOUND for: 0x42d7025938bec20b69cbae5a77421082407f053a
+ - addPoolToResultSlice poolname -  usdp
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xeb16ae0052ed37f479f7fe63849198df1765a733
+ ---getPoolFeeARP Searching volume for: 0xeb16ae0052ed37f479f7fe63849198df1765a733 282160.0076932373
+---getPoolFeeARP Volume NOT FOUND for: 0xeb16ae0052ed37f479f7fe63849198df1765a733
+ - addPoolToResultSlice poolname -  saave
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x52ea46506b9cc5ef470c5bf89f17dc28bb35d85c
+ ---getPoolFeeARP Searching volume for: 0x52ea46506b9cc5ef470c5bf89f17dc28bb35d85c 104519.77010523129
+---getPoolFeeARP Volume NOT FOUND for: 0x52ea46506b9cc5ef470c5bf89f17dc28bb35d85c
+ - addPoolToResultSlice poolname -  usdt
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x8474ddbe98f5aa3179b3b3f5942d724afcdec9f6
+ ---getPoolFeeARP Searching volume for: 0x8474ddbe98f5aa3179b3b3f5942d724afcdec9f6 1.6469417765328604e+08
+---getPoolFeeARP Volume NOT FOUND for: 0x8474ddbe98f5aa3179b3b3f5942d724afcdec9f6
+ - addPoolToResultSlice poolname -  musd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714
+ ---getPoolFeeARP Searching volume for: 0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714 231368.96859420583
+---getPoolFeeARP Volume NOT FOUND for: 0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714
+ - addPoolToResultSlice poolname -  sbtc
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xed279fdd11ca84beef15af5d39bb4d4bee23f0ca
+ ---getPoolFeeARP Searching volume for: 0xed279fdd11ca84beef15af5d39bb4d4bee23f0ca 1.197120506905135e+07
+---getPoolFeeARP Volume NOT FOUND for: 0xed279fdd11ca84beef15af5d39bb4d4bee23f0ca
+ - addPoolToResultSlice poolname -  lusd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x5a6a4d54456819380173272a5e8e9b9904bdf41b
+ ---getPoolFeeARP Searching volume for: 0x5a6a4d54456819380173272a5e8e9b9904bdf41b 8.82707732943127e+06
+---getPoolFeeARP Volume NOT FOUND for: 0x5a6a4d54456819380173272a5e8e9b9904bdf41b
+ - addPoolToResultSlice poolname -  mim
+ - addPoolToResultSlice CRV APR: 5.6484308570121335
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x3e01dd8a5e1fb3481f0f589056b428fc308af0fb
+ ---getPoolFeeARP Searching volume for: 0x3e01dd8a5e1fb3481f0f589056b428fc308af0fb 1.6382397391130793e+08
+---getPoolFeeARP Volume NOT FOUND for: 0x3e01dd8a5e1fb3481f0f589056b428fc308af0fb
+ - addPoolToResultSlice poolname -  usdk
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xdcef968d416a41cdac0ed8702fac8128a64241a2
+ ---getPoolFeeARP Searching volume for: 0xdcef968d416a41cdac0ed8702fac8128a64241a2 1.4081663136535302e+07
+---getPoolFeeARP Volume NOT FOUND for: 0xdcef968d416a41cdac0ed8702fac8128a64241a2
+ - addPoolToResultSlice poolname -  Curve.fi FRAX/USDC
+ - addPoolToResultSlice CRV APR: 0.26308334554000323
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0x8038c01a0390a8c547446a0b2c18fc9aefecc10c
+ ---getPoolFeeARP Searching volume for: 0x8038c01a0390a8c547446a0b2c18fc9aefecc10c 1.6369070774024805e+08
+---getPoolFeeARP Volume NOT FOUND for: 0x8038c01a0390a8c547446a0b2c18fc9aefecc10c
+ - addPoolToResultSlice poolname -  dusd
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xa5407eae9ba41422680e2e00537571bcc53efbfd
+ ---getPoolFeeARP Searching volume for: 0xa5407eae9ba41422680e2e00537571bcc53efbfd 3.2267696325667007e+10
+---getPoolFeeARP Volume NOT FOUND for: 0xa5407eae9ba41422680e2e00537571bcc53efbfd
+ - addPoolToResultSlice poolname -  susd
+ - addPoolToResultSlice CRV APR: 0.00023113558584612347
+ - addPoolToResultSlice Fee APR: 0
+ -- Registry pool address: 0xc18cc39da8b11da8c3541c598ee022258f9744da
+ ---getPoolFeeARP Searching volume for: 0xc18cc39da8b11da8c3541c598ee022258f9744da 1.6369069844604406e+08
+---getPoolFeeARP Volume NOT FOUND for: 0xc18cc39da8b11da8c3541c598ee022258f9744da
+ - addPoolToResultSlice poolname -  rsv
+ - addPoolToResultSlice CRV APR: 0
+ - addPoolToResultSlice Fee APR: 0
+POOL: frax                           | APY:     0.00% | TVL:       640734$
+POOL: steth                          | APY:     0.00% | TVL:    172324338$
+POOL: compound                       | APY:     0.02% | TVL:      1137378$
+POOL: ren                            | APY:     0.00% | TVL:       687256$
+POOL: aeth                           | APY:     0.00% | TVL:       230123$
+POOL: aave                           | APY:     0.00% | TVL:      4789686$
+POOL: gusd                           | APY:     0.00% | TVL:    166143833$
+POOL: pax                            | APY:     0.00% | TVL:        25337$
+POOL: y                              | APY:     0.00% | TVL:          852$
+POOL: busd                           | APY:     0.00% | TVL:        64604$
+POOL: reth                           | APY:    61.35% | TVL:       163778$
+POOL: alusd                          | APY:     0.00% | TVL:       256667$
+POOL: Curve.fi FRAX/USDP             | APY:     0.00% | TVL:        22674$
+POOL: Curve.fi ETH/frxETH            | APY:    27.03% | TVL:      8116721$
+POOL: tusd                           | APY:     0.00% | TVL:         6325$
+POOL: hbtc                           | APY:     0.00% | TVL:         6482$
+POOL: 3pool                          | APY:     0.00% | TVL:    327381229$
+POOL: usdp                           | APY:     0.00% | TVL:    163696443$
+POOL: saave                          | APY:     0.00% | TVL:       282160$
+POOL: usdt                           | APY:     0.00% | TVL:       104520$
+POOL: musd                           | APY:     0.00% | TVL:    164694178$
+POOL: sbtc                           | APY:     0.00% | TVL:       231369$
+POOL: lusd                           | APY:     0.00% | TVL:     11971205$
+POOL: mim                            | APY:     5.65% | TVL:      8827077$
+POOL: usdk                           | APY:     0.00% | TVL:    163823974$
+POOL: Curve.fi FRAX/USDC             | APY:     0.26% | TVL:     14081663$
+POOL: dusd                           | APY:     0.00% | TVL:    163690708$
+POOL: susd                           | APY:     0.00% | TVL:  32267696326$
+POOL: rsv                            | APY:     0.00% | TVL:    163690698$
+1m34.3621843s
+ - after Curve CallContract in CurveService
+ - after Curve CallContract
+2026/03/29 00:48:22  -- After addPoolToResultSlice
+
+
+
+
+-------------------------
+h

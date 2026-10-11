@@ -1,0 +1,58 @@
+https://www.youtube.com/@nikolay_tuzov/videos  некоторые видео
+
+https://www.youtube.com/@olezhek28_golang/videos
+его же основной канал https://www.youtube.com/@olezhek28go/videos
+
+https://www.youtube.com/watch?v=v6rMPOlPzpk  -- сокрощатель ссылок
+https://youtu.be/v6rMPOlPzpk?t=871
+
+https://www.youtube.com/@balun.courses/videos -- полезные видосики
+https://www.youtube.com/@vladimir_balun_programming/videos
+
+https://habr.com/ru/companies/timeweb/articles/770912/ дочитать  конкурентность потоков
+https://www.youtube.com/watch?v=mvUiw9ilqn8 конкурентность
+https://www.youtube.com/watch?v=4enHIBJLEng  конкурентность
+
+https://youtu.be/8z6FAaNPA-M?list=PLknJ4Vr6efQHYJio6GSXdtYvW693En54B&t=219  Go планировщик
+
+
+можно попробовать библиотеку для тестирования - testify
+
+
+https://youtu.be/kSfR5LWKUrM?list=PLc2Vkg57qmuRNHp6NNvYRVgg3OP-b5E_v&t=1015 Go подход
+
+https://www.youtube.com/@ArgooDev видосы по основам. среднее качество
+
+https://www.youtube.com/@nestartup/videos видосы
+
+https://golang-blog.blogspot.com/2021/08/slice-tricks.html?ysclid=mkoaoqrsjz145181460  фильтрация слайса ??
+
+https://github.com/loong/go-concurrency-exercises конкурентности в Go
+
+https://github.com/olezhek28/golang-arch   архитектура Олег
+
+https://www.youtube.com/watch?v=Fjkckov4F38  - контекст
+
+
+проверить  Codeforces
+
+https://play.kodikapusta.ru/  примеры на Go
+
+https://github.com/rezmoss/simple-load-balancer балансировщик трафика на Go https://kodikapusta.ru/articles/load-balancer
+
+
+
+https://uproger.com/go-100-voprosov-zadanij-s-sobesedovanij-podgotovka-k-sobesedovaniyu-golang/  100 вопросов
+https://www.youtube.com/watch?v=ZvaD-G5_3vQ&list=PLysMDSbb9HcxpAb8lhnMaRpX890wSLz66&index=34
+
+
+https://t.me/githubopensauce   статьи всякие, может есть что-то
+
+
+https://www.youtube.com/@lectory_fpmi/courses   разные курсы
+
+
+
+
+
+

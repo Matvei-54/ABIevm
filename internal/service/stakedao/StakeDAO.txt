@@ -1,0 +1,49 @@
+
+
+map с адресами контроллеров разных сетей, проверить.
+stakeDAOControllers -- ETH - 0x2d8BcE1FaE00a959354aCD9eBf9174337A64d4fb
+
+
+
+1. список gauge-адресов держим у себя в конфиге, а всё остальное (name, TVL, APY) читаем из блокчейна через ABI
+
+StakeDAO ProtocolController умеет по gauge найти vault(gauge) и asset(gauge), но не даёт нормального публичного метода
+“перечисли мне все gauge”.
+А их страница адресов вообще пишет, что address book синхронизируется из offchain registry.
+Поэтому discovery “с нуля” ончейн не очень удобен, и практичная схема — хранить список gauge у себя и уже по нему всё дочитывать ончейн.
+
+ERC4626
+Это стандарт vault-контрактов. Для StakeDAO он удобен тем, что TVL можно брать через totalAssets() и конвертацию convertToAssets()
+
+Strategy - конкретная архитектура StakeDAO V2.
+
+Discovery - не контракт и не сущность.
+
+offchain registry (их GitHub)
+
+
+добавлю multicall batching,
+и сделаю поддержку нескольких типов gauge ABI через fallback-детект
+
+
+Gauge в StakeDAO — это смарт-контракт, который распределяет награды (токены SDT) между поставщиками ликвидности.
+) между поставщиками ликвидности. Это механизм, определяющий доходность пулов: чем больше голосов (веса veSDT) получает gauge,
+ тем выше вознаграждение для пользователей, разместивших свои LP-токены в соответствующей стратегии Stake DAO.
+
+ SeedGauges — это твой стартовый список strategy gauge адресов, от которых ты уже идёшь в ProtocolController
+
+
+Подумать, как заменить конфиг настроек под каждую сеть, на что-то простое? может в базу вынести и тянуть раз 4/6 часа
+
+
+
+Алгоритм:
+    Список gauge-адресов у нас в конфиге
+    Шаг 1? В контракте ProtocolController вызвать метод vault передать адрес gauge - получаем адрес контракта RewardVault
+        В контракте ProtocolController вызвать метод asset передать адрес gauge - получаем адрес LP token
+        В контракте ProtocolController вызвать метод rewardReceiver передать адрес gauge - получаем адрес reward receiver
+
+        пока заменил на DiscoverStakeDAOVaults, чтобы из событий тянуть названия хранилищ и адреса.
+    Шаг 2? В контракте RewardVault name() symbol() gauge() ACCOUNTANT() - Метаданные пула. RewardVault у StakeDAO описан как ERC4626 vault.
+    Шаг 3? В Контракт: RewardVault totalAssets(), totalSupply(), convertToAssets(shares) - получаем TVL. для RewardVault assets == shares
+    Шаг 4? Контракт: Gauge + Accountant

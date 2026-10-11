@@ -1,0 +1,50 @@
+https://www.youtube.com/watch?v=NDCOkaB4dHM  Взламываю смарт-контракт на Solidity
+
+https://habr.com/ru/articles/757690/ solidity  JS
+
+https://habr.com/ru/articles/871276/ просто интересная статья про Curve
+
+
+https://www.reddit.com/r/golang/comments/vdtgng/any_technique_to_do_multicall_not_batch_request/?tl=ru  multicall
+
+
+
+
+old UIPoll  from ZeroLand  0xa6EA08D16d47feE408505fda73520EbefC68Ef01
+
+
+Он возвращает все активные incentives.
+https://api.merkl.xyz/v1/opportunities?chainId=1
+
+Расчет: TVL = (Количество заблокированных активов) * (Текущая рыночная цена токена/монеты)
+
+
+curve
+
+            AddressProvider  Старый AddressProvider (v1)
+            0x5ffe7FB82894076ECB99A30D6A32e969e6e35E98  адреса всех важных Curve-контракто
+
+            V2
+            0x0000000022D53366457F9d5E68Ec105046FC4383
+
+            addressProvider.get_address(7) → MetaRegistry
+            // пример (ETH):
+            // 0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC
+
+
+
+abigen  --abi ./contracts/AaveUIProvider.json  --pkg uipool  --out ./pkg/uipool/ui_pool_data_provider.go
+
+BoundContract + Call = универсальный способ вызвать любой контракт
+
+
+https://www.youtube.com/@Bedrosova-and-Blockchain канал про Solidity
+
+
+
+
+
+свое:
+https://bigenc.ru/c/svch-elektronika-e9b007
+https://lauftex.ru/blogs/osnovi-svch-electroniki
+https://youtu.be/BaHE8LC6Bq4?t=374

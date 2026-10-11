@@ -1,0 +1,195 @@
+1    через AddressProvider получаем адреса registry по разному типу пулов
+
+    get_address(0) → StableSwap
+    get_address(5) → Factory
+    get_address(7) → Crypto
+
+    //StableSwapRegistry := "0x90E00ACe148ca3b23Ac1bC8C240C2a7Dd9c2d7f5"
+    	//Factory := "0x8F942C20D02bEfc377D41445793068908E2250D0"
+    	//metaRegistry := "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+
+
+    	GaugeController  0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB
+    	Gauge Liquidity  взял рандомно 0xC5cfaDA84E902aD92DD40194f0883ad49639b023
+    	Chainlink CRV чтобы узнать цену CRV 0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f
+
+
+    	multicall 0xcA11bde05977b3631167028862bE2a173976CA11
+
+
+2
+
+API KEY - "https://eth-mainnet.g.alchemy.com/v2/--"
+
+------------------------------------------------------------------------------------------
+Resume
+Поднять ноду ETH за 12 евро, проверить на ней, все ли функции с chunk норм выполняются.
+Остановился, что нужно в функции multicallBatchGetPoolData нужно перенести получение static данных о пуле, многие сейчас
+ запрашиваем внутри filterPoolAndGetMetaDataPool. А внутри filterPoolAndGetMetaDataPool оставить только gauge isKilled.
+ Затем подключить loadSliceAllPools  + (registryABI) multicallBatchGetPoolData  + снять ограничение на 150
+__________________________________________________________________________________________
+
+Для каждого registry. узнать, сколько пулов. получить адрес каждого пула
+    pool_count()  например получил 49
+    pool_list(i)  с 0 по 48 получаем адрес пула на каждую цифру
+
+    ты получаешь все pool addresses
+
+3   MetaRegistry умеет работать со всеми, но не хранит список
+Каждый pool прогоняешь через MetaRegistry
+
+  В MetaRegistry вызывать функции с каждым контрактом из шага 2
+
+  сохранять в один слайс
+
+  если inflation_rate нет, В таком случае APR = 0
+  reward распределяется по working balances
+
+
+
+abigen  --abi ./contracts/curve/StablePoolRegistry.json  --pkg uipool  --out ./pkg/uipool/curve/stables_wap_registry.go
+
+abigen  --abi AddressProvider.json --pkg addressprovider --type AddressProvider --out address_provider.go
+
+http://localhost:8081/swagger/index.html
+
+GlobalCurvePoolMap - проверяем обрабатывался ли Pool раньше. хранит common.Address
+CurveDay24HFeeMap - размер комиссий от обменов за 24 часа. хранит common.Address/float
+CurvePoolStaticMeta - храним статические данные Pool, данные обычно не меняются.  common.Address Hex/*PoolStaticMeta
+CurvePoolDynamicMeta - храним динамические данные Pool, данные обычно меняются.  common.Address Hex/* &PoolDynamicMeta
+RegistryPoolMap - мапа с адресов регистра от Pool. хранит common.Address пула / common.Address регистра
+
+
+можно добавить boost - Gauge reward, на основе working_balance, но нужно знать veCRV пользователя
+    это персональная доходность
+
+ Точность - оставляй текущий метод через balances * token prices. Он точнее, чем totalSupply * virtualPrice.
+
+
+
+ - кеш данных api "https://api.curve.fi/api/getPools/ethereum/main" дергать весь слайс или дергать chainlink для каждого одного пула
+    - может этот лист 1 раз запрашивать и переложить в map, при вызове главной функции PullCurvePools,
+        чтобы с каждым пулом не делать запрос api, а по ключу адреса пула искать цену?
+ - где какой TVL использовать? какой для Fee, а какой для CRV reward?
+ - метод получения виртуально цены, там адрес пула или адрес lp-token
+ - 0.0004 это фиксированный размер комиссии обмена
+ - в функции calcGaugeAPR не используется TVL в расчетах
+ - у тебя registry.GetVirtualPrice, а я не нашел такой функции, видел только registry.GetVirtualPriceFromLpToken(opts, pool)
+
+ - один раз получать Curve API volume  пункт 1
+ - кешировать CRV price ???
+ - убрать 100+ HTTP запросов к llama
+ - сделать production-ready Curve indexer архитектуру
+
+
+ заменить получение FeeGet не по Curve api, а по 24hVolumeUSD  get24hVolumeUSD - load24hVolumeUSD  loadDayFeePoolAPI
+ FeeFloat это и есть swapFee
+
+   Task
+    -написать параллельную версию PullCurvePools
+    -оптимизировать RPC вызовы (часть можно вынести из цикла)
+    -Параллелизация RPC Parallel RPC architecture (1000 pools < 1 сек)
+    -Ограничение concurrency через semaphore
+    -Убрать лишние registry вызовы (часть можно кэшировать)
+    -Можно оптимизировать get24hVolumeUSD одним запросом на все пулы.
+    -TokenExchangeUnderlying
+    -Как получить точно 24h по timestamp
+    -1 eth_getLogs для всех Curve пулов
+    -ускорить getTokenPriceUSD Но API поддерживает batch запрос.
+    - могут ли у пула поменяться gauge-контракт, вроде нет, и тогда его можно один раз получить и даже через несколько
+        месяцев он не изменится и можно будет gauge у пула использовать
+    - правильно парсить swap events для все типо
+    -автоматически определять тип пула
+    -статические данные pool address, coins, decimals, name, gauge обдумать и загрузить 1 раз навсегда, но может добавлять новые
+      может сделать 2 кэша, статический для постоянных и динамический на 3-4 часа
+    -unwrap LP tokens (исправит TVL)
+    -batch RPC calls
+    -разница между подходами TVL TVL = totalSupply * virtualPrice и  calcTVL(value.Coins[:], poolsDynamicMap[address.Hex()].Balances[:], value.Decimals[:])
+    -много цен токенов в одном http запросе getTokenPriceUSD
+    -полную архитектуру Curve indexer как у DefiLlama
+    -Multicall batching для Go
+    -recursive unwrap pools (самая сложная часть Curve)  Curve recursive meta pools unwrap
+    -bulk token price loader (ускорение ~100x)
+    -мапа с номерами блоков, когда были задеплоены(стартанули) контракты, из которых я достаю адреса пулов.
+        переделать потом с postgres, чтобы 1 раз прогнать старые, а потом с последнего синхронизированного блока.
+    -CurvePoolStaticMeta вынести вообще скажем в postgres
+    -готовый volume engine (очень мощный)
+    -dynamic loader x10 быстрее
+
+
+
+
+   лог 02.03
+    - addPoolToResultSlice poolname -  pax
+     - addPoolToResultSlice CRV APR: 0
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  usdt
+     - addPoolToResultSlice CRV APR: 0
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  steth
+     - addPoolToResultSlice CRV APR: 0.0031728211664414333
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  susd
+     - addPoolToResultSlice CRV APR: 0.0003706983385598276
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  dusd
+     - addPoolToResultSlice CRV APR: 0
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  musd
+     - addPoolToResultSlice CRV APR: 2.4448588921485228e-05
+     - addPoolToResultSlice Fee APR: 0
+    POOL: ren                            | APY:     1.64% | TVL:       245029$
+    POOL: hbtc                           | APY:    21.43% | TVL:         2117$
+    POOL: compound                       | APY:     3.79% | TVL:       571802$
+
+    результат пулов и - addPoolToResultSlice CRV APR: 0 отличается, разные пулы по названию
+
+
+
+   еще один лог
+     - addPoolToResultSlice poolname -  saave
+     - addPoolToResultSlice CRV APR: 0.16097687820470372
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  compound
+     - addPoolToResultSlice CRV APR: 3.970520290887541
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  steth
+     - addPoolToResultSlice CRV APR: 0.003324418642703795
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  susd
+     - addPoolToResultSlice CRV APR: 0.0003884309835051022
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  gusd
+     - addPoolToResultSlice CRV APR: 0
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  dusd
+     - addPoolToResultSlice CRV APR: 0
+     - addPoolToResultSlice Fee APR: 0
+     - addPoolToResultSlice poolname -  musd
+     - addPoolToResultSlice CRV APR: 2.561810470998494e-05
+     - addPoolToResultSlice Fee APR: 0
+    POOL: ren                            | APY:     1.72% | TVL:       258142$
+    POOL: hbtc                           | APY:    22.46% | TVL:         2469$
+    POOL: compound                       | APY:     3.97% | TVL:       572162$
+
+
+  можно добавить, чтобы узнать все пулы одного регистра, сократить количество вызовов RPC:
+  eventSig := crypto.Keccak256Hash(
+      []byte("PoolAdded(address)"),
+  )
+
+
+
+7. Как выглядит идеальная архитектура
+    1. Load pools (1 eth_getLogs)
+    2. Filter active pools
+    3. Batch load metadata (multicall)
+    4. Load ALL swaps (1 eth_getLogs)
+    5. Calculate volume per pool
+    6. Batch load dynamic data
+    7. Calculate APR
+
+
+
+
+
