@@ -113,7 +113,7 @@ const docTemplate = `{
         },
         "/reservesStakedao/{network}": {
             "get": {
-                "description": "Возвращает полный список резервов с параметрами (LTV, ликвидность, цены и т.д.)",
+                "description": "Возвращает TVL и оценку APR наград для Curve V2; aprStatus показывает полноту. APY пока недоступен.",
                 "consumes": [
                     "application/json"
                 ],
@@ -123,11 +123,11 @@ const docTemplate = `{
                 "tags": [
                     "StakeDao"
                 ],
-                "summary": "Получить данные всех резервов StakeDao",
+                "summary": "Получить пулы StakeDAO из блокчейна",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Название сети: ethereum | arbitrum | polygon | optimism | base",
+                        "description": "Поддерживаемая сеть: ethereum",
                         "name": "network",
                         "in": "path",
                         "required": true
@@ -147,8 +147,17 @@ const docTemplate = `{
                             }
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {

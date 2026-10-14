@@ -2,10 +2,13 @@ package internal
 
 import (
 	_ "ABIevm/docs"
+	"ABIevm/internal/service/prices"
 	"ABIevm/internal/service/stakedao"
 
 	//"ABIevm/internal/dto"
 	"ABIevm/internal/service"
+	"context"
+	"errors"
 	//"errors"
 	"fmt"
 	"log"
@@ -31,11 +34,12 @@ type Handler struct {
 }
 
 func NewHandler() *Handler {
+	tokenPrices := prices.NewTokenPriceService(prices.NewMemoryStore(), prices.NewLlamaSource(nil))
 	return &Handler{
 		evmService:     NewPlatformService(),
 		abiLoadFetcher: NewAbiLoadFetcher(),
 		curveService:   internal.NewCurveService(),
-		stakeDao:       stakedao.NewStakeDAOService(),
+		stakeDao:       stakedao.NewStakeDAOService(tokenPrices),
 	}
 }
 
@@ -176,28 +180,31 @@ func (h *Handler) HandleGetCurveReserves(c echo.Context) error {
 	return c.JSON(http.StatusOK, nil)
 }
 
-// @Summary      Получить данные всех резервов StakeDao
-// @Description  Возвращает полный список резервов с параметрами (LTV, ликвидность, цены и т.д.)
+// @Summary      Получить пулы StakeDAO из блокчейна
+// @Description  Возвращает TVL и оценку APR наград для Curve V2; aprStatus показывает полноту. APY пока недоступен.
 // @Tags         StakeDao
 // @Accept       json
 // @Produce      json
-// @Param        network  path      string  true  "Название сети: ethereum | arbitrum | polygon | optimism | base"
+// @Param        network  path      string  true  "Поддерживаемая сеть: ethereum"
 // @Success      200      {object}  interface{}
 // @Failure      400      {object}  map[string]string
-// @Failure      500      {object}  map[string]string
+// @Failure      502      {object}  map[string]string
+// @Failure      504      {object}  map[string]string
 // @Router       /reservesStakedao/{network} [get]
 func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
-	paramNetwork := c.Param("network")
-
-	if paramNetwork == "" {
-		log.Println("provider is empty")
+	result, err := h.stakeDao.GetPools(c.Request().Context(), c.Param("network"))
+	if err != nil {
+		switch {
+		case errors.Is(err, stakedao.ErrUnsupportedNetwork):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "StakeDAO currently supports only ethereum"})
+		case errors.Is(err, context.DeadlineExceeded):
+			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "StakeDAO RPC request timed out"})
+		default:
+			// RPC errors may contain the endpoint's API key; never expose them in HTTP responses.
+			return c.JSON(http.StatusBadGateway, map[string]string{"error": "StakeDAO blockchain data could not be loaded"})
+		}
 	}
-	fmt.Println(" - from HandleGetStakeDaoReserves, before PoolStakeDaoPools ")
-
-	h.stakeDao.PoolStakeDAOPools()
-	fmt.Println(" - after StakeDao CallContract")
-
-	return c.JSON(http.StatusOK, nil)
+	return c.JSON(http.StatusOK, result)
 }
 
 func normalized(balance *big.Int, decimal *big.Int) *big.Float {

@@ -71,10 +71,9 @@ paths:
     get:
       consumes:
       - application/json
-      description: Возвращает полный список резервов с параметрами (LTV, ликвидность,
-        цены и т.д.)
+      description: Возвращает TVL и оценку APR наград для Curve V2; aprStatus показывает полноту. APY пока недоступен.
       parameters:
-      - description: 'Название сети: ethereum | arbitrum | polygon | optimism | base'
+      - description: 'Поддерживаемая сеть: ethereum'
         in: path
         name: network
         required: true
@@ -91,13 +90,19 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "500":
-          description: Internal Server Error
+        "502":
+          description: Bad Gateway
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Получить данные всех резервов StakeDao
+        "504":
+          description: Gateway Timeout
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить пулы StakeDAO из блокчейна
       tags:
       - StakeDao
 swagger: "2.0"

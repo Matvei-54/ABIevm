@@ -1,48 +1,58 @@
 package dto
 
 import (
-	"context"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type StakeDAOPool struct {
-	GaugeAddress common.Address `json:"gaugeAddress"`
-	VaultAddress common.Address `json:"vaultAddress"`
-	AssetAddress common.Address `json:"assetAddress"`
+	GaugeAddress   common.Address `json:"gaugeAddress"`
+	VaultAddress   common.Address `json:"vaultAddress"`
+	AssetAddress   common.Address `json:"assetAddress"`
+	RewardReceiver common.Address `json:"rewardReceiver"`
+	ProtocolID     string         `json:"protocolId"`
 
 	Name        string `json:"name"`
 	Symbol      string `json:"symbol"`
 	AssetSymbol string `json:"assetSymbol"`
 
-	TVL float64 `json:"tvl"`
-	APY float64 `json:"apy"`
+	// AssetAmount is an exact decimal quantity of the underlying token, not USD TVL.
+	AssetAmount   *string  `json:"assetAmount"`
+	AssetDecimals *uint8   `json:"assetDecimals"`
+	TVL           *float64 `json:"tvl"`
+	APR           *float64 `json:"apr"`
+	APRStatus     string   `json:"aprStatus"`
+	APY           *float64 `json:"apy"`
 
-	RewardToken common.Address `json:"rewardToken"`
+	RewardMechanism   string           `json:"rewardMechanism"`
+	AccountantAddress *common.Address  `json:"accountantAddress"`
+	RewardToken       *common.Address  `json:"rewardToken"`
+	APRScope          string           `json:"aprScope"`
+	Rewards           []StakeDAOReward `json:"rewards"`
+	RewardsComplete   bool             `json:"-"`
 	//	ChainID     int64          `json:"chainId"`
 	Source    string    `json:"source"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-type StakeDAOConfig struct {
-	RPCURL             string
-	ChainID            int64
-	ProtocolController common.Address
-	SeedGauges         []common.Address
-
-	// Для расчёта APY нужен основной reward token по gauge.
-	// Так как StakeDAO controller не даёт enumerate/discovery reward token-ов,
-	// это задаётся в конфиге приложения.
-	MainRewardTokenByGauge map[common.Address]common.Address
-
-	// Цена reward token в USD/ETH/etc — сюда подставь ваш общий ценовой сервис.
-	// StakeDAO.go только вызывает этот интерфейс.
-	PriceOracle TokenPriceOracle
+type StakeDAOReward struct {
+	Token         common.Address `json:"token"`
+	Source        string         `json:"source"`
+	RatePerSecond *string        `json:"ratePerSecond"`
+	PeriodFinish  *uint64        `json:"periodFinish"`
+	APR           *float64       `json:"apr"`
 }
 
-type TokenPriceOracle interface {
-	// Возвращает цену 1 токена в "денежной" единице приложения, например USD.
-	// Значение должно быть уже нормализовано, например 2.35 = $2.35
-	GetTokenPrice(ctx context.Context, token common.Address, chainID int64) (float64, error)
+type StakeDAOPoolsResponse struct {
+	Network     string              `json:"network"`
+	BlockNumber uint64              `json:"blockNumber"`
+	Pools       []StakeDAOPool      `json:"pools"`
+	Errors      []StakeDAOPoolError `json:"errors,omitempty"`
+}
+
+type StakeDAOPoolError struct {
+	GaugeAddress common.Address `json:"gaugeAddress"`
+	Field        string         `json:"field"`
+	Message      string         `json:"message"`
 }
