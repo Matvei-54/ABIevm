@@ -3,6 +3,7 @@ package stakedao
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -15,6 +16,53 @@ import (
 type poolSample struct {
 	fromBlock, toBlock uint64
 	limit              int
+	gauges             []common.Address
+}
+
+// GetPoolsForGauges checks explicitly selected gauges against current Controller
+// state. No event discovery or historical state is required. Addresses are hints,
+// never a substitute for the onchain registration.
+func (s *StakeDAOService) GetPoolsForGauges(ctx context.Context, network string, gauges []common.Address, limit int) (*dto.StakeDAOPoolsResponse, error) {
+	if limit < 1 || limit > 3 || len(gauges) < 1 || len(gauges) > 3 {
+		return nil, errors.New("select 1–3 gauge addresses and a sample limit between 1 and 3")
+	}
+	seen := make(map[common.Address]bool)
+	for _, gauge := range gauges {
+		if gauge == (common.Address{}) || seen[gauge] {
+			return nil, errors.New("sample gauges must be nonzero and unique")
+		}
+		seen[gauge] = true
+	}
+	return s.getPoolsWithSelection(ctx, network, &poolSample{limit: limit, gauges: append([]common.Address(nil), gauges...)})
+}
+
+func (s *StakeDAOService) currentGaugeRegistrations(ctx context.Context, block *big.Int, gauges []common.Address) ([]StakeDAOVaultInfo, error) {
+	registrations := make([]StakeDAOVaultInfo, 0, len(gauges))
+	for _, gauge := range gauges {
+		out, err := s.snapshotCall(ctx, block, s.controller, protocolControllerABI, "gauge", gauge)
+		if err != nil {
+			return nil, fmt.Errorf("controller.gauge(%s): %w", gauge.Hex(), err)
+		}
+		if len(out) != 5 {
+			return nil, errors.New("Controller.gauge returned an invalid registration")
+		}
+		vault, vaultOK := out[0].(common.Address)
+		asset, assetOK := out[1].(common.Address)
+		receiver, receiverOK := out[2].(common.Address)
+		protocol, protocolOK := out[3].([4]byte)
+		shutdown, shutdownOK := out[4].(bool)
+		if !vaultOK || !assetOK || !receiverOK || !protocolOK || !shutdownOK {
+			return nil, errors.New("Controller.gauge returned invalid registration types")
+		}
+		if vault == (common.Address{}) || shutdown {
+			continue
+		}
+		if asset == (common.Address{}) {
+			return nil, fmt.Errorf("controller.gauge(%s) has a vault but no asset", gauge.Hex())
+		}
+		registrations = append(registrations, StakeDAOVaultInfo{Gauge: gauge, Vault: vault, Asset: asset, RewardReceiver: receiver, ProtocolID: protocol})
+	}
+	return registrations, nil
 }
 
 // GetPoolsSample checks at most three current vaults registered in one small log

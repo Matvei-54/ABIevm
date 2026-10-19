@@ -120,20 +120,25 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		return nil, errors.New("invalid StakeDAO snapshot header")
 	}
 	s.snapshotTime = header.Time
-	var fromBlock, logsToBlock uint64
-	if sample == nil {
-		fromBlock, err = s.controllerDeploymentBlock(ctx, toBlock)
-		logsToBlock = toBlock
-		if err != nil {
-			return nil, err
-		}
+	var vaults []StakeDAOVaultInfo
+	if sample != nil && len(sample.gauges) > 0 {
+		vaults, err = s.currentGaugeRegistrations(ctx, block, sample.gauges)
 	} else {
-		if sample.toBlock > toBlock {
-			return nil, errors.New("sample log range extends beyond the current block")
+		var fromBlock, logsToBlock uint64
+		if sample == nil {
+			fromBlock, err = s.controllerDeploymentBlock(ctx, toBlock)
+			logsToBlock = toBlock
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if sample.toBlock > toBlock {
+				return nil, errors.New("sample log range extends beyond the current block")
+			}
+			fromBlock, logsToBlock = sample.fromBlock, sample.toBlock
 		}
-		fromBlock, logsToBlock = sample.fromBlock, sample.toBlock
+		vaults, err = DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, logsToBlock)
 	}
-	vaults, err := DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, logsToBlock)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +180,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		response.Errors = append(response.Errors, issues...)
 	}
 	if sample != nil && len(response.Pools) == 0 {
+		if len(sample.gauges) > 0 {
+			return nil, errors.New("no active vaults for the requested gauges in current Controller state; check the gauge addresses")
+		}
 		return nil, errors.New("no current matching vault registrations in the sample window; choose another window of up to 100 blocks")
 	}
 	tokens := make([]common.Address, 0, len(response.Pools)*2)

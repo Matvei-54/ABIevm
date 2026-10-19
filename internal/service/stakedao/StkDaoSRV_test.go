@@ -45,6 +45,7 @@ type fixtureRPC struct {
 	extraFinish          uint32
 	killed               bool
 	physical             *big.Int
+	shutdown             map[common.Address]bool
 }
 
 func (f *fixtureRPC) ChainID(context.Context) (*big.Int, error)   { return big.NewInt(1), nil }
@@ -123,6 +124,14 @@ func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, bloc
 		case "working_supply":
 			return method.Outputs.Pack(big.NewInt(4000000))
 		case "gauge":
+			if *call.To == f.controller {
+				args, err := method.Inputs.Unpack(call.Data[4:])
+				if err != nil {
+					return nil, err
+				}
+				gauge := args[0].(common.Address)
+				return method.Outputs.Pack(f.vaults[gauge], f.assets[gauge], common.HexToAddress("0x44"), [4]byte{0xc7, 0x15, 0xe3, 0x73}, f.shutdown[gauge])
+			}
 			return method.Outputs.Pack(common.BytesToAddress(f.logs[0].Topics[1].Bytes()))
 		case "baseRewardPool":
 			return method.Outputs.Pack(common.HexToAddress("0x1237"))

@@ -34,6 +34,7 @@ const PROTOCOL_CONTROLLER_ETH_ARB = "0x2d8BcE1FaE00a959354aCD9eBf9174337A64d4fb"
 
 // Controller ABI matches contracts/stakedao/CreateVault.json.
 const protocolControllerABI = `[
+	{"inputs":[{"name":"gauge","type":"address"}],"name":"gauge","outputs":[{"name":"vault","type":"address"},{"name":"asset","type":"address"},{"name":"rewardReceiver","type":"address"},{"name":"protocolId","type":"bytes4"},{"name":"isShutdown","type":"bool"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"internalType":"address","name":"gauge","type":"address"}],"name":"vault","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"internalType":"address","name":"gauge","type":"address"}],"name":"asset","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
 	{"inputs":[{"name":"protocolId","type":"bytes4"}],"name":"accountant","outputs":[{"type":"address"}],"stateMutability":"view","type":"function"}

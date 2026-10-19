@@ -4,12 +4,93 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 )
+
+func TestControllerGaugeGetterMatchesRepositoryABI(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/stakedao/CreateVault.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := abi.JSON(strings.NewReader(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subset, err := abi.JSON(strings.NewReader(protocolControllerABI))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, got := full.Methods["gauge"], subset.Methods["gauge"]
+	if got.Sig != want.Sig || len(got.Outputs) != len(want.Outputs) {
+		t.Fatal("Controller.gauge ABI signature mismatch")
+	}
+	for i := range want.Outputs {
+		if got.Outputs[i].Type.String() != want.Outputs[i].Type.String() {
+			t.Fatalf("Controller.gauge output %d mismatch", i)
+		}
+	}
+}
+
+func TestExplicitGaugesReadCurrentRegistrationWithoutLogsOrCode(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary = true
+	gauge := common.BytesToAddress(f.logs[0].Topics[1].Bytes())
+	// No usable historical registrations are available at all.
+	f.logs = nil
+	result, err := s.GetPoolsForGauges(context.Background(), "ethereum", []common.Address{gauge}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.queries) != 0 || f.codeReads != 0 || !f.closed || len(result.Pools) != 1 {
+		t.Fatalf("explicit sample used history: queries=%+v code=%d result=%+v", f.queries, f.codeReads, result)
+	}
+	pool := result.Pools[0]
+	if pool.APRStatus != "available" || pool.TVL == nil || pool.APR == nil || pool.ProtocolID != "0xc715e373" || pool.VaultAddress != f.vaults[gauge] {
+		t.Fatalf("did not use current onchain registration: %+v issues=%+v", pool, result.Errors)
+	}
+	for _, block := range f.callBlocks {
+		if block != f.latest {
+			t.Fatal("explicit sample used historical state")
+		}
+	}
+}
+
+func TestExplicitGaugesSkipUnregisteredAndShutdown(t *testing.T) {
+	s, f := newPoolFixture(t)
+	gauge := common.BytesToAddress(f.logs[0].Topics[1].Bytes())
+	shutdown, unregistered := common.HexToAddress("0x11"), common.HexToAddress("0x12")
+	f.vaults[shutdown], f.assets[shutdown] = f.vaults[gauge], f.assets[gauge]
+	f.shutdown = map[common.Address]bool{shutdown: true}
+	s.client, s.controller, s.chainID = f, f.controller, 1
+	result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{limit: 3, gauges: []common.Address{shutdown, unregistered, gauge}})
+	if err != nil || len(result.Pools) != 1 || result.Pools[0].GaugeAddress != gauge {
+		t.Fatalf("selected inactive gauge: result=%+v err=%v", result, err)
+	}
+	_, err = s.getPoolsSelected(context.Background(), "ethereum", &poolSample{limit: 1, gauges: []common.Address{unregistered}})
+	if err == nil || !strings.Contains(err.Error(), "no active vaults") {
+		t.Fatalf("unregistered gauge accepted: %v", err)
+	}
+}
+
+func TestInvalidExplicitGaugesRejectBeforeDial(t *testing.T) {
+	s := NewStakeDAOService(nil)
+	s.dial = func(context.Context, string) (stakeDAORPC, error) {
+		t.Fatal("invalid candidates caused an RPC connection")
+		return nil, nil
+	}
+	a, b := common.HexToAddress("0x11"), common.HexToAddress("0x12")
+	for _, gauges := range [][]common.Address{nil, {{}}, {a, a}, {a, b, a, b}} {
+		if _, err := s.GetPoolsForGauges(context.Background(), "ethereum", gauges, 1); err == nil {
+			t.Fatal("invalid gauges accepted")
+		}
+	}
+}
 
 func TestSampleBoundsRejectBeforeDial(t *testing.T) {
 	s := NewStakeDAOService(nil)
@@ -17,7 +98,10 @@ func TestSampleBoundsRejectBeforeDial(t *testing.T) {
 		t.Fatal("invalid sample must not connect")
 		return nil, nil
 	}
-	for _, tc := range []poolSample{{1, 100, 0}, {1, 100, 4}, {2, 1, 1}, {1, 101, 1}, {0, ^uint64(0), 1}} {
+	for _, tc := range []struct {
+		fromBlock, toBlock uint64
+		limit              int
+	}{{1, 100, 0}, {1, 100, 4}, {2, 1, 1}, {1, 101, 1}, {0, ^uint64(0), 1}} {
 		if _, err := s.GetPoolsSample(context.Background(), "ethereum", tc.fromBlock, tc.toBlock, tc.limit); err == nil {
 			t.Fatalf("accepted invalid bounds: %+v", tc)
 		}
@@ -60,7 +144,7 @@ func TestSampleLimitsActivePoolsAndSkipsObsoleteRegistrations(t *testing.T) {
 			}
 		}
 		s.client, s.controller, s.chainID = f, f.controller, 1
-		result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{123, 222, limit})
+		result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{fromBlock: 123, toBlock: 222, limit: limit})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +164,7 @@ func TestSampleRejectsEmptyWindowFutureWindowAndReorg(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			s, f := newPoolFixture(t)
 			s.client, s.controller, s.chainID = f, f.controller, 1
-			selection := &poolSample{123, 222, 1}
+			selection := &poolSample{fromBlock: 123, toBlock: 222, limit: 1}
 			if kind == "empty" {
 				f.logs = nil
 			}
@@ -126,7 +210,7 @@ func TestSampleDoesNotReturnSuccessWhenBudgetRunsOutDuringMetadata(t *testing.T)
 	c := newSampleRPC(f)
 	c.remaining = 6
 	s.client, s.controller, s.chainID = c, f.controller, 1
-	result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{123, 222, 1})
+	result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{fromBlock: 123, toBlock: 222, limit: 1})
 	if err == nil || result != nil || !strings.Contains(err.Error(), "budget") {
 		t.Fatalf("exhausted sample returned success: result=%+v err=%v", result, err)
 	}
