@@ -73,6 +73,10 @@ func NewStakeDAOService(priceService prices.Provider) *StakeDAOService {
 
 // GetPools discovers registrations on every request; token prices are shared across requests.
 func (s *StakeDAOService) GetPools(ctx context.Context, network string) (*dto.StakeDAOPoolsResponse, error) {
+	return s.getPoolsWithSelection(ctx, network, nil)
+}
+
+func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network string, sample *poolSample) (*dto.StakeDAOPoolsResponse, error) {
 	config, ok := s.networks[network]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedNetwork, network)
@@ -84,6 +88,9 @@ func (s *StakeDAOService) GetPools(ctx context.Context, network string) (*dto.St
 		return nil, fmt.Errorf("%w: dial: %w", ErrRPCUnavailable, err)
 	}
 	defer client.Close()
+	if sample != nil {
+		client = newSampleRPC(client)
+	}
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: chain ID: %w", ErrRPCUnavailable, err)
@@ -92,10 +99,14 @@ func (s *StakeDAOService) GetPools(ctx context.Context, network string) (*dto.St
 		return nil, fmt.Errorf("%w: expected chain ID %d", ErrRPCUnavailable, config.chainID)
 	}
 	worker := &StakeDAOService{client: client, controller: config.controller, chainID: config.chainID, prices: s.prices}
-	return worker.getPools(ctx, network)
+	return worker.getPoolsSelected(ctx, network, sample)
 }
 
 func (s *StakeDAOService) getPools(ctx context.Context, network string) (*dto.StakeDAOPoolsResponse, error) {
+	return s.getPoolsSelected(ctx, network, nil)
+}
+
+func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, sample *poolSample) (*dto.StakeDAOPoolsResponse, error) {
 	toBlock, err := s.client.BlockNumber(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: latest block: %w", ErrRPCUnavailable, err)
@@ -109,11 +120,20 @@ func (s *StakeDAOService) getPools(ctx context.Context, network string) (*dto.St
 		return nil, errors.New("invalid StakeDAO snapshot header")
 	}
 	s.snapshotTime = header.Time
-	fromBlock, err := s.controllerDeploymentBlock(ctx, toBlock)
-	if err != nil {
-		return nil, err
+	var fromBlock, logsToBlock uint64
+	if sample == nil {
+		fromBlock, err = s.controllerDeploymentBlock(ctx, toBlock)
+		logsToBlock = toBlock
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if sample.toBlock > toBlock {
+			return nil, errors.New("sample log range extends beyond the current block")
+		}
+		fromBlock, logsToBlock = sample.fromBlock, sample.toBlock
 	}
-	vaults, err := DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, toBlock)
+	vaults, err := DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, logsToBlock)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +142,9 @@ func (s *StakeDAOService) getPools(ctx context.Context, network string) (*dto.St
 		Pools: make([]dto.StakeDAOPool, 0, len(vaults)),
 	}
 	for _, info := range vaults {
+		if sample != nil && len(response.Pools) >= sample.limit {
+			break
+		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -151,6 +174,9 @@ func (s *StakeDAOService) getPools(ctx context.Context, network string) (*dto.St
 		response.Pools = append(response.Pools, pool)
 		response.Errors = append(response.Errors, issues...)
 	}
+	if sample != nil && len(response.Pools) == 0 {
+		return nil, errors.New("no current matching vault registrations in the sample window; choose another window of up to 100 blocks")
+	}
 	tokens := make([]common.Address, 0, len(response.Pools)*2)
 	for _, pool := range response.Pools {
 		tokens = append(tokens, pool.AssetAddress)
@@ -174,6 +200,9 @@ func (s *StakeDAOService) getPools(ctx context.Context, network string) (*dto.St
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if client, ok := s.client.(*sampleRPC); ok && client.exhausted {
+		return nil, errors.New("sample RPC request budget exhausted; retry with -limit 1")
 	}
 	finalHeader, err := s.client.HeaderByNumber(ctx, block)
 	if err != nil {

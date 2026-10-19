@@ -31,6 +31,7 @@ type fixtureRPC struct {
 	callFailure          string
 	filterFailure        error
 	headerReads          int
+	codeReads            int
 	reorg                bool
 	closed               bool
 	accountant           common.Address
@@ -57,6 +58,7 @@ func (f *fixtureRPC) HeaderByNumber(_ context.Context, number *big.Int) (*types.
 	return h, nil
 }
 func (f *fixtureRPC) CodeAt(_ context.Context, _ common.Address, number *big.Int) ([]byte, error) {
+	f.codeReads++
 	if number.Uint64() >= f.deployment {
 		return []byte{1}, nil
 	}
