@@ -198,7 +198,13 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	if s.prices != nil {
 		// Successful quotes remain usable if other tokens have no price.
 		// Per-pool diagnostics below do not expose upstream transport URLs or credentials.
-		if err := s.prices.EnsurePrices(ctx, s.chainID, tokens); err != nil && ctx.Err() != nil {
+		var priceErr error
+		if provider, ok := s.prices.(prices.SnapshotProvider); ok {
+			priceErr = provider.EnsurePricesAt(ctx, s.chainID, tokens, prices.Snapshot{Caller: s.client, Block: toBlock, Timestamp: s.snapshotTime})
+		} else {
+			priceErr = s.prices.EnsurePrices(ctx, s.chainID, tokens)
+		}
+		if priceErr != nil && ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 	}
@@ -446,7 +452,7 @@ func (s *StakeDAOService) valuePool(ctx context.Context, pool *dto.StakeDAOPool)
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "USD TVL cannot be represented")}
 	}
 	pool.TVL = &value
-	pool.Source = "onchain+external-prices"
+	pool.Source = "onchain+price-cache"
 	return nil
 }
 

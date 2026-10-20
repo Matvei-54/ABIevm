@@ -1,7 +1,45 @@
 {
   "network": "ethereum",
-  "blockNumber": 26227874,
+  "blockNumber": 26234474,
   "pools": [
+    {
+      "gaugeAddress": "0xbe6228125448e40f5dcbb2dbdf7ff3f5721000b4",
+      "vaultAddress": "0x08c5e4f760cb2efdb69865ed2d3a6eb2796be799",
+      "assetAddress": "0x3c0965582db7a0f660d491aa6174b9438f911c21",
+      "rewardReceiver": "0xbca59ad0270f1ece6a671d24dccf54e9d146b5d7",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO evaUSDC/evaUSDT Vault",
+      "symbol": "sd-evaUSDMAIN-vault",
+      "assetSymbol": "evaUSDMAIN",
+      "assetAmount": "3822649.002615171621100758",
+      "assetDecimals": 18,
+      "tvl": 3820445.061187685,
+      "apr": 12.405601858426884,
+      "aprStatus": "available",
+      "apy": null,
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.0392007808792791631848081258384476169451450776445484661933838763597351665580500592636844924024416013424265453789501326755406056141470376277529979167625",
+          "periodFinish": null,
+          "apr": 12.405601858426884
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-10-20T14:44:43.086758653Z"
+    },
     {
       "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
       "vaultAddress": "0x79b1571ebe88b4519db4fd964b12b922c0a915d6",
@@ -38,45 +76,7 @@
         }
       ],
       "source": "onchain",
-      "updatedAt": "2026-10-19T16:39:46.126977666Z"
-    },
-    {
-      "gaugeAddress": "0xbe6228125448e40f5dcbb2dbdf7ff3f5721000b4",
-      "vaultAddress": "0x08c5e4f760cb2efdb69865ed2d3a6eb2796be799",
-      "assetAddress": "0x3c0965582db7a0f660d491aa6174b9438f911c21",
-      "rewardReceiver": "0xbca59ad0270f1ece6a671d24dccf54e9d146b5d7",
-      "protocolId": "0xc715e373",
-      "name": "Stake DAO evaUSDC/evaUSDT Vault",
-      "symbol": "sd-evaUSDMAIN-vault",
-      "assetSymbol": "evaUSDMAIN",
-      "assetAmount": "3782198.697847229009454713",
-      "assetDecimals": 18,
-      "tvl": 3771735.3109811204,
-      "apr": 12.858033565090123,
-      "aprStatus": "available",
-      "apy": null,
-      "rewardMechanism": "accountant",
-      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
-      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
-      "aprScope": "rewards",
-      "rewards": [
-        {
-          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
-          "source": "curve-primary-net",
-          "ratePerSecond": "0.0417412622357080885868687421383715271599404567307009109149646602663640866907326934311341443755328139543096740214282371924220932697114293687166207121",
-          "periodFinish": null,
-          "apr": 12.858033565090123
-        },
-        {
-          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
-          "source": "vault-extra",
-          "ratePerSecond": "0",
-          "periodFinish": 0,
-          "apr": 0
-        }
-      ],
-      "source": "onchain+external-prices",
-      "updatedAt": "2026-10-19T16:39:52.938152895Z"
+      "updatedAt": "2026-10-20T14:44:50.50311709Z"
     },
     {
       "gaugeAddress": "0x326b6d1a26fd04afaa349340022076b5a2eb0c7c",
@@ -89,9 +89,9 @@
       "assetSymbol": "frxscrvUSD",
       "assetAmount": "2.032228375438167188",
       "assetDecimals": 18,
-      "tvl": null,
-      "apr": null,
-      "aprStatus": "unavailable",
+      "tvl": 2.1215405898135935,
+      "apr": 0,
+      "aprStatus": "available",
       "apy": null,
       "rewardMechanism": "accountant",
       "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
@@ -103,18 +103,18 @@
           "source": "curve-primary-net",
           "ratePerSecond": "0",
           "periodFinish": null,
-          "apr": null
+          "apr": 0
         },
         {
           "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
           "source": "vault-extra",
           "ratePerSecond": "0",
           "periodFinish": 0,
-          "apr": null
+          "apr": 0
         }
       ],
-      "source": "onchain",
-      "updatedAt": "2026-10-19T16:40:00.365987468Z"
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-10-20T14:44:57.364453186Z"
     }
   ],
   "errors": [
@@ -125,16 +125,6 @@
     },
     {
       "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
-      "field": "apr",
-      "message": "Positive USD TVL is required for APR"
-    },
-    {
-      "gaugeAddress": "0x326b6d1a26fd04afaa349340022076b5a2eb0c7c",
-      "field": "tvl",
-      "message": "Fresh USD price for the underlying asset/LP token is unavailable"
-    },
-    {
-      "gaugeAddress": "0x326b6d1a26fd04afaa349340022076b5a2eb0c7c",
       "field": "apr",
       "message": "Positive USD TVL is required for APR"
     }

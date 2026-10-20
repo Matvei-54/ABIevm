@@ -34,7 +34,8 @@ type Handler struct {
 }
 
 func NewHandler() *Handler {
-	tokenPrices := prices.NewTokenPriceService(prices.NewMemoryStore(), prices.NewLlamaSource(nil))
+	priceStore := prices.NewMemoryStore()
+	tokenPrices := prices.NewTokenPriceService(priceStore, prices.NewContractSource(priceStore))
 	return &Handler{
 		evmService:     NewPlatformService(),
 		abiLoadFetcher: NewAbiLoadFetcher(),

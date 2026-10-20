@@ -21,6 +21,9 @@ type TokenKey struct {
 type Quote struct {
 	USD       decimal.Decimal
 	UpdatedAt time.Time
+	// ValidUntil bounds the oracle validity of a derived quote, independently
+	// of the cache refresh interval. Zero preserves sources without this field.
+	ValidUntil time.Time
 }
 
 // Store is the boundary for replacing the in-memory map with Redis later.
@@ -88,13 +91,23 @@ func (s *TokenPriceService) GetTokenPrice(ctx context.Context, token common.Addr
 		return decimal.Zero, err
 	}
 	age := s.now().Sub(quote.UpdatedAt)
-	if !found || !quote.USD.IsPositive() || age > s.maxAge || age < -time.Minute {
+	if !found || !quote.USD.IsPositive() || age > s.maxAge || age < -time.Minute || (!quote.ValidUntil.IsZero() && !s.now().Before(quote.ValidUntil)) {
 		return decimal.Zero, fmt.Errorf("%w: chain %d token %s", ErrPriceUnavailable, chainID, token.Hex())
 	}
 	return quote.USD, nil
 }
 
 func (s *TokenPriceService) EnsurePrices(ctx context.Context, chainID int64, tokens []common.Address) error {
+	return s.ensurePrices(ctx, chainID, tokens, nil)
+}
+
+// EnsurePricesAt uses the caller's already verified RPC connection and fixed
+// block. Cache hits require no RPC. The regular Provider remains compatible.
+func (s *TokenPriceService) EnsurePricesAt(ctx context.Context, chainID int64, tokens []common.Address, snapshot Snapshot) error {
+	return s.ensurePrices(ctx, chainID, tokens, &snapshot)
+}
+
+func (s *TokenPriceService) ensurePrices(ctx context.Context, chainID int64, tokens []common.Address, snapshot *Snapshot) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -127,7 +140,13 @@ func (s *TokenPriceService) EnsurePrices(ctx context.Context, chainID int64, tok
 	if s.source == nil {
 		return ErrPriceUnavailable
 	}
-	quotes, fetchErr := s.source.Fetch(ctx, chainID, missing)
+	var quotes map[common.Address]Quote
+	var fetchErr error
+	if source, ok := s.source.(SnapshotSource); ok && snapshot != nil {
+		quotes, fetchErr = source.FetchAt(ctx, chainID, missing, *snapshot)
+	} else {
+		quotes, fetchErr = s.source.Fetch(ctx, chainID, missing)
+	}
 	for _, token := range missing {
 		if quote, ok := quotes[token]; ok {
 			if err := s.store.Set(ctx, TokenKey{ChainID: chainID, Address: token}, quote); err != nil {

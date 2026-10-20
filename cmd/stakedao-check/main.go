@@ -94,7 +94,8 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 			gauges = gauges[:*limit]
 		}
 	}
-	service := stakedao.NewStakeDAOService(prices.NewTokenPriceService(prices.NewMemoryStore(), prices.NewLlamaSource(nil)))
+	priceStore := prices.NewMemoryStore()
+	service := stakedao.NewStakeDAOService(prices.NewTokenPriceService(priceStore, prices.NewContractSource(priceStore)))
 	var result *dto.StakeDAOPoolsResponse
 	var err error
 	fmt.Fprintln(diagnostics, "At most 5 RPC requests/sec and 300 attempts; CU cost depends on the provider.")
