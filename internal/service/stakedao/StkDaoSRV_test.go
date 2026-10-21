@@ -11,7 +11,9 @@ import (
 	"math/big"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 )
 
 type fixtureRPC struct {
+	mu                   sync.Mutex
 	controller           common.Address
 	latest, deployment   uint64
 	logs                 []types.Log
@@ -66,6 +69,8 @@ func (f *fixtureRPC) CodeAt(_ context.Context, _ common.Address, number *big.Int
 	return nil, nil
 }
 func (f *fixtureRPC) FilterLogs(_ context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.queries = append(f.queries, query)
 	if f.filterFailure != nil {
 		return nil, f.filterFailure
@@ -243,7 +248,8 @@ func TestDiscoveryChunksHistoryAndKeepsLatestRegistration(t *testing.T) {
 	if len(result) != 2 || result[0].Gauge != gauge || result[0].Vault != vault || result[0].RewardReceiver != common.HexToAddress("0x44") || result[0].ProtocolID != [4]byte{1, 2, 3, 4} {
 		t.Fatalf("wrong registrations: %+v", result)
 	}
-	wantRanges := [][2]uint64{{10, 2009}, {2010, 4009}, {4010, 4010}}
+	wantRanges := [][2]uint64{{10, 1509}, {1510, 3009}, {3010, 4010}}
+	sort.Slice(f.queries, func(i, j int) bool { return f.queries[i].FromBlock.Cmp(f.queries[j].FromBlock) < 0 })
 	if len(f.queries) != len(wantRanges) {
 		t.Fatalf("queries: %d", len(f.queries))
 	}
@@ -323,6 +329,9 @@ func newPoolFixture(t *testing.T) (*StakeDAOService, *fixtureRPC) {
 		t.Fatal(err)
 	}
 	s := NewStakeDAOService(prices.NewTokenPriceService(store, nil))
+	config := s.networks["ethereum"]
+	config.deploymentBlock = f.deployment
+	s.networks["ethereum"] = config
 	s.dial = func(context.Context, string) (stakeDAORPC, error) { return f, nil }
 	return s, f
 }
@@ -333,6 +342,7 @@ func TestGetPoolsUsesDiscoveredVaultsAndOneSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sort.Slice(f.queries, func(i, j int) bool { return f.queries[i].FromBlock.Cmp(f.queries[j].FromBlock) < 0 })
 	if len(result.Pools) != 1 || len(result.Errors) != 1 || result.Errors[0].Field != "apr" || result.BlockNumber != f.latest || f.queries[0].FromBlock.Uint64() != f.deployment || !f.closed {
 		t.Fatalf("unexpected result: %+v, queries: %+v, closed: %v", result, f.queries, f.closed)
 	}

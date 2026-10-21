@@ -8,16 +8,17 @@ import (
 	"math/big"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"ABIevm/internal/rpcclient"
 	"ABIevm/internal/service/prices"
 	dto "ABIevm/internal/service/stakedao/dto"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shopspring/decimal"
 )
 
@@ -39,20 +40,23 @@ type stakeDAORPC interface {
 }
 
 type stakeDAONetwork struct {
-	rpcURL     string
-	chainID    int64
-	controller common.Address
+	rpcURL          string
+	chainID         int64
+	controller      common.Address
+	deploymentBlock uint64
 }
 
 // StakeDAOService owns its RPC client; concurrent HTTP requests use separate instances.
 type StakeDAOService struct {
-	client       stakeDAORPC
-	controller   common.Address
-	chainID      int64
-	prices       prices.Provider
-	snapshotTime uint64
-	networks     map[string]stakeDAONetwork
-	dial         func(context.Context, string) (stakeDAORPC, error)
+	client          stakeDAORPC
+	controller      common.Address
+	chainID         int64
+	prices          prices.Provider
+	snapshotTime    uint64
+	deploymentBlock uint64
+	configErr       error
+	networks        map[string]stakeDAONetwork
+	dial            func(context.Context, string) (stakeDAORPC, error)
 }
 
 func NewStakeDAOService(priceService prices.Provider) *StakeDAOService {
@@ -60,13 +64,23 @@ func NewStakeDAOService(priceService prices.Provider) *StakeDAOService {
 	if rpcURL == "" {
 		rpcURL = "https://eth.llamarpc.com"
 	}
+	deploymentBlock := uint64(23225415)
+	var configErr error
+	if text := os.Getenv("STAKEDAO_CONTROLLER_DEPLOYMENT_BLOCK"); text != "" {
+		var err error
+		deploymentBlock, err = strconv.ParseUint(text, 10, 64)
+		if err != nil || deploymentBlock == 0 {
+			configErr = errors.New("STAKEDAO_CONTROLLER_DEPLOYMENT_BLOCK must be a positive decimal block number")
+		}
+	}
 	return &StakeDAOService{
-		prices: priceService,
+		prices:    priceService,
+		configErr: configErr,
 		networks: map[string]stakeDAONetwork{
-			"ethereum": {rpcURL: rpcURL, chainID: 1, controller: common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB)},
+			"ethereum": {rpcURL: rpcURL, chainID: 1, controller: common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB), deploymentBlock: deploymentBlock},
 		},
 		dial: func(ctx context.Context, endpoint string) (stakeDAORPC, error) {
-			return ethclient.DialContext(ctx, endpoint)
+			return rpcclient.DialContext(ctx, endpoint)
 		},
 	}
 }
@@ -80,6 +94,9 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 	config, ok := s.networks[network]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedNetwork, network)
+	}
+	if sample == nil && s.configErr != nil {
+		return nil, s.configErr
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -98,7 +115,7 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 	if chainID == nil || chainID.Cmp(big.NewInt(config.chainID)) != 0 {
 		return nil, fmt.Errorf("%w: expected chain ID %d", ErrRPCUnavailable, config.chainID)
 	}
-	worker := &StakeDAOService{client: client, controller: config.controller, chainID: config.chainID, prices: s.prices}
+	worker := &StakeDAOService{client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock}
 	return worker.getPoolsSelected(ctx, network, sample)
 }
 
@@ -126,7 +143,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	} else {
 		var fromBlock, logsToBlock uint64
 		if sample == nil {
-			fromBlock, err = s.controllerDeploymentBlock(ctx, toBlock)
+			fromBlock, err = s.controllerStartBlock(toBlock)
 			logsToBlock = toBlock
 			if err != nil {
 				return nil, err
@@ -228,33 +245,15 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	return response, nil
 }
 
-// Locate the first block containing Controller code, rather than inventing a deployment block.
-// Historical eth_getCode must be supported by the configured RPC provider.
-func (s *StakeDAOService) controllerDeploymentBlock(ctx context.Context, toBlock uint64) (uint64, error) {
-	code, err := s.client.CodeAt(ctx, s.controller, new(big.Int).SetUint64(toBlock))
-	if err != nil {
-		return 0, fmt.Errorf("%w: Controller code: %w", ErrRPCUnavailable, err)
+// The original live Alchemy binary search located first code at 23225415
+// (reported in the user's subsequent eth_getLogs failure). Reuse that start
+// instead of requiring archive state on every request. A creation receipt was
+// not independently retrieved in this environment; provenance is in README.md.
+func (s *StakeDAOService) controllerStartBlock(toBlock uint64) (uint64, error) {
+	if s.deploymentBlock == 0 || s.deploymentBlock > toBlock {
+		return 0, errors.New("Controller deployment block is unknown or beyond the snapshot")
 	}
-	if len(code) == 0 {
-		return 0, errors.New("StakeDAO Controller has no code on the selected network")
-	}
-	low, high := uint64(0), toBlock
-	for low < high {
-		if err := ctx.Err(); err != nil {
-			return 0, err
-		}
-		mid := low + (high-low)/2
-		code, err := s.client.CodeAt(ctx, s.controller, new(big.Int).SetUint64(mid))
-		if err != nil {
-			return 0, fmt.Errorf("%w: historical Controller code at block %d: %w", ErrRPCUnavailable, mid, err)
-		}
-		if len(code) == 0 {
-			low = mid + 1
-		} else {
-			high = mid
-		}
-	}
-	return low, nil
+	return s.deploymentBlock, nil
 }
 
 type StakeDAOVaultInfo struct {
@@ -279,65 +278,49 @@ func DiscoverStakeDAOVaults(ctx context.Context, client vaultLogReader, controll
 		return nil, err
 	}
 	event := parsed.Events["VaultRegistered"]
+	logs, err := readRegistrationLogs(ctx, client, controller, event.ID, fromBlock, toBlock)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(logs, func(i, j int) bool {
+		if logs[i].BlockNumber != logs[j].BlockNumber {
+			return logs[i].BlockNumber < logs[j].BlockNumber
+		}
+		if logs[i].TxIndex != logs[j].TxIndex {
+			return logs[i].TxIndex < logs[j].TxIndex
+		}
+		return logs[i].Index < logs[j].Index
+	})
 	registrations := make(map[common.Address]StakeDAOVaultInfo)
-	for start := fromBlock; ; {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	for _, entry := range logs {
+		if entry.Removed {
+			continue
 		}
-		end := toBlock
-		if toBlock-start >= 2000 {
-			end = start + 1999
+		if entry.Address != controller || entry.BlockNumber < fromBlock || entry.BlockNumber > toBlock || len(entry.Topics) != 4 || entry.Topics[0] != event.ID {
+			return nil, fmt.Errorf("invalid VaultRegistered log at block %d", entry.BlockNumber)
 		}
-		logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
-			Addresses: []common.Address{controller}, Topics: [][]common.Hash{{event.ID}},
-			FromBlock: new(big.Int).SetUint64(start), ToBlock: new(big.Int).SetUint64(end),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("%w: VaultRegistered blocks %d-%d: %w", ErrRPCUnavailable, start, end, err)
+		var decoded struct {
+			RewardReceiver common.Address
+			ProtocolId     [4]byte
 		}
-		sort.Slice(logs, func(i, j int) bool {
-			if logs[i].BlockNumber != logs[j].BlockNumber {
-				return logs[i].BlockNumber < logs[j].BlockNumber
-			}
-			if logs[i].TxIndex != logs[j].TxIndex {
-				return logs[i].TxIndex < logs[j].TxIndex
-			}
-			return logs[i].Index < logs[j].Index
-		})
-		for _, entry := range logs {
-			if entry.Removed {
-				continue
-			}
-			if entry.Address != controller || entry.BlockNumber < start || entry.BlockNumber > end || len(entry.Topics) != 4 || entry.Topics[0] != event.ID {
-				return nil, fmt.Errorf("invalid VaultRegistered log at block %d", entry.BlockNumber)
-			}
-			var decoded struct {
-				RewardReceiver common.Address
-				ProtocolId     [4]byte
-			}
-			if err := parsed.UnpackIntoInterface(&decoded, "VaultRegistered", entry.Data); err != nil {
-				return nil, fmt.Errorf("decode VaultRegistered at block %d: %w", entry.BlockNumber, err)
-			}
-			for _, topic := range entry.Topics[1:] {
-				if new(big.Int).SetBytes(topic[:12]).Sign() != 0 {
-					return nil, errors.New("invalid address padding in VaultRegistered")
-				}
-			}
-			info := StakeDAOVaultInfo{
-				Gauge:          common.BytesToAddress(entry.Topics[1].Bytes()),
-				Vault:          common.BytesToAddress(entry.Topics[2].Bytes()),
-				Asset:          common.BytesToAddress(entry.Topics[3].Bytes()),
-				RewardReceiver: decoded.RewardReceiver, ProtocolID: decoded.ProtocolId,
-			}
-			if info.Gauge == (common.Address{}) || info.Vault == (common.Address{}) || info.Asset == (common.Address{}) {
-				return nil, errors.New("zero gauge, vault or asset in VaultRegistered")
-			}
-			registrations[info.Gauge] = info
+		if err := parsed.UnpackIntoInterface(&decoded, "VaultRegistered", entry.Data); err != nil {
+			return nil, fmt.Errorf("decode VaultRegistered at block %d: %w", entry.BlockNumber, err)
 		}
-		if end == toBlock {
-			break
+		for _, topic := range entry.Topics[1:] {
+			if new(big.Int).SetBytes(topic[:12]).Sign() != 0 {
+				return nil, errors.New("invalid address padding in VaultRegistered")
+			}
 		}
-		start = end + 1
+		info := StakeDAOVaultInfo{
+			Gauge:          common.BytesToAddress(entry.Topics[1].Bytes()),
+			Vault:          common.BytesToAddress(entry.Topics[2].Bytes()),
+			Asset:          common.BytesToAddress(entry.Topics[3].Bytes()),
+			RewardReceiver: decoded.RewardReceiver, ProtocolID: decoded.ProtocolId,
+		}
+		if info.Gauge == (common.Address{}) || info.Vault == (common.Address{}) || info.Asset == (common.Address{}) {
+			return nil, errors.New("zero gauge, vault or asset in VaultRegistered")
+		}
+		registrations[info.Gauge] = info
 	}
 	result := make([]StakeDAOVaultInfo, 0, len(registrations))
 	for _, info := range registrations {

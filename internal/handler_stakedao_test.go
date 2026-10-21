@@ -23,6 +23,7 @@ import (
 
 // Exercise the real Echo route and ethclient JSON-RPC transport without mainnet access.
 func TestStakeDAORoute(t *testing.T) {
+	t.Setenv("STAKEDAO_CONTROLLER_DEPLOYMENT_BLOCK", "3")
 	controller := common.HexToAddress("0x2d8BcE1FaE00a959354aCD9eBf9174337A64d4fb")
 	gauge, vault, asset := common.HexToAddress("0x11"), common.HexToAddress("0x22"), common.HexToAddress("0x33")
 	data, err := os.ReadFile("../contracts/stakedao/CreateVault.json")

@@ -2,6 +2,7 @@ package internal
 
 import (
 	"ABIevm/internal/dto"
+	"ABIevm/internal/rpcclient"
 	"ABIevm/internal/util"
 	"context"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	//"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type PlatformService struct {
@@ -25,11 +25,12 @@ func NewPlatformService() *PlatformService {
 
 func (e *PlatformService) CallContract(to common.Address, rpc string) ([]dto.Pool, error) {
 
-	blockchainClient, err := ethclient.Dial(rpc)
+	blockchainClient, err := rpcclient.DialContext(context.Background(), rpc)
 
 	if err != nil {
 		return nil, err
 	}
+	defer blockchainClient.Close()
 
 	provider, err := aave.NewUipool(to, blockchainClient)
 	if err != nil {

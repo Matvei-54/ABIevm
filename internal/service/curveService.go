@@ -2,6 +2,7 @@ package internal
 
 import (
 	"ABIevm/internal/dto"
+	"ABIevm/internal/rpcclient"
 	curve "ABIevm/pkg/uipool/curve"
 	crv "ABIevm/pkg/uipool/curve/registry"
 	"context"
@@ -89,7 +90,7 @@ func (c CurveService) PullCurvePools() {
 	fmt.Println(" - from PullCurvePools, before all")
 	timeBegin := time.Now()
 
-	client, err := ethclient.Dial(ETH_RPC)
+	client, err := rpcclient.DialContext(context.Background(), ETH_RPC)
 	if err != nil {
 		log.Fatal("Failed to connect to Ethereum client")
 	}
