@@ -41,6 +41,8 @@ func readRegistrationLogs(ctx context.Context, client vaultLogReader, controller
 	if count < uint64(workers) {
 		workers = int(count)
 	}
+	progress := progressFrom(ctx)
+	progress.discoveryStarted(count, workers)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	jobs := make(chan discoveryRange)
@@ -117,6 +119,7 @@ func readRegistrationLogs(ctx context.Context, client vaultLogReader, controller
 		}
 		if firstErr == nil {
 			entries = append(entries, result.logs...)
+			progress.rangeRead(result.interval)
 		}
 	}
 	if firstErr != nil {

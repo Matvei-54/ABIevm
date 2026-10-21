@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/big"
 	"os"
@@ -90,7 +91,7 @@ func (s *StakeDAOService) GetPools(ctx context.Context, network string) (*dto.St
 	return s.getPoolsWithSelection(ctx, network, nil)
 }
 
-func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network string, sample *poolSample) (*dto.StakeDAOPoolsResponse, error) {
+func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network string, sample *poolSample) (result *dto.StakeDAOPoolsResponse, err error) {
 	config, ok := s.networks[network]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedNetwork, network)
@@ -100,14 +101,21 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	progress := newLoadProgress(slog.Default(), network, sample != nil)
+	ctx = context.WithValue(ctx, progressContextKey{}, progress)
+	finish := progress.watch(ctx, 15*time.Second)
+	defer func() { finish(err) }()
+	progress.setStage("dial")
 	client, err := s.dial(ctx, config.rpcURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: dial: %w", ErrRPCUnavailable, err)
 	}
 	defer client.Close()
+	client = &observedRPC{stakeDAORPC: client, progress: progress}
 	if sample != nil {
 		client = newSampleRPC(client)
 	}
+	progress.setStage("chain_id")
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: chain ID: %w", ErrRPCUnavailable, err)
@@ -124,6 +132,8 @@ func (s *StakeDAOService) getPools(ctx context.Context, network string) (*dto.St
 }
 
 func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, sample *poolSample) (*dto.StakeDAOPoolsResponse, error) {
+	progress := progressFrom(ctx)
+	progress.setStage("snapshot")
 	toBlock, err := s.client.BlockNumber(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%w: latest block: %w", ErrRPCUnavailable, err)
@@ -139,6 +149,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	s.snapshotTime = header.Time
 	var vaults []StakeDAOVaultInfo
 	if sample != nil && len(sample.gauges) > 0 {
+		progress.setStage("gauge_registrations")
 		vaults, err = s.currentGaugeRegistrations(ctx, block, sample.gauges)
 	} else {
 		var fromBlock, logsToBlock uint64
@@ -154,6 +165,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			}
 			fromBlock, logsToBlock = sample.fromBlock, sample.toBlock
 		}
+		progress.setStage("discovery")
 		vaults, err = DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, logsToBlock)
 	}
 	if err != nil {
@@ -163,13 +175,16 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		Network: network, BlockNumber: toBlock,
 		Pools: make([]dto.StakeDAOPool, 0, len(vaults)),
 	}
-	for _, info := range vaults {
+	progress.poolProgress(0, 0, len(vaults), common.Address{})
+	progress.setStage("pools")
+	for index, info := range vaults {
 		if sample != nil && len(response.Pools) >= sample.limit {
 			break
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		progress.poolProgress(index+1, len(response.Pools), len(vaults), info.Gauge)
 		registration := s.snapshotCalls(ctx, block,
 			readContract(s.controller, protocolControllerABI, "vault", info.Gauge),
 			readContract(s.controller, protocolControllerABI, "asset", info.Gauge),
@@ -199,6 +214,10 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		issues = append(issues, s.loadRewardStreams(ctx, info, block, &pool)...)
 		response.Pools = append(response.Pools, pool)
 		response.Errors = append(response.Errors, issues...)
+		progress.poolProgress(index+1, len(response.Pools), len(vaults), info.Gauge)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if sample != nil && len(response.Pools) == 0 {
 		if len(sample.gauges) > 0 {
@@ -216,6 +235,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			tokens = append(tokens, reward.Token)
 		}
 	}
+	progress.setStage("prices")
 	if s.prices != nil {
 		// Successful quotes remain usable if other tokens have no price.
 		// Per-pool diagnostics below do not expose upstream transport URLs or credentials.
@@ -229,6 +249,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			return nil, ctx.Err()
 		}
 	}
+	progress.setStage("valuation")
 	for i := range response.Pools {
 		response.Errors = append(response.Errors, s.valuePool(ctx, &response.Pools[i])...)
 		response.Errors = append(response.Errors, s.valueRewards(ctx, &response.Pools[i])...)
@@ -239,6 +260,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	if client, ok := s.client.(*sampleRPC); ok && client.exhausted {
 		return nil, errors.New("sample RPC request budget exhausted; retry with -limit 1")
 	}
+	progress.setStage("verify_snapshot")
 	finalHeader, err := s.client.HeaderByNumber(ctx, block)
 	if err != nil {
 		return nil, fmt.Errorf("%w: verify snapshot: %w", ErrRPCUnavailable, err)
