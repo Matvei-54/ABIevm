@@ -170,14 +170,18 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		vault, err := s.snapshotAddress(ctx, block, s.controller, protocolControllerABI, "vault", info.Gauge)
+		registration := s.snapshotCalls(ctx, block,
+			readContract(s.controller, protocolControllerABI, "vault", info.Gauge),
+			readContract(s.controller, protocolControllerABI, "asset", info.Gauge),
+		)
+		vault, err := registration[0].address()
 		if err != nil {
 			return nil, fmt.Errorf("controller.vault(%s): %w", info.Gauge.Hex(), err)
 		}
 		if vault == (common.Address{}) {
 			continue // Registration has since been disabled.
 		}
-		asset, err := s.snapshotAddress(ctx, block, s.controller, protocolControllerABI, "asset", info.Gauge)
+		asset, err := registration[1].address()
 		if err != nil {
 			return nil, fmt.Errorf("controller.asset(%s): %w", info.Gauge.Hex(), err)
 		}
@@ -348,17 +352,7 @@ func (s *StakeDAOService) snapshotCall(ctx context.Context, block *big.Int, cont
 
 func (s *StakeDAOService) snapshotAddress(ctx context.Context, block *big.Int, contract common.Address, abiJSON, method string, args ...interface{}) (common.Address, error) {
 	out, err := s.snapshotCall(ctx, block, contract, abiJSON, method, args...)
-	if err != nil {
-		return common.Address{}, err
-	}
-	if len(out) != 1 {
-		return common.Address{}, errors.New("invalid address output")
-	}
-	address, ok := out[0].(common.Address)
-	if !ok {
-		return common.Address{}, errors.New("contract output is not an address")
-	}
-	return address, nil
+	return (snapshotResult{values: out, err: err}).address()
 }
 
 func (s *StakeDAOService) loadPool(ctx context.Context, info StakeDAOVaultInfo, block *big.Int) (dto.StakeDAOPool, []dto.StakeDAOPoolError) {
@@ -371,8 +365,15 @@ func (s *StakeDAOService) loadPool(ctx context.Context, info StakeDAOVaultInfo, 
 		Rewards:   make([]dto.StakeDAOReward, 0),
 	}
 	var issues []dto.StakeDAOPoolError
-	readString := func(contract common.Address, abiJSON, method, field string) string {
-		out, err := s.snapshotCall(ctx, block, contract, abiJSON, method)
+	data := s.snapshotCalls(ctx, block,
+		readContract(info.Vault, erc20NameABI, "name"),
+		readContract(info.Vault, erc20SymbolABI, "symbol"),
+		readContract(info.Asset, erc20SymbolABI, "symbol"),
+		readContract(info.Asset, erc20DecimalsABI, "decimals"),
+		readContract(info.Vault, rewardVaultERC4626ABI, "totalAssets"),
+	)
+	readString := func(result snapshotResult, method, field string) string {
+		out, err := result.values, result.err
 		if err == nil && len(out) == 1 {
 			if value, ok := out[0].(string); ok && strings.TrimSpace(value) != "" {
 				return value
@@ -381,12 +382,12 @@ func (s *StakeDAOService) loadPool(ctx context.Context, info StakeDAOVaultInfo, 
 		issues = append(issues, poolIssue(info.Gauge, field, method+"() could not be read or decoded"))
 		return ""
 	}
-	pool.Name = readString(info.Vault, erc20NameABI, "name", "name")
-	pool.Symbol = readString(info.Vault, erc20SymbolABI, "symbol", "symbol")
-	pool.AssetSymbol = readString(info.Asset, erc20SymbolABI, "symbol", "assetSymbol")
+	pool.Name = readString(data[0], "name", "name")
+	pool.Symbol = readString(data[1], "symbol", "symbol")
+	pool.AssetSymbol = readString(data[2], "symbol", "assetSymbol")
 	pool.Name = nonEmpty(pool.Name, pool.Symbol, info.Gauge.Hex())
-	decimalsOut, decimalsErr := s.snapshotCall(ctx, block, info.Asset, erc20DecimalsABI, "decimals")
-	assetsOut, assetsErr := s.snapshotCall(ctx, block, info.Vault, rewardVaultERC4626ABI, "totalAssets")
+	decimalsOut, decimalsErr := data[3].values, data[3].err
+	assetsOut, assetsErr := data[4].values, data[4].err
 	var decimals uint8
 	var decimalsOK bool
 	if decimalsErr == nil && len(decimalsOut) == 1 {
@@ -448,12 +449,16 @@ func (s *StakeDAOService) loadPoolRewardMechanism(ctx context.Context, info Stak
 		return []dto.StakeDAOPoolError{poolIssue(info.Gauge, "apr", "Unverified reward mechanism for this protocol ID")}
 	}
 	pool.RewardMechanism = "accountant"
-	accountant, err := s.snapshotAddress(ctx, block, info.Vault, rewardVaultAccountantABI, "ACCOUNTANT")
+	data := s.snapshotCalls(ctx, block,
+		readContract(info.Vault, rewardVaultAccountantABI, "ACCOUNTANT"),
+		readContract(s.controller, protocolControllerABI, "accountant", info.ProtocolID),
+	)
+	accountant, err := data[0].address()
 	if err != nil || accountant == (common.Address{}) {
 		return []dto.StakeDAOPoolError{poolIssue(info.Gauge, "apr", "RewardVault Accountant could not be read or decoded")}
 	}
 	pool.AccountantAddress = &accountant
-	current, err := s.snapshotAddress(ctx, block, s.controller, protocolControllerABI, "accountant", info.ProtocolID)
+	current, err := data[1].address()
 	if err != nil || current != accountant {
 		return []dto.StakeDAOPoolError{poolIssue(info.Gauge, "apr", "Vault Accountant does not match the current Controller Accountant")}
 	}
@@ -467,23 +472,7 @@ func (s *StakeDAOService) loadPoolRewardMechanism(ctx context.Context, info Stak
 
 func (s *StakeDAOService) unsignedCall(ctx context.Context, block *big.Int, address common.Address, abiJSON, method string, args ...interface{}) (*big.Int, error) {
 	out, err := s.snapshotCall(ctx, block, address, abiJSON, method, args...)
-	if err != nil {
-		return nil, err
-	}
-	if len(out) != 1 {
-		return nil, errors.New("invalid unsigned output")
-	}
-	switch value := out[0].(type) {
-	case *big.Int:
-		if value != nil && value.Sign() >= 0 {
-			return value, nil
-		}
-	case uint8:
-		return new(big.Int).SetUint64(uint64(value)), nil
-	case uint32:
-		return new(big.Int).SetUint64(uint64(value)), nil
-	}
-	return nil, errors.New("invalid unsigned output type")
+	return (snapshotResult{values: out, err: err}).unsigned()
 }
 
 func (s *StakeDAOService) addressList(ctx context.Context, block *big.Int, address common.Address, abiJSON, method string, args ...interface{}) ([]common.Address, error) {
@@ -520,6 +509,16 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 		return append(issues, poolIssue(info.Gauge, "apr", "RewardVault extra reward list is unavailable"))
 	}
 	seen := map[common.Address]bool{}
+	var reads []snapshotRead
+	for _, token := range tokens {
+		if token != (common.Address{}) && !seen[token] {
+			reads = append(reads, readContract(info.Vault, vaultV2ABI, "rewardData", token), readContract(token, erc20DecimalsABI, "decimals"))
+			seen[token] = true
+		}
+	}
+	extra := s.snapshotCalls(ctx, block, reads...)
+	clear(seen)
+	index := 0
 	for _, token := range tokens {
 		if token == (common.Address{}) || seen[token] {
 			issues = append(issues, poolIssue(info.Gauge, "apr", "Invalid or duplicate extra reward token"))
@@ -527,7 +526,9 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 		}
 		seen[token] = true
 		reward := dto.StakeDAOReward{Token: token, Source: "vault-extra"}
-		out, err := s.snapshotCall(ctx, block, info.Vault, vaultV2ABI, "rewardData", token)
+		out, err := extra[index].values, extra[index].err
+		decimals, decErr := extra[index+1].unsigned()
+		index += 2
 		if err == nil && len(out) == 5 {
 			finish, okFinish := out[2].(uint32)
 			raw, okRate := out[3].(*big.Int)
@@ -538,7 +539,7 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 				value := "0"
 				if period <= s.snapshotTime || raw.Sign() == 0 {
 					reward.RatePerSecond = &value
-				} else if decimals, decErr := s.unsignedCall(ctx, block, token, erc20DecimalsABI, "decimals"); decErr == nil && decimals.Uint64() <= 255 {
+				} else if decErr == nil && decimals.IsUint64() && decimals.Uint64() <= 255 {
 					// Verified RewardVault rate is scaled by 1e18 in addition to ERC20 decimals.
 					value = decimal.NewFromBigInt(raw, -18-int32(decimals.Uint64())).String()
 					reward.RatePerSecond = &value
@@ -564,11 +565,22 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 	if err != nil || strategy == (common.Address{}) {
 		return decimal.Zero, errors.New("strategy unavailable")
 	}
-	strategyAccountant, err := s.snapshotAddress(ctx, block, strategy, strategyV2ABI, "ACCOUNTANT")
+	data := s.snapshotCalls(ctx, block,
+		readContract(strategy, strategyV2ABI, "ACCOUNTANT"),
+		readContract(strategy, strategyV2ABI, "balanceOf", info.Gauge),
+		readContract(strategy, strategyV2ABI, "REWARD_TOKEN"),
+		readContract(strategy, strategyV2ABI, "LOCKER"),
+		readContract(info.Vault, vaultV2ABI, "allocator"),
+		readContract(*pool.AccountantAddress, accountantV2ABI, "getProtocolFeePercent"),
+		readContract(*pool.AccountantAddress, accountantV2ABI, "getHarvestFeePercent"),
+		readContract(info.Vault, vaultV2ABI, "POLICY"),
+		readContract(*pool.RewardToken, erc20DecimalsABI, "decimals"),
+	)
+	strategyAccountant, err := data[0].address()
 	if err != nil || strategyAccountant != *pool.AccountantAddress {
 		return decimal.Zero, errors.New("strategy Accountant mismatch")
 	}
-	physical, err := s.unsignedCall(ctx, block, strategy, strategyV2ABI, "balanceOf", info.Gauge)
+	physical, err := data[1].unsigned()
 	if err != nil || pool.AssetAmount == nil || pool.AssetDecimals == nil {
 		return decimal.Zero, errors.New("physical allocation unavailable")
 	}
@@ -576,15 +588,15 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 	if err != nil || assets.Shift(int32(*pool.AssetDecimals)).BigInt().Cmp(physical) != 0 {
 		return decimal.Zero, errors.New("vault supply differs from physical allocation")
 	}
-	strategyToken, err := s.snapshotAddress(ctx, block, strategy, strategyV2ABI, "REWARD_TOKEN")
+	strategyToken, err := data[2].address()
 	if err != nil || strategyToken != *pool.RewardToken {
 		return decimal.Zero, errors.New("strategy reward token mismatch")
 	}
-	locker, err := s.snapshotAddress(ctx, block, strategy, strategyV2ABI, "LOCKER")
+	locker, err := data[3].address()
 	if err != nil || locker == (common.Address{}) {
 		return decimal.Zero, errors.New("locker unavailable")
 	}
-	allocator, err := s.snapshotAddress(ctx, block, info.Vault, vaultV2ABI, "allocator")
+	allocator, err := data[4].address()
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -592,15 +604,15 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 	if err != nil {
 		return decimal.Zero, err
 	}
-	protocolFee, err := s.unsignedCall(ctx, block, *pool.AccountantAddress, accountantV2ABI, "getProtocolFeePercent")
+	protocolFee, err := data[5].unsigned()
 	if err != nil {
 		return decimal.Zero, err
 	}
-	harvestFee, err := s.unsignedCall(ctx, block, *pool.AccountantAddress, accountantV2ABI, "getHarvestFeePercent")
+	harvestFee, err := data[6].unsigned()
 	if err != nil {
 		return decimal.Zero, err
 	}
-	policy, err := s.unsignedCall(ctx, block, info.Vault, vaultV2ABI, "POLICY")
+	policy, err := data[7].unsigned()
 	if err != nil || !policy.IsUint64() || policy.Uint64() > 1 {
 		return decimal.Zero, errors.New("unsupported harvest policy")
 	}
@@ -630,19 +642,25 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			if killed {
 				continue
 			}
-			inflation, err := s.unsignedCall(ctx, block, info.Gauge, curveGaugeABI, "inflation_rate")
+			gaugeData := s.snapshotCalls(ctx, block,
+				readContract(info.Gauge, curveGaugeABI, "inflation_rate"),
+				readContract(common.HexToAddress("0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB"), curveControllerABI, "gauge_relative_weight", info.Gauge, new(big.Int).SetUint64(s.snapshotTime)),
+				readContract(info.Gauge, curveGaugeABI, "working_balances", locker),
+				readContract(info.Gauge, curveGaugeABI, "working_supply"),
+			)
+			inflation, err := gaugeData[0].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
-			weight, err := s.unsignedCall(ctx, block, common.HexToAddress("0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB"), curveControllerABI, "gauge_relative_weight", info.Gauge, new(big.Int).SetUint64(s.snapshotTime))
+			weight, err := gaugeData[1].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
-			working, err := s.unsignedCall(ctx, block, info.Gauge, curveGaugeABI, "working_balances", locker)
+			working, err := gaugeData[2].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
-			supply, err := s.unsignedCall(ctx, block, info.Gauge, curveGaugeABI, "working_supply")
+			supply, err := gaugeData[3].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
@@ -654,52 +672,67 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			}
 			lockerRate = decimal.NewFromBigInt(inflation, 0).Mul(decimal.NewFromBigInt(weight, -18)).Mul(decimal.NewFromBigInt(working, 0)).DivRound(decimal.NewFromBigInt(supply, 0), 128)
 		} else {
-			sidecarAccountant, err := s.snapshotAddress(ctx, block, target, sidecarV2ABI, "ACCOUNTANT")
+			sidecarData := s.snapshotCalls(ctx, block,
+				readContract(target, sidecarV2ABI, "ACCOUNTANT"),
+				readContract(target, sidecarV2ABI, "REWARD_TOKEN"),
+				readContract(target, sidecarV2ABI, "gauge"),
+				readContract(target, sidecarV2ABI, "baseRewardPool"),
+			)
+			sidecarAccountant, err := sidecarData[0].address()
 			if err != nil || sidecarAccountant != *pool.AccountantAddress {
 				return decimal.Zero, errors.New("sidecar Accountant mismatch")
 			}
-			token, err := s.snapshotAddress(ctx, block, target, sidecarV2ABI, "REWARD_TOKEN")
+			token, err := sidecarData[1].address()
 			if err != nil || token != *pool.RewardToken {
 				return decimal.Zero, errors.New("unsupported sidecar")
 			}
-			gauge, err := s.snapshotAddress(ctx, block, target, sidecarV2ABI, "gauge")
+			gauge, err := sidecarData[2].address()
 			if err != nil || gauge != info.Gauge {
 				return decimal.Zero, errors.New("sidecar gauge mismatch")
 			}
-			rewardPool, err := s.snapshotAddress(ctx, block, target, sidecarV2ABI, "baseRewardPool")
+			rewardPool, err := sidecarData[3].address()
 			if err != nil {
 				return decimal.Zero, err
 			}
-			token, err = s.snapshotAddress(ctx, block, rewardPool, convexPoolABI, "rewardToken")
+			rewardData := s.snapshotCalls(ctx, block,
+				readContract(rewardPool, convexPoolABI, "rewardToken"),
+				readContract(rewardPool, convexPoolABI, "periodFinish"),
+			)
+			token, err = rewardData[0].address()
 			if err != nil || token != *pool.RewardToken {
 				return decimal.Zero, errors.New("Convex reward token mismatch")
 			}
-			finish, err := s.unsignedCall(ctx, block, rewardPool, convexPoolABI, "periodFinish")
+			finish, err := rewardData[1].unsigned()
 			if err != nil || !finish.IsUint64() {
 				return decimal.Zero, errors.New("invalid reward period")
 			}
 			if finish.Uint64() <= s.snapshotTime {
 				continue
 			}
-			balance, err := s.unsignedCall(ctx, block, target, sidecarV2ABI, "balanceOf")
+			allocation := s.snapshotCalls(ctx, block,
+				readContract(target, sidecarV2ABI, "balanceOf"),
+				readContract(rewardPool, convexPoolABI, "totalSupply"),
+				readContract(rewardPool, convexPoolABI, "rewardRate"),
+			)
+			balance, err := allocation[0].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
 			if balance.Sign() == 0 {
 				continue
 			}
-			supply, err := s.unsignedCall(ctx, block, rewardPool, convexPoolABI, "totalSupply")
+			supply, err := allocation[1].unsigned()
 			if err != nil || supply == nil || supply.Sign() == 0 || balance.Cmp(supply) > 0 {
 				return decimal.Zero, errors.New("invalid Convex supply")
 			}
-			rate, err := s.unsignedCall(ctx, block, rewardPool, convexPoolABI, "rewardRate")
+			rate, err := allocation[2].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
 			sidecarRate = sidecarRate.Add(decimal.NewFromBigInt(rate, 0).Mul(decimal.NewFromBigInt(balance, 0)).DivRound(decimal.NewFromBigInt(supply, 0), 128))
 		}
 	}
-	decimals, err := s.unsignedCall(ctx, block, *pool.RewardToken, erc20DecimalsABI, "decimals")
+	decimals, err := data[8].unsigned()
 	if err != nil || decimals.Uint64() > 255 {
 		return decimal.Zero, errors.New("reward decimals unavailable")
 	}

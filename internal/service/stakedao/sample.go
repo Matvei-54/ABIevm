@@ -38,8 +38,13 @@ func (s *StakeDAOService) GetPoolsForGauges(ctx context.Context, network string,
 
 func (s *StakeDAOService) currentGaugeRegistrations(ctx context.Context, block *big.Int, gauges []common.Address) ([]StakeDAOVaultInfo, error) {
 	registrations := make([]StakeDAOVaultInfo, 0, len(gauges))
+	reads := make([]snapshotRead, 0, len(gauges))
 	for _, gauge := range gauges {
-		out, err := s.snapshotCall(ctx, block, s.controller, protocolControllerABI, "gauge", gauge)
+		reads = append(reads, readContract(s.controller, protocolControllerABI, "gauge", gauge))
+	}
+	data := s.snapshotCalls(ctx, block, reads...)
+	for i, gauge := range gauges {
+		out, err := data[i].values, data[i].err
 		if err != nil {
 			return nil, fmt.Errorf("controller.gauge(%s): %w", gauge.Hex(), err)
 		}

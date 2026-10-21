@@ -30,6 +30,8 @@ type fixtureRPC struct {
 	logs                 []types.Log
 	queries              []ethereum.FilterQuery
 	callBlocks           []uint64
+	multicallSizes       []int
+	directCalls          int
 	vaults, assets       map[common.Address]common.Address
 	callFailure          string
 	filterFailure        error
@@ -86,6 +88,26 @@ func (f *fixtureRPC) FilterLogs(_ context.Context, query ethereum.FilterQuery) (
 func (f *fixtureRPC) Close() { f.closed = true }
 func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
 	f.callBlocks = append(f.callBlocks, block.Uint64())
+	if call.To != nil && *call.To == stakeDAOMulticallAddress {
+		parsed, _ := abi.JSON(strings.NewReader(stakeDAOMulticallABI))
+		args, err := parsed.Methods["aggregate3"].Inputs.Unpack(call.Data[4:])
+		if err != nil {
+			return nil, err
+		}
+		calls := *abi.ConvertType(args[0], new([]multicallInput)).(*[]multicallInput)
+		f.multicallSizes = append(f.multicallSizes, len(calls))
+		results := make([]multicallOutput, len(calls))
+		for i, subcall := range calls {
+			data, err := f.contractResult(ethereum.CallMsg{To: &subcall.Target, Data: subcall.CallData})
+			results[i] = multicallOutput{Success: err == nil, ReturnData: data}
+		}
+		return parsed.Methods["aggregate3"].Outputs.Pack(results)
+	}
+	f.directCalls++
+	return f.contractResult(call)
+}
+
+func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveControllerABI, convexPoolABI} {
 		parsed, _ := abi.JSON(strings.NewReader(abiJSON))
 		method, err := parsed.MethodById(call.Data[:4])

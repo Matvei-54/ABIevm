@@ -5,6 +5,7 @@ import (
 	"ABIevm/internal/service/stakedao"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +56,77 @@ func TestStakeDAORoute(t *testing.T) {
 	]`))
 	if err != nil {
 		t.Fatal(err)
+	}
+	multicallData, err := os.ReadFile("../contracts/curve/Multicall3Curve.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	multicallABI, err := abi.JSON(strings.NewReader(string(multicallData)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type multicallInput struct {
+		Target       common.Address
+		AllowFailure bool
+		CallData     []byte
+	}
+	type multicallOutput struct {
+		Success    bool
+		ReturnData []byte
+	}
+	var executeCall func(common.Address, []byte) ([]byte, error)
+	executeCall = func(to common.Address, input []byte) ([]byte, error) {
+		if len(input) < 4 {
+			return nil, fmt.Errorf("missing calldata")
+		}
+		if to == common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11") {
+			method := multicallABI.Methods["aggregate3"]
+			args, err := method.Inputs.Unpack(input[4:])
+			if err != nil {
+				return nil, err
+			}
+			calls := *abi.ConvertType(args[0], new([]multicallInput)).(*[]multicallInput)
+			results := make([]multicallOutput, len(calls))
+			for i, call := range calls {
+				data, err := executeCall(call.Target, call.CallData)
+				results[i] = multicallOutput{Success: err == nil, ReturnData: data}
+			}
+			return method.Outputs.Pack(results)
+		}
+		contractABI := tokenABI
+		if to == controller {
+			contractABI = controllerABI
+		}
+		method, err := contractABI.MethodById(input[:4])
+		if err != nil {
+			return nil, err
+		}
+		var value interface{}
+		switch method.Name {
+		case "strategy":
+			value = common.Address{}
+		case "getRewardTokens":
+			value = []common.Address{}
+		case "ACCOUNTANT", "accountant":
+			value = common.HexToAddress("0x55")
+		case "REWARD_TOKEN":
+			value = common.HexToAddress("0x66")
+		case "vault":
+			value = vault
+		case "asset":
+			value = asset
+		case "name":
+			value = "Stake DAO HTTP fixture Vault"
+		case "symbol":
+			value = "FIX"
+		case "decimals":
+			value = uint8(6)
+		case "totalAssets":
+			value = big.NewInt(2500000)
+		default:
+			return nil, fmt.Errorf("unexpected method: %s", method.Name)
+		}
+		return method.Outputs.Pack(value)
 	}
 	rpcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
@@ -108,44 +180,7 @@ func TestStakeDAORoute(t *testing.T) {
 				w.WriteHeader(400)
 				return
 			}
-			contractABI := tokenABI
-			if call.To == controller {
-				contractABI = controllerABI
-			}
-			method, err := contractABI.MethodById(input[:4])
-			if err != nil {
-				t.Error(err)
-				w.WriteHeader(400)
-				return
-			}
-			var value interface{}
-			switch method.Name {
-			case "strategy":
-				value = common.Address{}
-			case "getRewardTokens":
-				value = []common.Address{}
-			case "ACCOUNTANT", "accountant":
-				value = common.HexToAddress("0x55")
-			case "REWARD_TOKEN":
-				value = common.HexToAddress("0x66")
-			case "vault":
-				value = vault
-			case "asset":
-				value = asset
-			case "name":
-				value = "Stake DAO HTTP fixture Vault"
-			case "symbol":
-				value = "FIX"
-			case "decimals":
-				value = uint8(6)
-			case "totalAssets":
-				value = big.NewInt(2500000)
-			default:
-				t.Errorf("unexpected method: %s", method.Name)
-				w.WriteHeader(400)
-				return
-			}
-			encoded, err := method.Outputs.Pack(value)
+			encoded, err := executeCall(call.To, input)
 			if err != nil {
 				t.Error(err)
 				w.WriteHeader(400)
