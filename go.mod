@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/ethereum/go-ethereum v1.16.7
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/shopspring/decimal v1.4.0
 	github.com/swaggo/echo-swagger v1.5.2
@@ -43,6 +44,9 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect

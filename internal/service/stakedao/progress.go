@@ -23,25 +23,27 @@ var stakeDAORequestSequence atomic.Uint64
 // Request-local diagnostics. Never retain/log endpoints, calldata or raw errors:
 // provider errors can contain credentials in URLs or response bodies.
 type loadProgress struct {
-	mu       sync.Mutex
-	logger   *slog.Logger
-	started  time.Time
-	stage    string
-	ranges   uint64
-	read     uint64
-	lastFrom uint64
-	lastTo   uint64
-	workers  int
-	visited  int
-	loaded   int
-	pools    int
-	gauge    common.Address
-	methods  map[string]uint64
-	active   int
-	failures uint64
-	lastRPC  string
-	lastTime time.Duration
-	firstErr *rpcFailure
+	mu             sync.Mutex
+	logger         *slog.Logger
+	started        time.Time
+	stage          string
+	ranges         uint64
+	read           uint64
+	lastFrom       uint64
+	lastTo         uint64
+	workers        int
+	visited        int
+	loaded         int
+	pools          int
+	gauge          common.Address
+	methods        map[string]uint64
+	active         int
+	failures       uint64
+	lastRPC        string
+	lastTime       time.Duration
+	firstErr       *rpcFailure
+	registrySaved  uint64
+	registryTarget uint64
 }
 
 type rpcFailure struct {
@@ -101,6 +103,19 @@ func (p *loadProgress) poolProgress(visited, loaded, total int, gauge common.Add
 	p.mu.Unlock()
 }
 
+func (p *loadProgress) registryProgress(point *RegistryCheckpoint, target uint64) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.registryTarget = target
+	p.registrySaved = 0
+	if point != nil {
+		p.registrySaved = point.Block
+	}
+}
+
 func (p *loadProgress) report(event string, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -114,6 +129,9 @@ func (p *loadProgress) report(event string, err error) {
 	}
 	if p.gauge != (common.Address{}) {
 		attrs = append(attrs, "gauge", p.gauge.Hex())
+	}
+	if p.registryTarget != 0 {
+		attrs = append(attrs, "registry_saved_block", p.registrySaved, "registry_target_block", p.registryTarget)
 	}
 	if failure := p.firstErr; failure != nil {
 		attrs = append(attrs, "first_rpc_failure", failure.kind, "first_rpc_failure_method", failure.method, "first_rpc_failure_stage", failure.stage)
@@ -146,6 +164,10 @@ func (p *loadProgress) report(event string, err error) {
 
 func safeFailure(err error) string {
 	switch {
+	case errors.Is(err, ErrRegistryUnavailable):
+		return "registry_storage"
+	case errors.Is(err, ErrRegistryReorg):
+		return "registry_reorg"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "rpc_timeout"
 	case errors.Is(err, context.Canceled):

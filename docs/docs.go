@@ -156,6 +156,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "504": {
                         "description": "Gateway Timeout",
                         "schema": {

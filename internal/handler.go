@@ -33,14 +33,16 @@ type Handler struct {
 	stakeDao       *stakedao.StakeDAOService
 }
 
-func NewHandler() *Handler {
+func NewHandler() *Handler { return NewHandlerWithRegistry(nil) }
+
+func NewHandlerWithRegistry(store stakedao.RegistryStore) *Handler {
 	priceStore := prices.NewMemoryStore()
 	tokenPrices := prices.NewTokenPriceService(priceStore, prices.NewContractSource(priceStore))
 	return &Handler{
 		evmService:     NewPlatformService(),
 		abiLoadFetcher: NewAbiLoadFetcher(),
 		curveService:   internal.NewCurveService(),
-		stakeDao:       stakedao.NewStakeDAOService(tokenPrices),
+		stakeDao:       stakedao.NewStakeDAOServiceWithRegistry(tokenPrices, store),
 	}
 }
 
@@ -190,6 +192,7 @@ func (h *Handler) HandleGetCurveReserves(c echo.Context) error {
 // @Success      200      {object}  interface{}
 // @Failure      400      {object}  map[string]string
 // @Failure      502      {object}  map[string]string
+// @Failure      503      {object}  map[string]string
 // @Failure      504      {object}  map[string]string
 // @Router       /reservesStakedao/{network} [get]
 func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
@@ -200,6 +203,8 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "StakeDAO currently supports only ethereum"})
 		case errors.Is(err, context.DeadlineExceeded):
 			return c.JSON(http.StatusGatewayTimeout, map[string]string{"error": "StakeDAO RPC request timed out"})
+		case errors.Is(err, stakedao.ErrRegistryUnavailable), errors.Is(err, stakedao.ErrRegistryReorg):
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "StakeDAO registry is unavailable"})
 		default:
 			// RPC errors may contain the endpoint's API key; never expose them in HTTP responses.
 			return c.JSON(http.StatusBadGateway, map[string]string{"error": "StakeDAO blockchain data could not be loaded"})

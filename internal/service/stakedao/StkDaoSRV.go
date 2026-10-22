@@ -49,6 +49,7 @@ type stakeDAONetwork struct {
 
 // StakeDAOService owns its RPC client; concurrent HTTP requests use separate instances.
 type StakeDAOService struct {
+	registry        *RegistryService
 	client          stakeDAORPC
 	controller      common.Address
 	chainID         int64
@@ -86,7 +87,17 @@ func NewStakeDAOService(priceService prices.Provider) *StakeDAOService {
 	}
 }
 
-// GetPools discovers registrations on every request; token prices are shared across requests.
+// NewStakeDAOServiceWithRegistry uses persistent discovery for full requests.
+// Bounded manual samples keep their existing direct Controller path.
+func NewStakeDAOServiceWithRegistry(priceService prices.Provider, store RegistryStore) *StakeDAOService {
+	s := NewStakeDAOService(priceService)
+	if store != nil {
+		s.registry = NewRegistryService(store)
+	}
+	return s
+}
+
+// GetPools synchronizes persistent discovery when configured; token prices are shared across requests.
 func (s *StakeDAOService) GetPools(ctx context.Context, network string) (*dto.StakeDAOPoolsResponse, error) {
 	return s.getPoolsWithSelection(ctx, network, nil)
 }
@@ -123,7 +134,7 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 	if chainID == nil || chainID.Cmp(big.NewInt(config.chainID)) != 0 {
 		return nil, fmt.Errorf("%w: expected chain ID %d", ErrRPCUnavailable, config.chainID)
 	}
-	worker := &StakeDAOService{client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock}
+	worker := &StakeDAOService{registry: s.registry, client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock}
 	return worker.getPoolsSelected(ctx, network, sample)
 }
 
@@ -165,8 +176,13 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			}
 			fromBlock, logsToBlock = sample.fromBlock, sample.toBlock
 		}
-		progress.setStage("discovery")
-		vaults, err = DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, logsToBlock)
+		if sample == nil && s.registry != nil {
+			progress.setStage("registry_sync")
+			vaults, err = s.registry.SyncAndList(ctx, s.client, RegistryKey{ChainID: s.chainID, Platform: "stakedao", Controller: s.controller}, fromBlock, toBlock)
+		} else {
+			progress.setStage("discovery")
+			vaults, err = DiscoverStakeDAOVaults(ctx, s.client, s.controller, fromBlock, logsToBlock)
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -185,27 +201,15 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			return nil, err
 		}
 		progress.poolProgress(index+1, len(response.Pools), len(vaults), info.Gauge)
-		registration := s.snapshotCalls(ctx, block,
-			readContract(s.controller, protocolControllerABI, "vault", info.Gauge),
-			readContract(s.controller, protocolControllerABI, "asset", info.Gauge),
-		)
-		vault, err := registration[0].address()
+		current, err := s.currentGaugeRegistrations(ctx, block, []common.Address{info.Gauge})
 		if err != nil {
-			return nil, fmt.Errorf("controller.vault(%s): %w", info.Gauge.Hex(), err)
+			return nil, err
 		}
-		if vault == (common.Address{}) {
-			continue // Registration has since been disabled.
-		}
-		asset, err := registration[1].address()
-		if err != nil {
-			return nil, fmt.Errorf("controller.asset(%s): %w", info.Gauge.Hex(), err)
-		}
-		if asset == (common.Address{}) {
-			response.Errors = append(response.Errors, poolIssue(info.Gauge, "asset", "Controller returned a zero asset address"))
+		if len(current) == 0 {
 			continue
-		}
-		if vault != info.Vault || asset != info.Asset {
-			// Avoid attaching rewardReceiver/protocolId from an obsolete registration.
+		} // Unregistered or shutdown at the calculation block.
+		state := current[0]
+		if state.Vault != info.Vault || state.Asset != info.Asset || state.RewardReceiver != info.RewardReceiver || state.ProtocolID != info.ProtocolID {
 			response.Errors = append(response.Errors, poolIssue(info.Gauge, "registration", "Registration differs from Controller state at the snapshot block"))
 			continue
 		}
@@ -325,26 +329,9 @@ func DiscoverStakeDAOVaults(ctx context.Context, client vaultLogReader, controll
 		if entry.Address != controller || entry.BlockNumber < fromBlock || entry.BlockNumber > toBlock || len(entry.Topics) != 4 || entry.Topics[0] != event.ID {
 			return nil, fmt.Errorf("invalid VaultRegistered log at block %d", entry.BlockNumber)
 		}
-		var decoded struct {
-			RewardReceiver common.Address
-			ProtocolId     [4]byte
-		}
-		if err := parsed.UnpackIntoInterface(&decoded, "VaultRegistered", entry.Data); err != nil {
-			return nil, fmt.Errorf("decode VaultRegistered at block %d: %w", entry.BlockNumber, err)
-		}
-		for _, topic := range entry.Topics[1:] {
-			if new(big.Int).SetBytes(topic[:12]).Sign() != 0 {
-				return nil, errors.New("invalid address padding in VaultRegistered")
-			}
-		}
-		info := StakeDAOVaultInfo{
-			Gauge:          common.BytesToAddress(entry.Topics[1].Bytes()),
-			Vault:          common.BytesToAddress(entry.Topics[2].Bytes()),
-			Asset:          common.BytesToAddress(entry.Topics[3].Bytes()),
-			RewardReceiver: decoded.RewardReceiver, ProtocolID: decoded.ProtocolId,
-		}
-		if info.Gauge == (common.Address{}) || info.Vault == (common.Address{}) || info.Asset == (common.Address{}) {
-			return nil, errors.New("zero gauge, vault or asset in VaultRegistered")
+		info, err := decodeVaultRegistration(parsed, entry)
+		if err != nil {
+			return nil, err
 		}
 		registrations[info.Gauge] = info
 	}
@@ -354,6 +341,29 @@ func DiscoverStakeDAOVaults(ctx context.Context, client vaultLogReader, controll
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Gauge.Hex() < result[j].Gauge.Hex() })
 	return result, nil
+}
+
+func decodeVaultRegistration(parsed abi.ABI, entry types.Log) (StakeDAOVaultInfo, error) {
+	if len(entry.Topics) != 4 || entry.Topics[0] != parsed.Events["VaultRegistered"].ID {
+		return StakeDAOVaultInfo{}, errors.New("invalid VaultRegistered topics")
+	}
+	var decoded struct {
+		RewardReceiver common.Address
+		ProtocolId     [4]byte
+	}
+	if err := parsed.UnpackIntoInterface(&decoded, "VaultRegistered", entry.Data); err != nil {
+		return StakeDAOVaultInfo{}, fmt.Errorf("decode VaultRegistered at block %d: %w", entry.BlockNumber, err)
+	}
+	for _, topic := range entry.Topics[1:] {
+		if new(big.Int).SetBytes(topic[:12]).Sign() != 0 {
+			return StakeDAOVaultInfo{}, errors.New("invalid address padding in VaultRegistered")
+		}
+	}
+	info := StakeDAOVaultInfo{Gauge: common.BytesToAddress(entry.Topics[1].Bytes()), Vault: common.BytesToAddress(entry.Topics[2].Bytes()), Asset: common.BytesToAddress(entry.Topics[3].Bytes()), RewardReceiver: decoded.RewardReceiver, ProtocolID: decoded.ProtocolId}
+	if info.Gauge == (common.Address{}) || info.Vault == (common.Address{}) || info.Asset == (common.Address{}) {
+		return StakeDAOVaultInfo{}, errors.New("zero gauge, vault or asset in VaultRegistered")
+	}
+	return info, nil
 }
 
 func (s *StakeDAOService) snapshotCall(ctx context.Context, block *big.Int, contract common.Address, abiJSON, method string, args ...interface{}) ([]interface{}, error) {

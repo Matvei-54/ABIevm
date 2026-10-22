@@ -103,6 +103,8 @@ func TestStakeDAORoute(t *testing.T) {
 		}
 		var value interface{}
 		switch method.Name {
+		case "gauge":
+			return method.Outputs.Pack(vault, asset, common.HexToAddress("0x44"), [4]byte{0xc7, 0x15, 0xe3, 0x73}, false)
 		case "strategy":
 			value = common.Address{}
 		case "getRewardTokens":

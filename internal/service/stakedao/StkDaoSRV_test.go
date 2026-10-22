@@ -226,7 +226,7 @@ func registration(t *testing.T, controller, gauge, vault, asset common.Address, 
 		t.Fatal(err)
 	}
 	event := parsed.Events["VaultRegistered"]
-	data, err := event.Inputs.NonIndexed().Pack(common.HexToAddress("0x44"), [4]byte{1, 2, 3, 4})
+	data, err := event.Inputs.NonIndexed().Pack(common.HexToAddress("0x44"), [4]byte{0xc7, 0x15, 0xe3, 0x73})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestDiscoveryChunksHistoryAndKeepsLatestRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result) != 2 || result[0].Gauge != gauge || result[0].Vault != vault || result[0].RewardReceiver != common.HexToAddress("0x44") || result[0].ProtocolID != [4]byte{1, 2, 3, 4} {
+	if len(result) != 2 || result[0].Gauge != gauge || result[0].Vault != vault || result[0].RewardReceiver != common.HexToAddress("0x44") || result[0].ProtocolID != [4]byte{0xc7, 0x15, 0xe3, 0x73} {
 		t.Fatalf("wrong registrations: %+v", result)
 	}
 	wantRanges := [][2]uint64{{10, 1509}, {1510, 3009}, {3010, 4010}}
@@ -427,7 +427,7 @@ func TestGetPoolsRejectsStaleRegistrationAndReorganizedSnapshot(t *testing.T) {
 		t.Fatal("reorganized snapshot accepted")
 	}
 	s, f = newPoolFixture(t)
-	f.callFailure = "vault"
+	f.callFailure = "gauge"
 	if _, err := s.GetPools(context.Background(), "ethereum"); err == nil || !f.closed {
 		t.Fatal("failed Controller read was silently skipped")
 	}
