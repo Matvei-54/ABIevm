@@ -5,57 +5,61 @@
 сервер завершает запуск с понятной ошибкой, без переключения на полное сканирование.
 Поддерживается PostgreSQL 17; драйвер Go — `pgx/v5`, пул до 5 соединений.
 
-## Локальный Postgres через Docker (PowerShell)
+## Установленный Postgres: вручную через pgAdmin
 
-Из корня проекта:
+Docker не требуется. Используйте установленный PostgreSQL и свой существующий
+логин. Пароль и адрес подключения задаются только на вашем компьютере.
+
+1. В pgAdmin подключитесь к своему серверу PostgreSQL.
+2. Создайте базу `abievm` через **Databases → Create → Database** либо выберите
+   уже созданную базу. Владельцем укажите своего пользователя.
+3. Именно для этой базы откройте **Query Tool**.
+4. Откройте файл `migrations/000001_registry.up.sql` и выполните его **целиком**,
+   вместе с `BEGIN` / `COMMIT`. Скрипт уже содержит все таблицы, индексы и ограничения;
+   вручную собирать колонки через GUI не нужно.
+5. Обновите дерево **Schemas → public → Tables**: должны появиться
+   `registry_sync_state`, `registry_checkpoints`, `registry_events`.
+
+Применяйте скрипт один раз. Он не создаёт саму базу или пользователя. Подключение
+приложения должно указывать на ту же базу, где выполнен скрипт. Для простого
+локального запуска используйте тот же логин, которым создавали таблицы; при
+отдельном пользователе приложения ему нужны права чтения/записи этих таблиц.
+
+Вариант без pgAdmin — установленный `psql`, из корня проекта:
 
 ```powershell
-$env:POSTGRES_PASSWORD = "change_me_local"
-docker compose -f compose.postgres.yml up -d
-docker compose -f compose.postgres.yml ps
-```
-
-Дождитесь `healthy`. Для уже установленного Postgres Docker не нужен: создайте
-пользователя и базу `abievm`, затем примените миграцию через `psql`.
-
-Применить схему в Docker:
-
-```powershell
-Get-Content -Raw migrations/000001_registry.up.sql | docker compose -f compose.postgres.yml exec -T postgres psql -U abievm -d abievm -v ON_ERROR_STOP=1
-```
-
-Или установленным `psql` (адрес и пароль укажите свои):
-
-```powershell
-$env:DATABASE_URL = "postgres://abievm:change_me_local@127.0.0.1:5432/abievm?sslmode=disable"
+$env:DATABASE_URL = "postgres://postgres:YOUR_PASSWORD@127.0.0.1:5432/abievm?sslmode=disable"
 psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f migrations/000001_registry.up.sql
 ```
 
-В Linux/macOS:
-
-```sh
-export POSTGRES_PASSWORD=change_me_local
-docker compose -f compose.postgres.yml up -d
-# После healthy:
-docker compose -f compose.postgres.yml exec -T postgres psql -U abievm -d abievm -v ON_ERROR_STOP=1 < migrations/000001_registry.up.sql
-```
-
-`change_me_local` — пример для локальной разработки. В удалённом Postgres
-используйте свои реквизиты и требуемый сервером TLS. Спецсимволы в пароле URL
-нужно URL-encode. Пароль существующего Docker volume не меняется от простой
-замены переменной POSTGRES_PASSWORD после первого создания базы.
+Замените `postgres`, `YOUR_PASSWORD`, порт и имя базы своими значениями.
+Все реквизиты уже содержатся в `DATABASE_URL`; отдельные `POSTGRES_USER` /
+`POSTGRES_PASSWORD` для Go-приложения не нужны. Спецсимволы в пароле URL нужно
+URL-encode, например `@` → `%40`, `#` → `%23`. Для локального примера показан
+`sslmode=disable`; для удалённого Postgres укажите требуемый сервером TLS.
 
 ## Подключение Go/Echo
 
 ```powershell
-$env:DATABASE_URL = "postgres://abievm:change_me_local@127.0.0.1:5432/abievm?sslmode=disable"
+$env:DATABASE_URL = "postgres://postgres:YOUR_PASSWORD@127.0.0.1:5432/abievm?sslmode=disable"
 $env:STAKEDAO_ETHEREUM_RPC_URL = "ВАШ_ETHEREUM_MAINNET_RPC"
 $env:RPC_MAX_RPS = "18"
 $env:STAKEDAO_DISCOVERY_WORKERS = "8"
 go run -mod=readonly ./cmd
 ```
 
-В IDE задайте эти переменные в **Run Configuration → Environment variables**.
+Если запускаете из GoLand, задайте их в
+**Run → Edit Configurations → ваша конфигурация → Environment variables**:
+
+```text
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@127.0.0.1:5432/abievm?sslmode=disable
+STAKEDAO_ETHEREUM_RPC_URL=ВАШ_ETHEREUM_MAINNET_RPC
+```
+
+Логин и пароль в первой строке — ваши реальные реквизиты. При успешном старте
+в консоли появится `StakeDAO registry storage backend=postgres`. После этого
+используйте прежний Swagger `GET /reservesStakedao/ethereum`.
+
 Переменные другой PowerShell-сессии не попадут в уже запущенную IDE.
 `.env.example` можно использовать как образец; сам Go `.env` не читает.
 Echo не требует отдельного DB-плагина: `cmd/main.go` открывает пул, проверяет схему
@@ -66,6 +70,24 @@ Echo не требует отдельного DB-плагина: `cmd/main.go` �
 заново сканирует историю. Режим явно печатается при старте.
 Если URL задан неверно или Postgres недоступен, тихого fallback нет.
 Проверка `cmd/stakedao-check -limit 5` по-прежнему идёт напрямую по gauge без БД.
+
+## Необязательный вариант на будущее: Docker
+
+Для вашей установленной БД этот раздел можно пропустить. `compose.postgres.yml`
+оставлен как альтернативный способ запуска отдельного локального сервера:
+
+```powershell
+$env:POSTGRES_PASSWORD = "change_me_local"
+docker compose -f compose.postgres.yml up -d --wait
+Get-Content -Raw migrations/000001_registry.up.sql | docker compose -f compose.postgres.yml exec -T postgres psql -U abievm -d abievm -v ON_ERROR_STOP=1
+```
+
+В этом варианте создаются отдельные база/пользователь `abievm`, поэтому URL будет
+`postgres://abievm:change_me_local@127.0.0.1:5432/abievm?sslmode=disable`.
+Если установленный Postgres уже занимает 5432, для контейнера нужен другой
+`POSTGRES_PORT`. Docker Compose может читать `.env`, Go автоматически его не читает.
+Пароль существующего Docker volume не меняется от простой замены переменной
+POSTGRES_PASSWORD после первого создания базы.
 
 ## Файлы и обязанности
 

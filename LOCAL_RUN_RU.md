@@ -115,7 +115,7 @@ Swagger `GET /reservesStakedao/ethereum` по-прежнему выполняе�
 тот же блок/время и сопоставимый reward APR, а не итоговый APY из UI.
 
 Хранение регистраций в Postgres реализовано и включается через `DATABASE_URL`.
-Миграция, команды Docker/psql и настройки IDE: [migrations/README.md](migrations/README.md).
+Ручная миграция через pgAdmin/psql и настройки IDE: [migrations/README.md](migrations/README.md).
 Архитектура: `internal/service/stakedao/REGISTRY_STORAGE_PLAN_RU.md`.
 Redis пока не требуется: цены остаются в map.
 
@@ -170,7 +170,7 @@ RPC_MAX_RPS ограничивает суммарные HTTP RPC-методы Aa
 
 Один раз примените `migrations/000001_registry.up.sql` в своей базе, затем задайте
 `DATABASE_URL` в терминале/Run Configuration до запуска сервера. Полные команды
-для локального Docker и обычного установленного Postgres — в
+для вашего установленного Postgres (pgAdmin/psql) и необязательного Docker — в
 [migrations/README.md](migrations/README.md). Миграции не выполняются автоматически.
 
 Echo получает пул из `cmd/main.go`; сервис синхронизации находится в
