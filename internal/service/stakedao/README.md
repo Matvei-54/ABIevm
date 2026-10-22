@@ -116,7 +116,7 @@ URL, исходные тексты ошибок и тела ответов не 
 
 ### Multicall в StakeDAO
 
-Multicall3 подключён к полному endpoint и команде проверки 1–3 пулов. Адрес
+Multicall3 подключён к полному endpoint и команде проверки 1–5 пулов. Адрес
 Ethereum Mainnet: `0xcA11bde05977b3631167028862bE2a173976CA11`.
 ABI `aggregate3` в `multicall.go` — подмножество уже имеющегося
 `contracts/curve/Multicall3Curve.json`; совместимость кодирования проверяется тестом.
@@ -175,7 +175,7 @@ Multicall необходимо проверять отдельно от RPS.
 ```sh
 # Перед запуском задайте STAKEDAO_ETHEREUM_RPC_URL своего Ethereum Mainnet endpoint.
 go run -mod=readonly ./cmd/stakedao-check -limit 1 -output stakedao-sample.json
-go run -mod=readonly ./cmd/stakedao-check -limit 3 -output stakedao-sample.json
+go run -mod=readonly ./cmd/stakedao-check -limit 5 -output stakedao-sample-5.json
 ```
 
 По умолчанию `GetPoolsForGauges` читает текущий `Controller.gauge(address)` для
@@ -185,14 +185,16 @@ go run -mod=readonly ./cmd/stakedao-check -limit 3 -output stakedao-sample.json
 - `0xbE6228125448E40F5DCBB2DbdF7fF3F5721000B4`
 - `0x3285987Bbd0b695Ac48DC8571F519065B50aBA07`
 - `0x326b6d1a26Fd04afAa349340022076b5a2eb0c7C`
+- `0xa5F5DBdFc6baFc69bb4107AF97Ca79519304Dbd7`
+- `0x8F4e42343AF1CBF4f364cE448252d801E3f73937`
 
 Кандидаты заданы только в ручной команде, не в production discovery. Их актуальные
 vault, asset, rewardReceiver, protocolId и shutdown читаются из Controller на
 свежем snapshot-блоке; неподтверждённые регистрации не используются. Затем
 работают общие функции метаданных, TVL, наград и финальная проверка hash блока.
 Нет `eth_getLogs` и `eth_getCode`. Свои gauge можно передать через `-gauges`:
-1–3 уникальных ненулевых адреса через запятую. `-limit 1` проверяет только первого
-кандидата; `-limit 3` — до трёх. Неактивные кандидаты могут уменьшить выборку.
+1–5 уникальных ненулевых адресов через запятую. `-limit 1` проверяет только первого
+кандидата; `-limit 5` — до пяти. Неактивные кандидаты могут уменьшить выборку.
 
 Предыдущий default — окно 23225415–23225514 — не дал подходящих регистраций
 при запуске пользователем. Оно больше не используется по умолчанию. Ручной режим
@@ -227,6 +229,41 @@ APY во всех трёх `null`. Это snapshot-оценка reward APR, не
 с UI StakeDAO. При повторном запуске значения/доступность оракулов могут отличаться.
 GetBlock endpoint пользователя в этом запуске не использовался; его квота не
 расходовалась. Полный Swagger discovery изменён после этой ограниченной проверки; его mainnet-время пока не измерено.
+
+### Проверка пяти пулов после расширения выборки
+
+22.10.2026 команда `-limit 5` загрузила пять vault через PublicNode на блоке
+**26248584**, без `eth_getLogs`/`eth_getCode`. Итог: **165 RPC-попыток за ~33 секунды**,
+внутри прежних ограничений 5 RPS, 300 попыток, 5 минут. GetBlock пользователя
+не использовался. Результат: `examples/stakedao-sample-5.json`.
+
+| Пул | TVL, USD | Reward APR | Статус |
+| --- | --- | --- | --- |
+| evaUSDC/evaUSDT | 3 820 371.15 | 11.92396225% | available |
+| avUSD/evaUSDC | null | null | unavailable |
+| frxUSD/scrvUSD | 2.12 | 0% | available |
+| srRoyUSDC/frxUSD | 9 663.82 | 0% | available |
+| frxUSD/evaUSDT | 996.20 | 0% | available |
+
+Два сообщения `errors` относятся к avUSD: без доступной USD-цены нет TVL и APR.
+Нулевые APR в остальных трёх строках получены из прочитанных текущих reward rates,
+а не подставлены при ошибке. `rpc_errors` в диагностике включает неуспешные пробы
+источников цен; этот счётчик не равен числу недоступных полей итогового JSON.
+Фактические APR/reward streams указаны в JSON без округления таблицы.
+
+Проверка подтверждает загрузку пяти текущих регистраций и работу расчёта на одном
+snapshot-блоке. Она не является независимым доказательством точности формул или
+совпадения с UI StakeDAO. Автотесты проверяют расчёт комиссий, масштабы и состояния
+available/partial/unavailable на контролируемых данных. Для сверки с UI нужно
+сопоставить именно reward APR, состав наград и близкое время; итоговый UI APY
+может включать торговые комиссии/другие доходы, которых наш `aprScope=rewards` не включает.
+
+## Хранение регистраций — предложение
+
+План для согласования: [REGISTRY_STORAGE_PLAN_RU.md](REGISTRY_STORAGE_PLAN_RU.md).
+Предлагаются Postgres для реестра и атомарного курсора, Redis позднее для
+временных цен/результатов. Учтены несколько сетей/платформ, изменения/отключения
+пулов, реорганизации и размер данных. В текущей правке эти механизмы не реализованы.
 
 ## Проверки
 

@@ -13,6 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// MaxSamplePools bounds manual checks without scanning the full registry.
+const MaxSamplePools = 5
+
 type poolSample struct {
 	fromBlock, toBlock uint64
 	limit              int
@@ -23,8 +26,8 @@ type poolSample struct {
 // state. No event discovery or historical state is required. Addresses are hints,
 // never a substitute for the onchain registration.
 func (s *StakeDAOService) GetPoolsForGauges(ctx context.Context, network string, gauges []common.Address, limit int) (*dto.StakeDAOPoolsResponse, error) {
-	if limit < 1 || limit > 3 || len(gauges) < 1 || len(gauges) > 3 {
-		return nil, errors.New("select 1–3 gauge addresses and a sample limit between 1 and 3")
+	if limit < 1 || limit > MaxSamplePools || len(gauges) < 1 || len(gauges) > MaxSamplePools {
+		return nil, errors.New("select 1–5 gauge addresses and a sample limit between 1 and 5")
 	}
 	seen := make(map[common.Address]bool)
 	for _, gauge := range gauges {
@@ -70,12 +73,12 @@ func (s *StakeDAOService) currentGaugeRegistrations(ctx context.Context, block *
 	return registrations, nil
 }
 
-// GetPoolsSample checks at most three current vaults registered in one small log
+// GetPoolsSample checks at most five current vaults registered in one small log
 // window. It deliberately avoids deployment discovery and historical eth_getCode.
 // An older registration is used only when its vault and asset still match Controller.
 func (s *StakeDAOService) GetPoolsSample(ctx context.Context, network string, fromBlock, toBlock uint64, limit int) (*dto.StakeDAOPoolsResponse, error) {
-	if limit < 1 || limit > 3 {
-		return nil, errors.New("sample limit must be between 1 and 3")
+	if limit < 1 || limit > MaxSamplePools {
+		return nil, errors.New("sample limit must be between 1 and 5")
 	}
 	if fromBlock > toBlock || toBlock-fromBlock >= 100 {
 		return nil, errors.New("sample log window must contain between 1 and 100 blocks")

@@ -78,6 +78,34 @@ func TestExplicitGaugesSkipUnregisteredAndShutdown(t *testing.T) {
 	}
 }
 
+func TestFiveExplicitGaugesUseCurrentControllerWithoutHistory(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary = true
+	var gauges []common.Address
+	for i := int64(0); i < 5; i++ {
+		gauge := common.BigToAddress(big.NewInt(1000 + i))
+		gauges = append(gauges, gauge)
+		f.vaults[gauge] = common.BigToAddress(big.NewInt(2000 + i))
+		f.assets[gauge] = common.HexToAddress("0xcc")
+	}
+	// Exercise selection/calculations without the sample wrapper's wall-clock
+	// pacing. The RPC-budget/throttle wrapper is covered independently.
+	f.logs = nil
+	s.client, s.controller, s.chainID = f, f.controller, 1
+	result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{limit: 5, gauges: gauges})
+	if err != nil || len(result.Pools) != 5 || len(result.Errors) != 0 {
+		t.Fatalf("five-pool check failed: result=%+v err=%v", result, err)
+	}
+	if len(f.queries) != 0 || f.codeReads != 0 {
+		t.Fatal("five-pool check scanned history")
+	}
+	for i, pool := range result.Pools {
+		if pool.GaugeAddress != gauges[i] || pool.VaultAddress != f.vaults[gauges[i]] || pool.APRStatus != "available" || pool.APR == nil || pool.TVL == nil {
+			t.Fatalf("mixed registration or missing calculation for pool %d: %+v", i, pool)
+		}
+	}
+}
+
 func TestInvalidExplicitGaugesRejectBeforeDial(t *testing.T) {
 	s := NewStakeDAOService(nil)
 	s.dial = func(context.Context, string) (stakeDAORPC, error) {
@@ -85,7 +113,11 @@ func TestInvalidExplicitGaugesRejectBeforeDial(t *testing.T) {
 		return nil, nil
 	}
 	a, b := common.HexToAddress("0x11"), common.HexToAddress("0x12")
-	for _, gauges := range [][]common.Address{nil, {{}}, {a, a}, {a, b, a, b}} {
+	oversized := make([]common.Address, 6)
+	for i := range oversized {
+		oversized[i] = common.BigToAddress(big.NewInt(int64(i + 1)))
+	}
+	for _, gauges := range [][]common.Address{nil, {{}}, {a, a}, {a, b, a, b}, oversized} {
 		if _, err := s.GetPoolsForGauges(context.Background(), "ethereum", gauges, 1); err == nil {
 			t.Fatal("invalid gauges accepted")
 		}
@@ -101,7 +133,7 @@ func TestSampleBoundsRejectBeforeDial(t *testing.T) {
 	for _, tc := range []struct {
 		fromBlock, toBlock uint64
 		limit              int
-	}{{1, 100, 0}, {1, 100, 4}, {2, 1, 1}, {1, 101, 1}, {0, ^uint64(0), 1}} {
+	}{{1, 100, 0}, {1, 100, 6}, {2, 1, 1}, {1, 101, 1}, {0, ^uint64(0), 1}} {
 		if _, err := s.GetPoolsSample(context.Background(), "ethereum", tc.fromBlock, tc.toBlock, tc.limit); err == nil {
 			t.Fatalf("accepted invalid bounds: %+v", tc)
 		}
@@ -129,11 +161,11 @@ func TestSampleUsesCurrentStateWithoutHistoricalCode(t *testing.T) {
 }
 
 func TestSampleLimitsActivePoolsAndSkipsObsoleteRegistrations(t *testing.T) {
-	for _, limit := range []int{1, 3} {
+	for _, limit := range []int{1, 3, 5} {
 		s, f := newPoolFixture(t)
-		// Keep the original active Curve vault and add three others, including
+		// Keep the original active Curve vault and add five others, including
 		// an obsolete registration that must never be attached to current state.
-		for i := int64(1); i <= 4; i++ {
+		for i := int64(1); i <= 5; i++ {
 			gauge := common.BigToAddress(big.NewInt(1000 + i))
 			vault := common.BigToAddress(big.NewInt(2000 + i))
 			asset := common.BytesToAddress(f.logs[0].Topics[3].Bytes())

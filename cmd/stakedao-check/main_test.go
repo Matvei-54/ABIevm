@@ -14,7 +14,7 @@ func TestInvalidCheckDoesNotMakeRequests(t *testing.T) {
 		t.Fatal("missing endpoint was accepted")
 	}
 	t.Setenv("STAKEDAO_ETHEREUM_RPC_URL", "https://must-not-connect.invalid")
-	for _, args := range [][]string{{"-limit", "4"}, {"-from", "1", "-to", "101"}, {"-from", "2", "-to", "1"}, {"-from", "1"}, {"-gauges", "invalid"}, {"-gauges", "0x0000000000000000000000000000000000000000"}, {"unexpected"}} {
+	for _, args := range [][]string{{"-limit", "6"}, {"-from", "1", "-to", "101"}, {"-from", "2", "-to", "1"}, {"-from", "1"}, {"-gauges", "invalid"}, {"-gauges", "0x0000000000000000000000000000000000000000"}, {"unexpected"}} {
 		if err := run(context.Background(), args, io.Discard, io.Discard); err == nil {
 			t.Fatalf("invalid arguments accepted: %v", args)
 		}

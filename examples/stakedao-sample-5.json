@@ -1,0 +1,215 @@
+{
+  "network": "ethereum",
+  "blockNumber": 26248584,
+  "pools": [
+    {
+      "gaugeAddress": "0xbe6228125448e40f5dcbb2dbdf7ff3f5721000b4",
+      "vaultAddress": "0x08c5e4f760cb2efdb69865ed2d3a6eb2796be799",
+      "assetAddress": "0x3c0965582db7a0f660d491aa6174b9438f911c21",
+      "rewardReceiver": "0xbca59ad0270f1ece6a671d24dccf54e9d146b5d7",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO evaUSDC/evaUSDT Vault",
+      "symbol": "sd-evaUSDMAIN-vault",
+      "assetSymbol": "evaUSDMAIN",
+      "assetAmount": "3822649.002615171621100758",
+      "assetDecimals": 18,
+      "tvl": 3820371.150069875,
+      "apr": 11.923962250984262,
+      "aprStatus": "available",
+      "apy": null,
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.039200184212572561702507946104776035213159429042400406061484443632675681137898034371052026486511635382763138515711654567962191569252346152801822858745",
+          "periodFinish": null,
+          "apr": 11.923962250984262
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-10-22T13:54:29.169884886Z"
+    },
+    {
+      "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
+      "vaultAddress": "0x79b1571ebe88b4519db4fd964b12b922c0a915d6",
+      "assetAddress": "0x6c380152ee65d4f41eaf1a136aa882713f2524fe",
+      "rewardReceiver": "0xc479b94a0267994442b9da406068d562090e4ea0",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO avUSD/evaUSDC Vault",
+      "symbol": "sd-Avant Eva-vault",
+      "assetSymbol": "Avant Eva",
+      "assetAmount": "0.100140583641024587",
+      "assetDecimals": 18,
+      "tvl": null,
+      "apr": null,
+      "aprStatus": "unavailable",
+      "apy": null,
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0",
+          "periodFinish": null,
+          "apr": null
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": null
+        }
+      ],
+      "source": "onchain",
+      "updatedAt": "2026-10-22T13:54:31.943635Z"
+    },
+    {
+      "gaugeAddress": "0x326b6d1a26fd04afaa349340022076b5a2eb0c7c",
+      "vaultAddress": "0x8fe5ff2d6784d048e7ebfb915709e9e3c07841db",
+      "assetAddress": "0x4d968a5db8da0822a2f08840f553de4129aae5f3",
+      "rewardReceiver": "0x15c546bb942d5b420884006423a5f860fd7a2ff4",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO frxUSD/scrvUSD Vault",
+      "symbol": "sd-frxscrvUSD-vault",
+      "assetSymbol": "frxscrvUSD",
+      "assetAmount": "2.032228375438167188",
+      "assetDecimals": 18,
+      "tvl": 2.122562955169799,
+      "apr": 0,
+      "aprStatus": "available",
+      "apy": null,
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0",
+          "periodFinish": null,
+          "apr": 0
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-10-22T13:54:34.548642315Z"
+    },
+    {
+      "gaugeAddress": "0xa5f5dbdfc6bafc69bb4107af97ca79519304dbd7",
+      "vaultAddress": "0x9397871b35931d6690ff5cc2cbea1bef18b84e6e",
+      "assetAddress": "0x310a9fd2906c6a3ee97289095b183f96309c56ae",
+      "rewardReceiver": "0xfe169b32a7670928bdfe6949a9db5c8a9f094a3e",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO srRoyUSDC/frxUSD Vault",
+      "symbol": "sd-srRYfrxusd-vault",
+      "assetSymbol": "srRYfrxusd",
+      "assetAmount": "9478.197732792230184486",
+      "assetDecimals": 18,
+      "tvl": 9663.823803624371,
+      "apr": 0,
+      "aprStatus": "available",
+      "apy": null,
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0",
+          "periodFinish": null,
+          "apr": 0
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-10-22T13:54:37.157097457Z"
+    },
+    {
+      "gaugeAddress": "0x8f4e42343af1cbf4f364ce448252d801e3f73937",
+      "vaultAddress": "0x2c1ad3b6a7cce8baf2fc070d231cb95f4a607911",
+      "assetAddress": "0x552827613fea5eada3871f83b2d407d50cb04116",
+      "rewardReceiver": "0x55be9477a8ba443507482346cbd41cc29cf8dc10",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO frxUSD/evaUSDT Vault",
+      "symbol": "sd-frxevaUSDT-vault",
+      "assetSymbol": "frxevaUSDT",
+      "assetAmount": "996.166054059538731669",
+      "assetDecimals": 18,
+      "tvl": 996.1955083856727,
+      "apr": 0,
+      "aprStatus": "available",
+      "apy": null,
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0",
+          "periodFinish": null,
+          "apr": 0
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0
+        },
+        {
+          "token": "0xcacd6fd266af91b8aed52accc382b4e165586e29",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-10-22T13:54:39.374844691Z"
+    }
+  ],
+  "errors": [
+    {
+      "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
+      "field": "tvl",
+      "message": "Fresh USD price for the underlying asset/LP token is unavailable"
+    },
+    {
+      "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
+      "field": "apr",
+      "message": "Positive USD TVL is required for APR"
+    }
+  ]
+}

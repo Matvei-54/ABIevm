@@ -4,10 +4,10 @@
 При первом запуске Go скачает зависимости. Реальный RPC URL храните в переменной
 окружения, не в исходниках. `.env` автоматически не читается.
 
-## Проверка одного или трёх реальных пулов с GetBlock
+## Проверка 1–5 реальных пулов с GetBlock
 
 Команда запускается отдельно от сервера и Swagger. По умолчанию она берёт
-до трёх gauge из вашего первоначального `gaugesMainFromController` (commit
+до пяти gauge из вашего первоначального `gaugesMainFromController` (commit
 `ec418eb`) и читает актуальную регистрацию через `Controller.gauge(address)`.
 Адреса являются кандидатами, а не доказательством регистрации: источником vault,
 asset, rewardReceiver и protocolId служит текущий контракт Controller.
@@ -39,10 +39,10 @@ go run -mod=readonly ./cmd/stakedao-check -limit 1 -output stakedao-sample.json
 Не используйте PowerShell pipe или перенаправление: за сохранение отвечает
 `-output`, результат записывается в UTF-8 без BOM после успешного получения JSON.
 
-Затем можно проверить до трёх и сохранить JSON для разбора:
+Для проверки пяти пулов и сохранения JSON для разбора:
 
 ```powershell
-go run -mod=readonly ./cmd/stakedao-check -limit 3 -output stakedao-sample.json
+go run -mod=readonly ./cmd/stakedao-check -limit 5 -output stakedao-sample-5.json
 ```
 
 В Linux/macOS:
@@ -50,7 +50,7 @@ go run -mod=readonly ./cmd/stakedao-check -limit 3 -output stakedao-sample.json
 ```sh
 export STAKEDAO_ETHEREUM_RPC_URL="ВАШ_GETBLOCK_MAINNET_RPC_URL"
 go run -mod=readonly ./cmd/stakedao-check -limit 1 -output stakedao-sample.json
-go run -mod=readonly ./cmd/stakedao-check -limit 3 -output stakedao-sample.json
+go run -mod=readonly ./cmd/stakedao-check -limit 5 -output stakedao-sample-5.json
 ```
 
 Команда делает не больше **5 RPC-запросов/с** и **300 RPC-попыток** за запуск.
@@ -78,7 +78,7 @@ Chainlink/ERC4626/Curve NG и кэшируются в памяти. Чтения
 go run -mod=readonly ./cmd/stakedao-check -limit 1 -gauges 0x3285987Bbd0b695Ac48DC8571F519065B50aBA07 -output stakedao-sample.json
 ```
 
-Через `-gauges` допускается максимум три уникальных ненулевых адреса через запятую.
+Через `-gauges` допускается максимум пять уникальных ненулевых адреса через запятую.
 Это адреса gauge, не LP-токены и не адреса vault. Curve V2 имеет поддержку основной
 награды, Balancer primary — пока нет.
 
@@ -91,7 +91,8 @@ go run -mod=readonly ./cmd/stakedao-check -limit 1 -gauges 0x3285987Bbd0b695Ac48
 
 Первый кандидат (`-limit 1`) — `evaUSDC/evaUSDT`, для которого в ручном
 mainnet-запуске на блоке 26234474 получены TVL и APR. Пример результата трёх пулов
-есть в `examples/stakedao-sample.json`. В нём avUSD/evaUSDC не имеет цены из-за
+есть в `examples/stakedao-sample.json`; отдельный новый пример пяти —
+`examples/stakedao-sample-5.json`. В нём avUSD/evaUSDC не имеет цены из-за
 отсутствия USD feed для avUSD; для frxUSD/scrvUSD цена уже получена из контрактов; значения при новом запуске могут отличаться. Этот пример получен
 через PublicNode, не через ваш GetBlock.
 
@@ -100,6 +101,22 @@ mainnet-запуске на блоке 26234474 получены TVL и APR. П�
 100 блоков, но отказал в историческом `eth_getCode`. Для новой проверки по gauge
 оба метода не нужны. JSON может содержать `errors` и недоступные цены/компоненты
 APR; наличие файла само по себе не подтверждает полноту или точность оценки.
+
+Пять кандидатов: evaUSDC/evaUSDT, avUSD/evaUSDC, frxUSD/scrvUSD,
+srRoyUSDC/frxUSD, frxUSD/evaUSDT. Первые три сохранены для сравнения с прежней
+выборкой; два новых выбраны из вашего исходного списка после проверки текущей
+регистрации и доступности контрактных цен. avUSD оставлен как случай отсутствующей
+USD-цены: его TVL/APR могут быть `null`. Это не подстановка нулевой доходности.
+
+**Проверка пяти пулов запускается командой выше, отдельно от Swagger.**
+Swagger `GET /reservesStakedao/ethereum` по-прежнему выполняет полную загрузку.
+Бюджет команды остаётся 300 попыток, не 300 CU. Сам факт успешного JSON не
+доказывает точность APR: для независимой сверки нужны состав наград, комиссии,
+тот же блок/время и сопоставимый reward APR, а не итоговый APY из UI.
+
+План сохранения регистраций в Postgres и последующего кэширования в Redis:
+`internal/service/stakedao/REGISTRY_STORAGE_PLAN_RU.md`. Пока это проект решения,
+БД не подключена.
 
 ## Запуск веб-сервера
 
@@ -142,7 +159,7 @@ RPC_MAX_RPS ограничивает суммарные HTTP RPC-методы Aa
 самостоятельными чтениями. CU группы может стоить больше одиночного getter.
 Изменения этой оптимизации относятся только к StakeDAO.
 
-Ограниченная команда для 1–3 пулов остаётся удобной для дешёвой диагностики.
+Ограниченная команда для 1–5 пулов остаётся удобной для дешёвой диагностики.
 
 ## Если Swagger вернул 504
 

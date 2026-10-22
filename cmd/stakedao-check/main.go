@@ -23,7 +23,11 @@ import (
 // Manual sample candidates from gaugesMainFromController in the user's original
 // stakeDaoService.go (commit ec418eb). Every registration is read onchain; this
 // list is only for the diagnostic command, never production pool discovery.
-const sampleGauges = "0xbE6228125448E40F5DCBB2DbdF7fF3F5721000B4,0x3285987Bbd0b695Ac48DC8571F519065B50aBA07,0x326b6d1a26Fd04afAa349340022076b5a2eb0c7C"
+const sampleGauges = "0xbE6228125448E40F5DCBB2DbdF7fF3F5721000B4," + // evaUSDC/evaUSDT
+	"0x3285987Bbd0b695Ac48DC8571F519065B50aBA07," + // avUSD/evaUSDC: missing USD anchor is a useful negative case
+	"0x326b6d1a26Fd04afAa349340022076b5a2eb0c7C," + // frxUSD/scrvUSD
+	"0xa5F5DBdFc6baFc69bb4107AF97Ca79519304Dbd7," + // srRoyUSDC/frxUSD
+	"0x8F4e42343AF1CBF4f364cE448252d801E3f73937" // frxUSD/evaUSDT
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -43,8 +47,8 @@ func main() {
 func run(ctx context.Context, args []string, output, diagnostics io.Writer) error {
 	flags := flag.NewFlagSet("stakedao-check", flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
-	limit := flags.Int("limit", 1, "maximum pools to check (1–3)")
-	gaugeList := flags.String("gauges", sampleGauges, "1–3 gauge addresses, comma-separated; checked against current Controller state")
+	limit := flags.Int("limit", 1, "maximum pools to check (1–5)")
+	gaugeList := flags.String("gauges", sampleGauges, "1–5 gauge addresses, comma-separated; checked against current Controller state")
 	from := flags.Uint64("from", 0, "optional first registration block; requires -to")
 	to := flags.Uint64("to", 0, "optional last registration block; requires -from; at most 100 blocks")
 	filename := flags.String("output", "", "save JSON to this file only after a successful check")
@@ -57,8 +61,8 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	if strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_RPC_URL")) == "" {
 		return fmt.Errorf("set STAKEDAO_ETHEREUM_RPC_URL in this terminal before running the check")
 	}
-	if *limit < 1 || *limit > 3 {
-		return fmt.Errorf("use -limit 1..3")
+	if *limit < 1 || *limit > stakedao.MaxSamplePools {
+		return fmt.Errorf("use -limit 1..5")
 	}
 	windowFlags, explicitGauges := 0, false
 	flags.Visit(func(f *flag.Flag) {
@@ -87,8 +91,8 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 			seen[gauge] = true
 			gauges = append(gauges, gauge)
 		}
-		if len(gauges) > 3 {
-			return fmt.Errorf("select at most three gauges")
+		if len(gauges) > stakedao.MaxSamplePools {
+			return fmt.Errorf("select at most five gauges")
 		}
 		if len(gauges) > *limit {
 			gauges = gauges[:*limit]
