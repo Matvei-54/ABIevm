@@ -1,5 +1,28 @@
 # StakeDAO: текущее состояние интеграции
 
+## Какие файлы за что отвечают
+
+| Файл | Назначение |
+| --- | --- |
+| `StkDaoSRV.go` | Загрузка пулов, TVL и награды; декодер `decodeVaultRegistration`. |
+| `stakeDaoService.go`, `abi/` | ABI контрактов и адрес Controller; JSON ABI встраиваются в бинарник. |
+| `discovery.go` | Чтение событий диапазонами и воркерами; `readRegistryRanges`. |
+| `registryService.go` | Синхронизация регистраций, проверка курсора и реорганизаций. |
+| `registryStore.go` | Интерфейс хранилища и типы событий/курсора. |
+| `multicall.go` | Объединение чтений контрактов в Multicall3. |
+| `progress.go` | Логи этапов и прогресса загрузки. |
+| `sample.go` | Ограниченная проверка 1–5 явно выбранных пулов. |
+| `dto/stakeDaoDTO.go` | Структура ответа API. |
+| `../../repository/stakedao/registryPostgres.go` | Реализация хранилища в PostgreSQL. |
+
+Файлы `registryService.go`, `discovery.go` и `StkDaoSRV.go` используют общие
+приватные функции: они должны быть одной версии, находиться в одной папке
+`internal/service/stakedao` и иметь `package stakedao`. Объявлять заглушки для
+`readRegistryRanges` или `decodeVaultRegistration` не нужно. Если IDE не находит
+эти функции после копирования файлов, обновите весь проект из одной версии ветки
+`feat/stakedao-service`, включая `go.mod`, `go.sum`, зависимости и ABI.
+Порядок действий: [локальный запуск](../../../LOCAL_RUN_RU.md#если-ide-не-находит-функции-после-обновления).
+
 `GET /reservesStakedao/ethereum` читает регистрации, метаданные и количество
 активов на одном блоке. Общий `prices.TokenPriceService` сначала проверяет
 `MemoryStore`, затем получает отсутствующие цены через `ContractSource` на том же
