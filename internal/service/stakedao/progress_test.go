@@ -109,3 +109,32 @@ func TestSuccessfulLoadReportsCompletedStagesAndCounts(t *testing.T) {
 		t.Fatalf("incomplete progress counters: %+v", last)
 	}
 }
+
+func TestRegistryTailProgressDoesNotIncludeFinalizedRangeCounts(t *testing.T) {
+	buffer := captureLoadLogs(t)
+	progress := newLoadProgress(slog.Default(), "ethereum", false)
+	ctx := context.WithValue(context.Background(), progressContextKey{}, progress)
+	chain := &registryChain{finalized: 3000}
+	service := NewRegistryService(&memoryRegistry{})
+	if _, err := service.SyncAndList(ctx, chain, registryTestKey(), 1, 3066); err != nil {
+		t.Fatal(err)
+	}
+	progress.report("completed", nil)
+	records := loadLogRecords(t, buffer)
+	starts := 0
+	for _, record := range records {
+		if record["event"] == "discovery_start" {
+			starts++
+			if record["ranges_done"] != float64(0) || record["last_range_from"] != float64(0) || record["last_range_to"] != float64(0) {
+				t.Fatalf("new scan retained previous ranges: %+v", record)
+			}
+		}
+		if record["ranges_done"].(float64) > record["ranges_total"].(float64) {
+			t.Fatalf("progress exceeds current scan total: %+v", record)
+		}
+	}
+	last := records[len(records)-1]
+	if starts != 2 || last["ranges_done"] != float64(1) || last["ranges_total"] != float64(1) || last["last_range_from"] != float64(3001) || last["last_range_to"] != float64(3066) || last["registry_saved_block"] != float64(3000) {
+		t.Fatalf("wrong tail progress: starts=%d last=%+v", starts, last)
+	}
+}

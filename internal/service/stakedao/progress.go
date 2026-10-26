@@ -80,6 +80,9 @@ func (p *loadProgress) discoveryStarted(total uint64, workers int) {
 	}
 	p.mu.Lock()
 	p.ranges, p.workers = total, workers
+	// Each scan has its own denominator (finalized history, then the tail).
+	// Keep RPC/registry counters request-wide, but reset range-local progress.
+	p.read, p.lastFrom, p.lastTo = 0, 0, 0
 	p.mu.Unlock()
 	p.report("discovery_start", nil)
 }
