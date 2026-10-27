@@ -35,6 +35,7 @@ type loadProgress struct {
 	visited        int
 	loaded         int
 	pools          int
+	poolWorkers    int
 	gauge          common.Address
 	methods        map[string]uint64
 	active         int
@@ -106,6 +107,16 @@ func (p *loadProgress) poolProgress(visited, loaded, total int, gauge common.Add
 	p.mu.Unlock()
 }
 
+func (p *loadProgress) poolStarted(total, workers int) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.pools, p.poolWorkers = total, workers
+	p.mu.Unlock()
+	p.setStage("pools")
+}
+
 func (p *loadProgress) registryProgress(point *RegistryCheckpoint, target uint64) {
 	if p == nil {
 		return
@@ -125,7 +136,7 @@ func (p *loadProgress) report(event string, err error) {
 	attrs := []any{
 		"event", event, "stage", p.stage, "elapsed", time.Since(p.started).Round(time.Millisecond),
 		"ranges_done", p.read, "ranges_total", p.ranges, "last_range_from", p.lastFrom, "last_range_to", p.lastTo, "workers", p.workers,
-		"pools_visited", p.visited, "pools_total", p.pools, "pools_loaded", p.loaded,
+		"pools_visited", p.visited, "pools_total", p.pools, "pools_loaded", p.loaded, "pool_workers", p.poolWorkers,
 		"rpc_attempts", p.methods["eth_chainId"] + p.methods["eth_blockNumber"] + p.methods["eth_getBlockByNumber"] + p.methods["eth_getCode"] + p.methods["eth_getLogs"] + p.methods["eth_call"],
 		"rpc_logs", p.methods["eth_getLogs"], "rpc_calls", p.methods["eth_call"], "rpc_active", p.active, "rpc_errors", p.failures,
 		"last_rpc", p.lastRPC, "last_rpc_elapsed", p.lastTime.Round(time.Millisecond),

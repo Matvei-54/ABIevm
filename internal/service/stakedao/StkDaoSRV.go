@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ABIevm/internal/rpcclient"
@@ -57,6 +58,7 @@ type StakeDAOService struct {
 	snapshotTime    uint64
 	deploymentBlock uint64
 	configErr       error
+	batches         *snapshotBatcher
 	networks        map[string]stakeDAONetwork
 	dial            func(context.Context, string) (stakeDAORPC, error)
 }
@@ -191,34 +193,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		Network: network, BlockNumber: toBlock,
 		Pools: make([]dto.StakeDAOPool, 0, len(vaults)),
 	}
-	progress.poolProgress(0, 0, len(vaults), common.Address{})
-	progress.setStage("pools")
-	for index, info := range vaults {
-		if sample != nil && len(response.Pools) >= sample.limit {
-			break
-		}
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		progress.poolProgress(index+1, len(response.Pools), len(vaults), info.Gauge)
-		current, err := s.currentGaugeRegistrations(ctx, block, []common.Address{info.Gauge})
-		if err != nil {
-			return nil, err
-		}
-		if len(current) == 0 {
-			continue
-		} // Unregistered or shutdown at the calculation block.
-		state := current[0]
-		if state.Vault != info.Vault || state.Asset != info.Asset || state.RewardReceiver != info.RewardReceiver || state.ProtocolID != info.ProtocolID {
-			response.Errors = append(response.Errors, poolIssue(info.Gauge, "registration", "Registration differs from Controller state at the snapshot block"))
-			continue
-		}
-		pool, issues := s.loadPool(ctx, info, block)
-		issues = append(issues, s.loadPoolRewardMechanism(ctx, info, block, &pool)...)
-		issues = append(issues, s.loadRewardStreams(ctx, info, block, &pool)...)
-		response.Pools = append(response.Pools, pool)
-		response.Errors = append(response.Errors, issues...)
-		progress.poolProgress(index+1, len(response.Pools), len(vaults), info.Gauge)
+	response.Pools, response.Errors, err = s.loadPoolsAt(ctx, block, vaults, sample)
+	if err != nil {
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -367,6 +344,10 @@ func decodeVaultRegistration(parsed abi.ABI, entry types.Log) (StakeDAOVaultInfo
 }
 
 func (s *StakeDAOService) snapshotCall(ctx context.Context, block *big.Int, contract common.Address, abiJSON, method string, args ...interface{}) ([]interface{}, error) {
+	if s.batches != nil {
+		result := s.snapshotCalls(ctx, block, readContract(contract, abiJSON, method, args...))[0]
+		return result.values, result.err
+	}
 	parsed, err := abi.JSON(strings.NewReader(abiJSON))
 	if err != nil {
 		return nil, err
@@ -380,6 +361,139 @@ func (s *StakeDAOService) snapshotCall(ctx context.Context, block *big.Int, cont
 		return nil, err
 	}
 	return parsed.Unpack(method, raw)
+}
+
+const stakeDAOPoolWorkers = 8
+
+// Pool workers only produce request-local values. A single dispatcher groups
+// their reads into Multicall; the shared RPC limiter still sees every batch.
+func (s *StakeDAOService) loadPoolsAt(ctx context.Context, block *big.Int, vaults []StakeDAOVaultInfo, sample *poolSample) ([]dto.StakeDAOPool, []dto.StakeDAOPoolError, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	loader := *s
+	loader.batches = newSnapshotBatcher(ctx, s.client, block)
+	defer loader.batches.close()
+	progress := progressFrom(ctx)
+	workers := min(stakeDAOPoolWorkers, len(vaults))
+	if sample != nil {
+		workers = min(1, len(vaults)) // Keep the manual sample's selection/budget sequential.
+	}
+	progress.poolStarted(len(vaults), workers)
+	pools := make([]dto.StakeDAOPool, 0, len(vaults))
+	var issues []dto.StakeDAOPoolError
+	if sample != nil {
+		for index, info := range vaults {
+			if len(pools) >= sample.limit {
+				break
+			}
+			pool, errors, err := loader.loadPoolAt(ctx, info, block)
+			if err != nil {
+				return nil, nil, err
+			}
+			if pool != nil {
+				pools = append(pools, *pool)
+			}
+			issues = append(issues, errors...)
+			progress.poolProgress(index+1, len(pools), len(vaults), info.Gauge)
+		}
+		return pools, issues, ctx.Err()
+	}
+	type poolResult struct {
+		index  int
+		pool   *dto.StakeDAOPool
+		issues []dto.StakeDAOPoolError
+		err    error
+	}
+	jobs := make(chan int)
+	results := make(chan poolResult, workers)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(jobs)
+		for index := range vaults {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- index:
+			}
+		}
+	}()
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				pool, issues, err := loader.loadPoolAt(ctx, vaults[index], block)
+				results <- poolResult{index: index, pool: pool, issues: issues, err: err}
+				if err != nil {
+					return
+				}
+			}
+		}()
+	}
+	go func() { wg.Wait(); close(results) }()
+	ordered := make([]poolResult, len(vaults))
+	var firstErr error
+	visited, loaded := 0, 0
+	for result := range results {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+				cancel()
+			}
+			continue
+		}
+		ordered[result.index] = result
+		visited++
+		if result.pool != nil {
+			loaded++
+		}
+		progress.poolProgress(visited, loaded, len(vaults), vaults[result.index].Gauge)
+	}
+	if err := loader.batches.err(); err != nil {
+		return nil, nil, err
+	}
+	if firstErr != nil {
+		return nil, nil, firstErr
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	for _, result := range ordered {
+		if result.pool != nil {
+			pools = append(pools, *result.pool)
+		}
+		issues = append(issues, result.issues...)
+	}
+	return pools, issues, nil
+}
+
+func (s *StakeDAOService) loadPoolAt(ctx context.Context, info StakeDAOVaultInfo, block *big.Int) (*dto.StakeDAOPool, []dto.StakeDAOPoolError, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	current, err := s.currentGaugeRegistrations(ctx, block, []common.Address{info.Gauge})
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(current) == 0 {
+		return nil, nil, nil
+	}
+	state := current[0]
+	if state.Vault != info.Vault || state.Asset != info.Asset || state.RewardReceiver != info.RewardReceiver || state.ProtocolID != info.ProtocolID {
+		return nil, []dto.StakeDAOPoolError{poolIssue(info.Gauge, "registration", "Registration differs from Controller state at the snapshot block")}, nil
+	}
+	pool, issues := s.loadPool(ctx, info, block)
+	issues = append(issues, s.loadPoolRewardMechanism(ctx, info, block, &pool)...)
+	issues = append(issues, s.loadRewardStreams(ctx, info, block, &pool)...)
+	if err := s.batches.err(); err != nil {
+		return nil, nil, err
+	}
+	return &pool, issues, ctx.Err()
 }
 
 func (s *StakeDAOService) snapshotAddress(ctx context.Context, block *big.Int, contract common.Address, abiJSON, method string, args ...interface{}) (common.Address, error) {

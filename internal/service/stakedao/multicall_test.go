@@ -4,14 +4,21 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"net/http"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"ABIevm/internal/service/stakedao/dto"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type multicallProbeRPC struct {
@@ -198,4 +205,244 @@ func TestMulticallReducesFullPoolReadsWithoutChangingRates(t *testing.T) {
 		t.Fatalf("expected >2x fewer eth_call requests: %d requests for %d getters", requests, getters)
 	}
 	t.Logf("%d contract getters in %d eth_call requests (%d Multicall batches)", getters, requests, len(f.multicallSizes))
+}
+
+func TestSharedSnapshotReadsAreDeduplicatedWithoutSharingMutableValues(t *testing.T) {
+	parsed := repositoryMulticallABI(t)
+	getter, _ := abi.JSON(strings.NewReader(rewardVaultERC4626ABI))
+	started, release := make(chan struct{}), make(chan struct{})
+	client := &multicallProbeRPC{call: func(msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
+		calls := decodeMulticall(t, parsed, msg, block)
+		close(started)
+		<-release
+		if len(calls) != 1 {
+			t.Errorf("shared getter was sent more than once: %d", len(calls))
+		}
+		data, _ := getter.Methods["totalAssets"].Outputs.Pack(big.NewInt(123))
+		return parsed.Methods["aggregate3"].Outputs.Pack([]multicallOutput{{Success: true, ReturnData: data}})
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	batches := newSnapshotBatcher(ctx, client, big.NewInt(4500))
+	defer batches.close()
+	service := &StakeDAOService{batches: batches}
+	read := readContract(common.HexToAddress("0xbb"), rewardVaultERC4626ABI, "totalAssets")
+	values := make([]*big.Int, 8)
+	var wg sync.WaitGroup
+	for i := range values {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var err error
+			values[i], err = service.snapshotCalls(ctx, big.NewInt(4500), read)[0].unsigned()
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	<-started
+	close(release)
+	wg.Wait()
+	if client.calls != 1 {
+		t.Fatalf("duplicate in-flight/cached reads: %d RPC attempts", client.calls)
+	}
+	values[0].SetInt64(999)
+	for _, value := range values[1:] {
+		if value == nil || value.Int64() != 123 {
+			t.Fatalf("ABI consumers share mutable values: %v", values)
+		}
+	}
+	if result := service.snapshotCalls(ctx, big.NewInt(4501), read)[0]; result.err == nil || client.calls != 1 {
+		t.Fatal("scheduler accepted a different snapshot")
+	}
+}
+
+func TestSnapshotCacheDoesNotSurviveTheRequestOrHideGetterFailures(t *testing.T) {
+	parsed := repositoryMulticallABI(t)
+	getter, _ := abi.JSON(strings.NewReader(rewardVaultERC4626ABI))
+	seen := make(map[string]int)
+	client := &multicallProbeRPC{call: func(msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
+		args, err := parsed.Methods["aggregate3"].Inputs.Unpack(msg.Data[4:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls := *abi.ConvertType(args[0], new([]multicallInput)).(*[]multicallInput)
+		out := make([]multicallOutput, len(calls))
+		for i, call := range calls {
+			seen[block.String()+call.Target.Hex()]++
+			data, _ := getter.Methods["totalAssets"].Outputs.Pack(new(big.Int).Set(block))
+			out[i] = multicallOutput{Success: true, ReturnData: data}
+			switch call.Target {
+			case common.HexToAddress("0x1"):
+				out[i].Success = false
+			case common.HexToAddress("0x2"):
+				out[i].ReturnData = []byte{1}
+			}
+		}
+		return parsed.Methods["aggregate3"].Outputs.Pack(out)
+	}}
+	ctx := context.Background()
+	for _, block := range []int64{4500, 4501} {
+		batches := newSnapshotBatcher(ctx, client, big.NewInt(block))
+		service := &StakeDAOService{batches: batches}
+		reads := []snapshotRead{
+			readContract(common.HexToAddress("0x1"), rewardVaultERC4626ABI, "totalAssets"),
+			readContract(common.HexToAddress("0x2"), rewardVaultERC4626ABI, "totalAssets"),
+			readContract(common.HexToAddress("0x3"), rewardVaultERC4626ABI, "totalAssets"),
+		}
+		for range 2 {
+			result := service.snapshotCalls(ctx, big.NewInt(block), reads...)
+			value, err := result[2].unsigned()
+			if result[0].err == nil || result[1].err == nil || err != nil || value.Int64() != block {
+				t.Fatalf("getter failures leaked or stale snapshot reused: block=%d results=%+v", block, result)
+			}
+		}
+		batches.close()
+	}
+	if len(seen) != 6 {
+		t.Fatalf("requests shared a cache: %+v", seen)
+	}
+	for key, count := range seen {
+		if count != 1 {
+			t.Fatalf("getter retried/fallback used: %s count=%d", key, count)
+		}
+	}
+}
+
+func multiPoolFixture(t *testing.T, count int) (*StakeDAOService, *fixtureRPC, []StakeDAOVaultInfo) {
+	t.Helper()
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.logs = true, nil
+	var vaults []StakeDAOVaultInfo
+	for i := 0; i < count; i++ {
+		gauge := common.BigToAddress(big.NewInt(int64(1000 + i)))
+		vault := common.BigToAddress(big.NewInt(int64(2000 + i)))
+		asset := common.HexToAddress("0xcc")
+		f.vaults[gauge], f.assets[gauge] = vault, asset
+		f.logs = append(f.logs, registration(t, f.controller, gauge, vault, asset, 124, uint(i)))
+		vaults = append(vaults, StakeDAOVaultInfo{Gauge: gauge, Vault: vault, Asset: asset, RewardReceiver: common.HexToAddress("0x44"), ProtocolID: [4]byte{0xc7, 0x15, 0xe3, 0x73}})
+	}
+	sort.Slice(vaults, func(i, j int) bool { return vaults[i].Gauge.Hex() < vaults[j].Gauge.Hex() })
+	return s, f, vaults
+}
+
+func TestCrossPoolMulticallPreservesValuesAndReducesRPCRequests(t *testing.T) {
+	baseline, oldRPC, vaults := multiPoolFixture(t, 5)
+	baseline.client, baseline.controller, baseline.chainID = oldRPC, oldRPC.controller, 1
+	var expected []dto.StakeDAOPool
+	for _, info := range vaults {
+		if _, err := baseline.currentGaugeRegistrations(context.Background(), big.NewInt(4500), []common.Address{info.Gauge}); err != nil {
+			t.Fatal(err)
+		}
+		pool, issues := baseline.loadPool(context.Background(), info, big.NewInt(4500))
+		issues = append(issues, baseline.loadPoolRewardMechanism(context.Background(), info, big.NewInt(4500), &pool)...)
+		issues = append(issues, baseline.loadRewardStreams(context.Background(), info, big.NewInt(4500), &pool)...)
+		issues = append(issues, baseline.valuePool(context.Background(), &pool)...)
+		issues = append(issues, baseline.valueRewards(context.Background(), &pool)...)
+		if len(issues) != 0 {
+			t.Fatalf("baseline is incomplete: %+v", issues)
+		}
+		pool.UpdatedAt = time.Time{}
+		expected = append(expected, pool)
+	}
+	optimized, newRPC, _ := multiPoolFixture(t, 5)
+	result, err := optimized.GetPools(context.Background(), "ethereum")
+	if err != nil || result == nil || len(result.Errors) != 0 || len(result.Pools) != len(expected) {
+		t.Fatalf("optimized load failed: %+v %v", result, err)
+	}
+	for i := range result.Pools {
+		result.Pools[i].UpdatedAt = time.Time{}
+		if !reflect.DeepEqual(result.Pools[i], expected[i]) {
+			t.Fatalf("pool %d changed: got %+v want %+v", i, result.Pools[i], expected[i])
+		}
+	}
+	oldCalls := len(oldRPC.callBlocks)
+	newCalls := len(newRPC.callBlocks)
+	if newCalls*2 >= oldCalls || newRPC.directCalls != 0 {
+		t.Fatalf("cross-pool batching did not halve eth_call requests: before=%d after=%d direct=%d", oldCalls, newCalls, newRPC.directCalls)
+	}
+	for _, size := range newRPC.multicallSizes {
+		if size > stakeDAOMulticallBatchSize {
+			t.Fatal("oversized cross-pool batch")
+		}
+	}
+	t.Logf("5 fixture pools, identical values/order: eth_call before=%d after=%d", oldCalls, newCalls)
+}
+
+func TestFull359PoolLoadUsesBoundedCrossPoolBatches(t *testing.T) {
+	s, f, vaults := multiPoolFixture(t, 359)
+	result, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil || result == nil || len(result.Pools) != len(vaults) || len(result.Errors) != 0 {
+		t.Fatalf("359-pool load failed: pools=%v err=%v", result, err)
+	}
+	for i, pool := range result.Pools {
+		if pool.GaugeAddress != vaults[i].Gauge || pool.VaultAddress != vaults[i].Vault || pool.TVL == nil || pool.APR == nil || pool.APRStatus != "available" {
+			t.Fatalf("reordered/incomplete pool %d: %+v", i, pool)
+		}
+	}
+	if len(f.callBlocks) > 5*len(vaults) {
+		t.Fatalf("too many eth_call requests: %d", len(f.callBlocks))
+	}
+	t.Logf("359 fixture pools: %d eth_call requests; cache contains only this request's fixed block", len(f.callBlocks))
+}
+
+type contextPoolRPC struct {
+	stakeDAORPC
+	call func(context.Context) ([]byte, error)
+}
+
+func (p *contextPoolRPC) CallContract(ctx context.Context, _ ethereum.CallMsg, _ *big.Int) ([]byte, error) {
+	return p.call(ctx)
+}
+
+func TestCrossPoolFailureStopsWorkersAndDoesNotRetryQuotaErrors(t *testing.T) {
+	s, fixture, _ := multiPoolFixture(t, 20)
+	var calls atomic.Int32
+	s.dial = func(context.Context, string) (stakeDAORPC, error) {
+		return &contextPoolRPC{stakeDAORPC: fixture, call: func(context.Context) ([]byte, error) {
+			calls.Add(1)
+			return nil, rpc.HTTPError{StatusCode: http.StatusPaymentRequired, Status: "402 Payment Required"}
+		}}, nil
+	}
+	result, err := s.GetPools(context.Background(), "ethereum")
+	var httpErr rpc.HTTPError
+	if result != nil || !errors.As(err, &httpErr) || httpErr.StatusCode != 402 || calls.Load() != 1 || !fixture.closed {
+		t.Fatalf("quota error retried/hidden or RPC left open: result=%+v err=%v calls=%d", result, err, calls.Load())
+	}
+}
+
+func TestCrossPoolCancellationJoinsDispatcherAndPoolWorkers(t *testing.T) {
+	s, fixture, _ := multiPoolFixture(t, 20)
+	started := make(chan struct{})
+	var active atomic.Int32
+	s.dial = func(context.Context, string) (stakeDAORPC, error) {
+		return &contextPoolRPC{stakeDAORPC: fixture, call: func(ctx context.Context) ([]byte, error) {
+			active.Add(1)
+			defer active.Add(-1)
+			close(started)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.GetPools(ctx, "ethereum")
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("pool dispatcher did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) || active.Load() != 0 || !fixture.closed {
+			t.Fatalf("cancellation left work running: err=%v active=%d closed=%v", err, active.Load(), fixture.closed)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("pool workers/dispatcher did not exit")
+	}
 }
