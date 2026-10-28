@@ -36,10 +36,12 @@ type loadProgress struct {
 	loaded         int
 	pools          int
 	poolWorkers    int
+	priceWorkers   int
 	gauge          common.Address
 	methods        map[string]uint64
 	active         int
 	failures       uint64
+	reverts        uint64
 	lastRPC        string
 	lastTime       time.Duration
 	firstErr       *rpcFailure
@@ -117,6 +119,16 @@ func (p *loadProgress) poolStarted(total, workers int) {
 	p.setStage("pools")
 }
 
+func (p *loadProgress) pricesStarted(workers int) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.priceWorkers = workers
+	p.mu.Unlock()
+	p.setStage("prices")
+}
+
 func (p *loadProgress) registryProgress(point *RegistryCheckpoint, target uint64) {
 	if p == nil {
 		return
@@ -137,8 +149,9 @@ func (p *loadProgress) report(event string, err error) {
 		"event", event, "stage", p.stage, "elapsed", time.Since(p.started).Round(time.Millisecond),
 		"ranges_done", p.read, "ranges_total", p.ranges, "last_range_from", p.lastFrom, "last_range_to", p.lastTo, "workers", p.workers,
 		"pools_visited", p.visited, "pools_total", p.pools, "pools_loaded", p.loaded, "pool_workers", p.poolWorkers,
+		"price_workers", p.priceWorkers,
 		"rpc_attempts", p.methods["eth_chainId"] + p.methods["eth_blockNumber"] + p.methods["eth_getBlockByNumber"] + p.methods["eth_getCode"] + p.methods["eth_getLogs"] + p.methods["eth_call"],
-		"rpc_logs", p.methods["eth_getLogs"], "rpc_calls", p.methods["eth_call"], "rpc_active", p.active, "rpc_errors", p.failures,
+		"rpc_logs", p.methods["eth_getLogs"], "rpc_calls", p.methods["eth_call"], "rpc_active", p.active, "rpc_errors", p.failures, "rpc_reverts", p.reverts,
 		"last_rpc", p.lastRPC, "last_rpc_elapsed", p.lastTime.Round(time.Millisecond),
 	}
 	if p.gauge != (common.Address{}) {
@@ -191,6 +204,10 @@ func safeFailure(err error) string {
 	if errors.As(err, &timeout) && timeout.Timeout() {
 		return "rpc_timeout"
 	}
+	var contractErr rpc.Error
+	if errors.As(err, &contractErr) && contractErr.ErrorCode() == 3 {
+		return "contract_revert"
+	}
 	return "load_error"
 }
 
@@ -240,6 +257,10 @@ func (p *loadProgress) beginRPC(method string) func(error) {
 		p.lastRPC, p.lastTime = method, time.Since(started)
 		if err != nil {
 			p.failures++
+			var contractErr rpc.Error
+			if errors.As(err, &contractErr) && contractErr.ErrorCode() == 3 {
+				p.reverts++
+			}
 			if p.firstErr == nil {
 				failure := &rpcFailure{method: method, stage: p.stage, kind: safeFailure(err)}
 				var httpErr rpc.HTTPError

@@ -1,17 +1,21 @@
 package prices
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shopspring/decimal"
 )
 
@@ -23,7 +27,13 @@ type Snapshot struct {
 	Caller    ContractCaller
 	Block     uint64
 	Timestamp uint64
+	// Workers is opt-in token concurrency (0/1 is sequential, maximum 8).
+	// Callers must remain safe for concurrent direct eth_call requests.
+	Workers int
 }
+
+// ErrPriceRPCUnavailable distinguishes provider failures from a token without a price.
+var ErrPriceRPCUnavailable = errors.New("contract price RPC unavailable")
 
 type SnapshotSource interface {
 	FetchAt(context.Context, int64, []common.Address, Snapshot) (map[common.Address]Quote, error)
@@ -80,21 +90,144 @@ func (s *ContractSource) FetchAt(ctx context.Context, chainID int64, tokens []co
 	if chainID != 1 || snapshot.Caller == nil || snapshot.Block == 0 || snapshot.Timestamp == 0 || snapshot.Timestamp > uint64(time.Now().Add(time.Minute).Unix()) {
 		return nil, errors.New("contract prices require a valid Ethereum snapshot")
 	}
-	r := &contractResolver{source: s, ctx: ctx, snapshot: snapshot, memo: make(map[common.Address]Quote), visiting: make(map[common.Address]bool), decimals: make(map[common.Address]uint8)}
+	if snapshot.Workers < 0 || snapshot.Workers > 8 {
+		return nil, errors.New("price workers must be between 0 and 8")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	calls := &contractCallCache{ctx: ctx, cancel: cancel, caller: snapshot.Caller, block: snapshot.Block, entries: make(map[contractCallKey]*contractCallResult)}
+	snapshot.Caller = calls
 	result := make(map[common.Address]Quote)
-	var issues []error
-	for _, token := range tokens {
-		if err := ctx.Err(); err != nil {
-			return result, err
+	issues := make([]error, len(tokens))
+	type tokenResult struct {
+		index int
+		quote Quote
+		err   error
+	}
+	workers := min(max(snapshot.Workers, 1), len(tokens))
+	jobs := make(chan int)
+	results := make(chan tokenResult, workers)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(jobs)
+		for i := range tokens {
+			select {
+			case jobs <- i:
+			case <-ctx.Done():
+				return
+			}
 		}
-		q, err := r.price(token, 0)
-		if err != nil {
-			issues = append(issues, fmt.Errorf("token %s: %w", token.Hex(), err))
-			continue
+	}()
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Dependency stacks and decoded values belong to one worker. Only
+			// immutable RPC bytes and completed Store quotes are shared.
+			r := &contractResolver{source: s, ctx: ctx, snapshot: snapshot, memo: make(map[common.Address]Quote), visiting: make(map[common.Address]bool), decimals: make(map[common.Address]uint8)}
+			for index := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				q, err := r.price(tokens[index], 0)
+				results <- tokenResult{index: index, quote: q, err: err}
+			}
+		}()
+	}
+	go func() { wg.Wait(); close(results) }()
+	for item := range results {
+		token := tokens[item.index]
+		if item.err != nil {
+			issues[item.index] = fmt.Errorf("token %s: %w", token.Hex(), item.err)
+		} else {
+			result[token] = item.quote
 		}
-		result[token] = q
+	}
+	if err := calls.terminalError(); err != nil {
+		return result, fmt.Errorf("%w: %w", ErrPriceRPCUnavailable, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 	return result, errors.Join(issues...)
+}
+
+type contractCallKey struct {
+	target common.Address
+	data   string
+}
+
+type contractCallResult struct {
+	done chan struct{}
+	raw  []byte
+	err  error
+}
+
+// This cache belongs to one FetchAt and one fixed block. Both successful calls
+// and failed capability probes are deduplicated, including in-flight requests.
+// Reads stay direct: moving oracle calls through Multicall could change access
+// checks based on msg.sender/tx.origin. The caller's shared RPS limit still applies.
+type contractCallCache struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	caller  ContractCaller
+	block   uint64
+	mu      sync.Mutex
+	entries map[contractCallKey]*contractCallResult
+	failure error
+}
+
+func (c *contractCallCache) terminalError() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.failure
+}
+
+func (c *contractCallCache) CallContract(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if call.To == nil || block == nil || !block.IsUint64() || block.Uint64() != c.block {
+		return nil, errors.New("price call differs from its fixed snapshot")
+	}
+	key := contractCallKey{target: *call.To, data: string(call.Data)}
+	c.mu.Lock()
+	if c.failure != nil {
+		err := c.failure
+		c.mu.Unlock()
+		return nil, err
+	}
+	entry, found := c.entries[key]
+	if !found {
+		entry = &contractCallResult{done: make(chan struct{})}
+		c.entries[key] = entry
+	}
+	c.mu.Unlock()
+	if !found {
+		entry.raw, entry.err = c.caller.CallContract(c.ctx, call, block)
+		var httpErr rpc.HTTPError
+		var netErr net.Error
+		if errors.As(entry.err, &httpErr) || errors.As(entry.err, &netErr) {
+			c.mu.Lock()
+			if c.failure == nil {
+				c.failure = entry.err
+			}
+			c.mu.Unlock()
+			c.cancel()
+		}
+		close(entry.done)
+	}
+	select {
+	case <-entry.done:
+		// ABI decoders/consumers must not share a mutable RPC response buffer.
+		return bytes.Clone(entry.raw), entry.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.ctx.Done():
+		return nil, c.ctx.Err()
+	}
 }
 
 type contractResolver struct {

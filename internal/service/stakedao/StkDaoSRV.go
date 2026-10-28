@@ -216,18 +216,28 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			tokens = append(tokens, reward.Token)
 		}
 	}
-	progress.setStage("prices")
+	priceWorkers := 0
+	if s.prices != nil {
+		priceWorkers = 1
+		if _, ok := s.prices.(prices.SnapshotProvider); ok && sample == nil {
+			priceWorkers = stakeDAOPoolWorkers
+		}
+	}
+	progress.pricesStarted(priceWorkers)
 	if s.prices != nil {
 		// Successful quotes remain usable if other tokens have no price.
 		// Per-pool diagnostics below do not expose upstream transport URLs or credentials.
 		var priceErr error
 		if provider, ok := s.prices.(prices.SnapshotProvider); ok {
-			priceErr = provider.EnsurePricesAt(ctx, s.chainID, tokens, prices.Snapshot{Caller: s.client, Block: toBlock, Timestamp: s.snapshotTime})
+			priceErr = provider.EnsurePricesAt(ctx, s.chainID, tokens, prices.Snapshot{Caller: s.client, Block: toBlock, Timestamp: s.snapshotTime, Workers: priceWorkers})
 		} else {
 			priceErr = s.prices.EnsurePrices(ctx, s.chainID, tokens)
 		}
 		if priceErr != nil && ctx.Err() != nil {
 			return nil, ctx.Err()
+		}
+		if errors.Is(priceErr, prices.ErrPriceRPCUnavailable) {
+			return nil, fmt.Errorf("%w: token prices: %w", ErrRPCUnavailable, priceErr)
 		}
 	}
 	progress.setStage("valuation")

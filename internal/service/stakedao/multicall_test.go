@@ -14,10 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"ABIevm/internal/service/prices"
 	"ABIevm/internal/service/stakedao/dto"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -371,6 +373,15 @@ func TestCrossPoolMulticallPreservesValuesAndReducesRPCRequests(t *testing.T) {
 
 func TestFull359PoolLoadUsesBoundedCrossPoolBatches(t *testing.T) {
 	s, f, vaults := multiPoolFixture(t, 359)
+	// Unlike the original warmed-price fixture, every asset now has a distinct
+	// cold quote. Exercise the real price source as well as pool loading.
+	for i := range f.logs {
+		gauge := common.BytesToAddress(f.logs[i].Topics[1].Bytes())
+		asset := common.BigToAddress(big.NewInt(int64(4000 + i)))
+		f.assets[gauge] = asset
+		f.logs[i].Topics[3] = common.BytesToHash(asset.Bytes())
+	}
+	oracle := attachColdPriceSource(t, s, f)
 	result, err := s.GetPools(context.Background(), "ethereum")
 	if err != nil || result == nil || len(result.Pools) != len(vaults) || len(result.Errors) != 0 {
 		t.Fatalf("359-pool load failed: pools=%v err=%v", result, err)
@@ -383,7 +394,135 @@ func TestFull359PoolLoadUsesBoundedCrossPoolBatches(t *testing.T) {
 	if len(f.callBlocks) > 5*len(vaults) {
 		t.Fatalf("too many eth_call requests: %d", len(f.callBlocks))
 	}
-	t.Logf("359 fixture pools: %d eth_call requests; cache contains only this request's fixed block", len(f.callBlocks))
+	if oracle.calls.Load() != 3*(359+1) {
+		t.Fatalf("cold quotes were not fetched exactly once: %d", oracle.calls.Load())
+	}
+	t.Logf("359 pools with cold contract prices: pool eth_call=%d price eth_call=%d", len(f.callBlocks), oracle.calls.Load())
+}
+
+const coldOracleABI = `[
+{"type":"function","name":"getFeed","inputs":[{"type":"address"},{"type":"address"}],"outputs":[{"type":"address"}]},
+{"type":"function","name":"decimals","inputs":[],"outputs":[{"type":"uint8"}]},
+{"type":"function","name":"latestRoundData","inputs":[],"outputs":[{"type":"uint80"},{"type":"int256"},{"type":"uint256"},{"type":"uint256"},{"type":"uint80"}]}
+]`
+
+type coldPriceRPC struct {
+	*fixtureRPC
+	methods   abi.ABI
+	timestamp uint64
+	calls     atomic.Int32
+	failure   error
+	missing   common.Address
+}
+
+func attachColdPriceSource(t *testing.T, service *StakeDAOService, fixture *fixtureRPC) *coldPriceRPC {
+	t.Helper()
+	methods, err := abi.JSON(strings.NewReader(coldOracleABI))
+	if err != nil {
+		t.Fatal(err)
+	}
+	caller := &coldPriceRPC{fixtureRPC: fixture, methods: methods, timestamp: uint64(time.Now().Unix())}
+	store := prices.NewMemoryStore()
+	service.prices = prices.NewTokenPriceService(store, prices.NewContractSource(store))
+	service.dial = func(context.Context, string) (stakeDAORPC, error) { return caller, nil }
+	return caller
+}
+
+func (c *coldPriceRPC) HeaderByNumber(ctx context.Context, block *big.Int) (*types.Header, error) {
+	header, err := c.fixtureRPC.HeaderByNumber(ctx, block)
+	if header != nil {
+		header.Time = c.timestamp
+	}
+	return header, err
+}
+
+func (c *coldPriceRPC) CallContract(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	if call.To != nil && *call.To == stakeDAOMulticallAddress {
+		return c.fixtureRPC.CallContract(ctx, call, block)
+	}
+	c.calls.Add(1)
+	if c.failure != nil {
+		return nil, c.failure
+	}
+	if block == nil || block.Uint64() != c.latest || call.From != (common.Address{}) || call.To == nil {
+		return nil, errors.New("oracle caller/snapshot changed")
+	}
+	method, err := c.methods.MethodById(call.Data[:4])
+	if err != nil {
+		return nil, err
+	}
+	switch method.Name {
+	case "getFeed":
+		args, err := method.Inputs.Unpack(call.Data[4:])
+		if err != nil {
+			return nil, err
+		}
+		token := args[0].(common.Address)
+		if token == c.missing {
+			return nil, priceRevertError{}
+		}
+		return method.Outputs.Pack(common.BigToAddress(new(big.Int).Add(token.Big(), big.NewInt(100000))))
+	case "decimals":
+		return method.Outputs.Pack(uint8(8))
+	case "latestRoundData":
+		answer := big.NewInt(200000000)
+		if *call.To == common.BigToAddress(new(big.Int).Add(c.rewardToken.Big(), big.NewInt(100000))) {
+			answer = big.NewInt(300000000)
+		}
+		updated := new(big.Int).SetUint64(c.timestamp - 60)
+		return method.Outputs.Pack(big.NewInt(5), answer, updated, updated, big.NewInt(5))
+	}
+	return nil, errors.New("unexpected oracle method")
+}
+
+type priceRevertError struct{}
+
+func (priceRevertError) Error() string  { return "execution reverted: Feed not found" }
+func (priceRevertError) ErrorCode() int { return 3 }
+
+func TestColdPriceFailureIsUnavailableDataButHTTP402AbortsTheLoad(t *testing.T) {
+	for _, quota := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing-feed", true: "quota"}[quota], func(t *testing.T) {
+			logs := captureLoadLogs(t)
+			s, fixture, vaults := multiPoolFixture(t, 2)
+			missing := common.HexToAddress("0xeeee")
+			gauge := common.BytesToAddress(fixture.logs[0].Topics[1].Bytes())
+			fixture.assets[gauge], fixture.logs[0].Topics[3] = missing, common.BytesToHash(missing.Bytes())
+			oracle := attachColdPriceSource(t, s, fixture)
+			oracle.missing = missing
+			if quota {
+				oracle.failure = rpc.HTTPError{StatusCode: 402, Status: "402 Payment Required"}
+			}
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if quota {
+				var httpErr rpc.HTTPError
+				if result != nil || !errors.Is(err, ErrRPCUnavailable) || !errors.As(err, &httpErr) || httpErr.StatusCode != 402 || !fixture.closed {
+					t.Fatalf("price quota failure hidden: result=%+v err=%v", result, err)
+				}
+			} else {
+				if err != nil || result == nil || len(result.Pools) != len(vaults) {
+					t.Fatalf("missing feed discarded otherwise valid pools: result=%+v err=%v", result, err)
+				}
+				for _, pool := range result.Pools {
+					if pool.AssetAddress == missing {
+						if pool.TVL != nil || pool.APR != nil {
+							t.Fatal("missing USD price was replaced with a number")
+						}
+					} else if pool.TVL == nil || *pool.TVL != 2.469134 || pool.APR == nil {
+						t.Fatalf("valid cold USD quote lost: %+v", pool)
+					}
+				}
+			}
+			records := loadLogRecords(t, logs)
+			last := records[len(records)-1]
+			if last["price_workers"] != float64(8) || last["rpc_active"] != float64(0) {
+				t.Fatalf("missing price concurrency diagnostics/unfinished calls: %+v", last)
+			}
+			if !quota && (last["rpc_reverts"].(float64) < 1 || last["first_rpc_failure"] != "contract_revert" || last["event"] != "completed") {
+				t.Fatalf("expected contract probe treated as a failed load: %+v", last)
+			}
+		})
+	}
 }
 
 type contextPoolRPC struct {

@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shopspring/decimal"
 )
 
@@ -22,6 +26,7 @@ type pricePoolFixture struct {
 }
 
 type contractPriceFixture struct {
+	mu          sync.Mutex
 	t           *testing.T
 	methods     abi.ABI
 	timestamp   uint64
@@ -57,6 +62,8 @@ func (f *contractPriceFixture) addFeed(token common.Address, raw int64, precisio
 }
 
 func (f *contractPriceFixture) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if block == nil || block.Uint64() != 12345 {
 		f.t.Fatal("price query did not use the selected block")
 	}
@@ -128,6 +135,228 @@ func (f *contractPriceFixture) CallContract(_ context.Context, call ethereum.Cal
 		return m.Outputs.Pack(f.pools[target].supply)
 	}
 	return nil, errors.New("unexpected contract price method")
+}
+
+type contractCallerFunc func(context.Context, ethereum.CallMsg, *big.Int) ([]byte, error)
+
+func (f contractCallerFunc) CallContract(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	return f(ctx, call, block)
+}
+
+func repeatedLPFixture(t *testing.T, count int, missing bool) (*TokenPriceService, *contractPriceFixture, *MemoryStore, Snapshot, []common.Address, common.Address) {
+	t.Helper()
+	s, f, store, snapshot := newContractPriceFixture(t)
+	known, component := priceAddress(1), priceAddress(2)
+	f.addFeed(known, 102000000, 8)
+	f.precision[known], f.precision[component] = 6, 6
+	if !missing {
+		f.addFeed(component, 98000000, 8)
+	}
+	var tokens []common.Address
+	for i := 0; i < count; i++ {
+		token := priceAddress(int64(100 + i))
+		tokens = append(tokens, token)
+		f.precision[token] = 18
+		f.pools[token] = pricePoolFixture{coins: []common.Address{known, component}, balances: []*big.Int{big.NewInt(50000000), big.NewInt(50000000)}, supply: decimal.RequireFromString("10000000000000000000").BigInt()}
+	}
+	return s, f, store, snapshot, tokens, component
+}
+
+func TestParallelPricesPreserveLPValuesAndDeduplicateMissingComponents(t *testing.T) {
+	for _, missing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "priced", true: "missing-anchor"}[missing], func(t *testing.T) {
+			old, oldRPC, _, snapshot, tokens, _ := repeatedLPFixture(t, 20, missing)
+			// Reproduce the previous sequential resolver without the RPC cache.
+			r := &contractResolver{source: old.source.(*ContractSource), ctx: context.Background(), snapshot: snapshot, memo: make(map[common.Address]Quote), visiting: make(map[common.Address]bool), decimals: make(map[common.Address]uint8)}
+			expected := make(map[common.Address]Quote)
+			for _, token := range tokens {
+				q, err := r.price(token, 0)
+				if missing && err == nil || !missing && err != nil {
+					t.Fatalf("unexpected baseline price: %s %v", token, err)
+				}
+				if err == nil {
+					expected[token] = q
+				}
+			}
+			s, f, _, parallel, tokens, component := repeatedLPFixture(t, 20, missing)
+			parallel.Workers = 8
+			quotes, err := s.source.(*ContractSource).FetchAt(context.Background(), 1, tokens, parallel)
+			if missing && err == nil || !missing && err != nil || len(quotes) != len(expected) {
+				t.Fatalf("parallel result differs: quotes=%d expected=%d err=%v", len(quotes), len(expected), err)
+			}
+			for _, token := range tokens {
+				got, found := quotes[token]
+				want, priced := expected[token]
+				if found != priced || found && (!got.USD.Equal(want.USD) || got.ValidUntil.Sub(got.UpdatedAt) != want.ValidUntil.Sub(want.UpdatedAt)) {
+					t.Fatalf("LP price/deadline changed: token=%s got=%+v want=%+v", token, got, want)
+				}
+			}
+			if missing {
+				if f.calls[component.Hex()+":asset"] != 1 || f.calls[feedRegistry.Hex()+":getFeed"] != len(tokens)+2 {
+					t.Fatalf("missing component probed repeatedly: %+v", f.calls)
+				}
+				if totalPriceCalls(f) >= totalPriceCalls(oldRPC) {
+					t.Fatal("negative probes were not deduplicated")
+				}
+			}
+			t.Logf("20 LP tokens (missing anchor=%t): RPC before=%d after=%d", missing, totalPriceCalls(oldRPC), totalPriceCalls(f))
+		})
+	}
+}
+
+func TestCold359TokenPricesUseAtMostEightConcurrentDirectCalls(t *testing.T) {
+	s, f, _, snapshot := newContractPriceFixture(t)
+	var tokens []common.Address
+	for i := int64(1); i <= 359; i++ {
+		token := priceAddress(i)
+		tokens = append(tokens, token)
+		f.addFeed(token, 100000000+i, 8)
+	}
+	started, release := make(chan struct{}, 8), make(chan struct{})
+	var active, peak atomic.Int32
+	snapshot.Workers = 8
+	snapshot.Caller = contractCallerFunc(func(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+		n := active.Add(1)
+		defer active.Add(-1)
+		for old := peak.Load(); n > old && !peak.CompareAndSwap(old, n); old = peak.Load() {
+		}
+		if n > 8 {
+			t.Error("more than eight price RPC calls active")
+		}
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		if call.From != (common.Address{}) || call.To == nil || *call.To == common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11") {
+			t.Error("price reads changed oracle caller semantics")
+		}
+		return f.CallContract(ctx, call, block)
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- s.EnsurePricesAt(ctx, 1, tokens, snapshot) }()
+	for range 8 {
+		select {
+		case <-started:
+		case <-ctx.Done():
+			t.Fatal("price calls remained sequential")
+		}
+	}
+	close(release)
+	if err := <-done; err != nil || active.Load() != 0 || peak.Load() != 8 {
+		t.Fatalf("parallel prices failed or left active calls: err=%v active=%d peak=%d", err, active.Load(), peak.Load())
+	}
+	for i, token := range tokens {
+		q, err := s.GetTokenPrice(context.Background(), token, 1)
+		if err != nil || !q.Equal(decimal.NewFromInt(100000001+int64(i)).Shift(-8)) {
+			t.Fatalf("cold token price changed: %s %s %v", token, q, err)
+		}
+	}
+	before := totalPriceCalls(f)
+	if err := s.EnsurePricesAt(context.Background(), 1, tokens, Snapshot{}); err != nil || totalPriceCalls(f) != before {
+		t.Fatal("fresh prices were fetched again")
+	}
+	t.Logf("359 cold USD anchors: RPC=%d peak concurrency=%d", before, peak.Load())
+}
+
+func TestPriceWorkersCancelAndJoinOnProviderFailureOrRequestCancellation(t *testing.T) {
+	for _, status := range []int{0, http.StatusPaymentRequired, http.StatusTooManyRequests} {
+		t.Run(map[int]string{0: "canceled", 402: "quota", 429: "rate-limit"}[status], func(t *testing.T) {
+			s, _, _, snapshot := newContractPriceFixture(t)
+			snapshot.Workers = 8
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			started := make(chan struct{}, 8)
+			var active, attempts atomic.Int32
+			snapshot.Caller = contractCallerFunc(func(ctx context.Context, _ ethereum.CallMsg, _ *big.Int) ([]byte, error) {
+				active.Add(1)
+				defer active.Add(-1)
+				attempts.Add(1)
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+				if status != 0 {
+					return nil, rpc.HTTPError{StatusCode: status, Status: "quota exhausted"}
+				}
+				<-ctx.Done()
+				return nil, ctx.Err()
+			})
+			var tokens []common.Address
+			for i := int64(1); i <= 30; i++ {
+				tokens = append(tokens, priceAddress(i))
+			}
+			done := make(chan error, 1)
+			go func() { done <- s.EnsurePricesAt(ctx, 1, tokens, snapshot) }()
+			if status == 0 {
+				for range 8 {
+					select {
+					case <-started:
+					case <-ctx.Done():
+						t.Fatal("price workers did not start")
+					}
+				}
+				cancel()
+			}
+			select {
+			case err := <-done:
+				if active.Load() != 0 || attempts.Load() > 8 {
+					t.Fatalf("failed calls retried/workers left active: active=%d attempts=%d", active.Load(), attempts.Load())
+				}
+				if status == 0 && !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation lost: %v", err)
+				}
+				var httpErr rpc.HTTPError
+				if status != 0 && (!errors.Is(err, ErrPriceRPCUnavailable) || !errors.As(err, &httpErr) || httpErr.StatusCode != status) {
+					t.Fatalf("provider failure became missing token price: %v", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("price workers did not stop")
+			}
+		})
+	}
+}
+
+func TestFailedContractProbeIsRetriedInTheNextFetch(t *testing.T) {
+	s, f, _, snapshot := newContractPriceFixture(t)
+	token := priceAddress(1)
+	if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot); err == nil {
+		t.Fatal("unknown token unexpectedly priced")
+	}
+	f.addFeed(token, 123000000, 8)
+	if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot); err != nil {
+		t.Fatal("failed probe cache survived its request", err)
+	}
+	q, err := s.GetTokenPrice(context.Background(), token, 1)
+	if err != nil || q.String() != "1.23" {
+		t.Fatalf("updated USD anchor ignored: %s %v", q, err)
+	}
+}
+
+func TestParallelCyclicRootsDoNotWaitOnEachOther(t *testing.T) {
+	s, f, _, snapshot := newContractPriceFixture(t)
+	a, b := priceAddress(1), priceAddress(2)
+	f.assets[a], f.assets[b] = b, a
+	f.precision[a], f.precision[b] = 6, 6
+	f.conversions[a], f.conversions[b] = big.NewInt(1000000), big.NewInt(1000000)
+	snapshot.Workers = 8
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := s.EnsurePricesAt(ctx, 1, []common.Address{a, b}, snapshot)
+	if err == nil || ctx.Err() != nil {
+		t.Fatalf("cyclic roots were priced or deadlocked: %v", err)
+	}
+	for _, token := range []common.Address{a, b} {
+		if _, err := s.GetTokenPrice(context.Background(), token, 1); !errors.Is(err, ErrPriceUnavailable) {
+			t.Fatal("cyclic token received a USD quote")
+		}
+	}
 }
 
 func totalPriceCalls(f *contractPriceFixture) int {
