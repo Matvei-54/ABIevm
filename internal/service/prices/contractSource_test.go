@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	metaRegistry "ABIevm/pkg/uipool/curve/registry"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -37,6 +38,9 @@ type contractPriceFixture struct {
 	assets      map[common.Address]common.Address
 	conversions map[common.Address]*big.Int
 	pools       map[common.Address]pricePoolFixture
+	metaPools   map[common.Address]common.Address // LP -> pool; addresses may differ.
+	metaLPs     map[common.Address]common.Address // Optional mismatched reverse lookup.
+	metaRevert  bool
 	calls       map[string]int
 	badRound    bool
 	fail        string
@@ -50,7 +54,7 @@ func newContractPriceFixture(t *testing.T) (*TokenPriceService, *contractPriceFi
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &contractPriceFixture{t: t, methods: methods, timestamp: uint64(time.Now().Unix()), feeds: make(map[common.Address]common.Address), answers: make(map[common.Address]*big.Int), updated: make(map[common.Address]uint64), precision: make(map[common.Address]uint8), assets: make(map[common.Address]common.Address), conversions: make(map[common.Address]*big.Int), pools: make(map[common.Address]pricePoolFixture), calls: make(map[string]int)}
+	f := &contractPriceFixture{t: t, methods: methods, timestamp: uint64(time.Now().Unix()), feeds: make(map[common.Address]common.Address), answers: make(map[common.Address]*big.Int), updated: make(map[common.Address]uint64), precision: make(map[common.Address]uint8), assets: make(map[common.Address]common.Address), conversions: make(map[common.Address]*big.Int), pools: make(map[common.Address]pricePoolFixture), metaPools: make(map[common.Address]common.Address), metaLPs: make(map[common.Address]common.Address), calls: make(map[string]int)}
 	store := NewMemoryStore()
 	return NewTokenPriceService(store, NewContractSource(store)), f, store, Snapshot{Caller: f, Block: 12345, Timestamp: f.timestamp}
 }
@@ -107,10 +111,52 @@ func (f *contractPriceFixture) CallContract(_ context.Context, call ethereum.Cal
 			f.t.Fatal("unverified Curve factory")
 		}
 		impl := common.Address{}
-		if _, ok := f.pools[args[0].(common.Address)]; ok {
+		token := args[0].(common.Address)
+		_, isMetaRegistered := f.metaPools[token]
+		if _, ok := f.pools[token]; ok && !isMetaRegistered {
 			impl = priceAddress(9999)
 		}
 		return m.Outputs.Pack(impl)
+	case "get_pool_from_lp_token":
+		if target != curveMetaRegistry {
+			f.t.Fatal("wrong MetaRegistry lookup target")
+		}
+		pool := f.metaPools[args[0].(common.Address)]
+		if pool == (common.Address{}) && f.metaRevert {
+			return nil, errors.New("execution reverted: unknown LP token")
+		}
+		return m.Outputs.Pack(pool)
+	case "get_lp_token":
+		pool := args[0].(common.Address)
+		if lp, ok := f.metaLPs[pool]; ok {
+			return m.Outputs.Pack(lp)
+		}
+		for lp, registered := range f.metaPools {
+			if registered == pool {
+				return m.Outputs.Pack(lp)
+			}
+		}
+		return m.Outputs.Pack(common.Address{})
+	case "get_n_coins":
+		return m.Outputs.Pack(big.NewInt(int64(len(f.pools[args[0].(common.Address)].coins))))
+	case "get_coins":
+		var coins [8]common.Address
+		copy(coins[:], f.pools[args[0].(common.Address)].coins)
+		return m.Outputs.Pack(coins)
+	case "get_balances", "get_decimals":
+		p := f.pools[args[0].(common.Address)]
+		var values [8]*big.Int
+		for i := range values {
+			values[i] = new(big.Int)
+			if i < len(p.coins) {
+				if m.Name == "get_balances" {
+					values[i].Set(p.balances[i])
+				} else {
+					values[i].SetUint64(uint64(f.precision[p.coins[i]]))
+				}
+			}
+		}
+		return m.Outputs.Pack(values)
 	case "is_meta":
 		return m.Outputs.Pack(f.pools[args[0].(common.Address)].meta)
 	case "asset":
@@ -132,6 +178,9 @@ func (f *contractPriceFixture) CallContract(_ context.Context, call ethereum.Cal
 	case "balances":
 		return m.Outputs.Pack(f.pools[target].balances[args[0].(*big.Int).Int64()])
 	case "totalSupply":
+		if pool, ok := f.metaPools[target]; ok {
+			return m.Outputs.Pack(f.pools[pool].supply)
+		}
 		return m.Outputs.Pack(f.pools[target].supply)
 	}
 	return nil, errors.New("unexpected contract price method")
@@ -356,6 +405,186 @@ func TestParallelCyclicRootsDoNotWaitOnEachOther(t *testing.T) {
 		if _, err := s.GetTokenPrice(context.Background(), token, 1); !errors.Is(err, ErrPriceUnavailable) {
 			t.Fatal("cyclic token received a USD quote")
 		}
+	}
+}
+
+func TestMetaRegistryABIEqualsTheRepositoryInterface(t *testing.T) {
+	declared, err := abi.JSON(strings.NewReader(metaRegistry.UipoolMetaData.ABI))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := NewContractSource(nil)
+	for _, name := range []string{"get_pool_from_lp_token", "get_lp_token", "get_n_coins", "get_coins", "get_balances", "get_decimals", "is_meta"} {
+		actual, expected := source.methods.Methods[name], declared.Methods[name]
+		if actual.Sig != expected.Sig || len(actual.Outputs) != len(expected.Outputs) || actual.Outputs[0].Type.String() != expected.Outputs[0].Type.String() {
+			t.Fatalf("MetaRegistry ABI mismatch for %s: %+v %+v", name, actual, expected)
+		}
+	}
+}
+
+func TestExplicitUSDFeedIsCheckedBeforeRegistryAndNeverBypassesBadRounds(t *testing.T) {
+	for _, kind := range []string{"fresh", "stale", "future", "negative", "incomplete"} {
+		t.Run(kind, func(t *testing.T) {
+			s, f, _, snapshot := newContractPriceFixture(t)
+			token := common.HexToAddress("0x3432B6A60D23Ca0dFCa7761B7ab56459D9C964D0")
+			feed := ethereumUSDFeeds[token]
+			f.precision[feed], f.answers[feed], f.updated[feed] = 8, big.NewInt(123456789), f.timestamp-60
+			switch kind {
+			case "stale":
+				f.updated[feed] = f.timestamp - 25*60*60
+			case "future":
+				f.updated[feed] = f.timestamp + 1
+			case "negative":
+				f.answers[feed] = big.NewInt(-1)
+			case "incomplete":
+				f.badRound = true
+			}
+			err := s.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot)
+			price, priceErr := s.GetTokenPrice(context.Background(), token, 1)
+			if kind == "fresh" {
+				if err != nil || priceErr != nil || price.String() != "1.23456789" {
+					t.Fatalf("explicit USD feed not used: price=%s err=%v/%v", price, err, priceErr)
+				}
+			} else if err == nil || !errors.Is(priceErr, ErrPriceUnavailable) {
+				t.Fatal("bad configured feed was bypassed or cached")
+			}
+			if f.calls[feedRegistry.Hex()+":getFeed"] != 0 || f.calls[curveMetaRegistry.Hex()+":get_pool_from_lp_token"] != 0 {
+				t.Fatal("configured feed unexpectedly fell through to another source")
+			}
+		})
+	}
+}
+
+func metaLPFixture(t *testing.T, sameAddress bool, lpDecimals uint8) (*TokenPriceService, *contractPriceFixture, *MemoryStore, Snapshot, common.Address, common.Address) {
+	t.Helper()
+	s, f, store, snapshot := newContractPriceFixture(t)
+	lp, pool := priceAddress(300), priceAddress(301)
+	if sameAddress {
+		pool = lp
+	}
+	usdc := priceAddress(1)
+	weth := common.HexToAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+	f.addFeed(usdc, 100000000, 8)
+	wethFeed := ethereumUSDFeeds[weth]
+	f.precision[wethFeed], f.answers[wethFeed], f.updated[wethFeed] = 8, big.NewInt(200000000000), f.timestamp-60
+	f.precision[usdc], f.precision[weth], f.precision[lp] = 6, 18, lpDecimals
+	f.metaPools[lp] = pool
+	f.pools[pool] = pricePoolFixture{
+		coins: []common.Address{usdc, weth}, balances: []*big.Int{big.NewInt(1000000000), big.NewInt(500000000000000000)},
+		supply: new(big.Int).Mul(big.NewInt(1000), new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(lpDecimals)), nil)),
+	}
+	return s, f, store, snapshot, lp, pool
+}
+
+func TestMetaRegistryValuesAllComponentsAndUsesTheLPTokenSupply(t *testing.T) {
+	for _, sameAddress := range []bool{false, true} {
+		for _, lpDecimals := range []uint8{6, 18} {
+			s, f, store, snapshot, lp, pool := metaLPFixture(t, sameAddress, lpDecimals)
+			if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{lp}, snapshot); err != nil {
+				t.Fatal(err)
+			}
+			price, err := s.GetTokenPrice(context.Background(), lp, 1)
+			if err != nil || price.String() != "2" {
+				t.Fatalf("wrong NAV: sameAddress=%t decimals=%d price=%s err=%v", sameAddress, lpDecimals, price, err)
+			}
+			quote, _, _ := store.Get(context.Background(), TokenKey{1, lp})
+			if quote.ValidUntil.After(quote.UpdatedAt.Add(15*time.Minute)) || f.calls[pool.Hex()+":get_balances"] != 0 || f.calls[lp.Hex()+":totalSupply"] != 1 {
+				t.Fatal("units, quote freshness or contract targets were lost")
+			}
+			before := totalPriceCalls(f)
+			if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{lp}, Snapshot{}); err != nil || totalPriceCalls(f) != before {
+				t.Fatal("fresh NAV quote did not bypass RPC")
+			}
+		}
+	}
+}
+
+func TestMetaRegistryRejectsIncompleteAndUnsupportedValuations(t *testing.T) {
+	for _, kind := range []string{"wrong-lp", "meta", "one-coin", "duplicate", "missing-anchor", "zero-supply", "bad-decimals", "nested-lp"} {
+		t.Run(kind, func(t *testing.T) {
+			s, f, _, snapshot, lp, pool := metaLPFixture(t, false, 18)
+			p := f.pools[pool]
+			switch kind {
+			case "wrong-lp":
+				f.metaLPs[pool] = priceAddress(999)
+			case "meta":
+				p.meta = true
+			case "one-coin":
+				p.coins, p.balances = p.coins[:1], p.balances[:1]
+			case "duplicate":
+				p.coins[1] = p.coins[0]
+			case "missing-anchor":
+				p.coins[1] = priceAddress(400)
+				f.precision[p.coins[1]] = 18
+			case "zero-supply":
+				p.supply = new(big.Int)
+			case "bad-decimals":
+				f.precision[p.coins[0]] = 37
+			case "nested-lp":
+				f.metaPools[priceAddress(400)] = priceAddress(401)
+				p.coins[1] = priceAddress(400)
+				f.precision[p.coins[1]] = 18
+			}
+			f.pools[pool] = p
+			if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{lp}, snapshot); err == nil {
+				t.Fatal("unsupported LP received a complete price")
+			}
+			if _, err := s.GetTokenPrice(context.Background(), lp, 1); !errors.Is(err, ErrPriceUnavailable) {
+				t.Fatal("incomplete LP price was cached as valid")
+			}
+		})
+	}
+}
+
+func TestMetaRegistryZeroBalanceDoesNotRequireAnUnknownUSDAnchor(t *testing.T) {
+	s, f, _, snapshot, lp, pool := metaLPFixture(t, false, 18)
+	p := f.pools[pool]
+	unknown := priceAddress(400)
+	p.coins[1], p.balances[1] = unknown, new(big.Int)
+	f.precision[unknown] = 18
+	f.pools[pool] = p
+	if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{lp}, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	price, err := s.GetTokenPrice(context.Background(), lp, 1)
+	if err != nil || price.String() != "1" || f.calls[unknown.Hex()+":asset"] != 0 || f.calls[feedRegistry.Hex()+":getFeed"] != 2 {
+		t.Fatalf("zero component balance was treated as a missing positive value: price=%s err=%v", price, err)
+	}
+}
+
+func TestMetaRegistryMissFallsThroughButHTTPAndMalformedDataDoNot(t *testing.T) {
+	for _, kind := range []string{"revert", "http", "malformed"} {
+		t.Run(kind, func(t *testing.T) {
+			s, f, _, snapshot := newContractPriceFixture(t)
+			token, base := priceAddress(1), priceAddress(2)
+			f.addFeed(base, 100000000, 8)
+			f.assets[token], f.precision[token], f.precision[base] = base, 6, 6
+			f.conversions[token] = big.NewInt(1100000)
+			f.metaRevert = true
+			if kind != "revert" {
+				snapshot.Caller = contractCallerFunc(func(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+					if *call.To == curveMetaRegistry {
+						if kind == "http" {
+							return nil, rpc.HTTPError{StatusCode: 402, Status: "402 Payment Required"}
+						}
+						return []byte{1}, nil
+					}
+					return f.CallContract(ctx, call, block)
+				})
+			}
+			err := s.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot)
+			if kind == "revert" {
+				price, priceErr := s.GetTokenPrice(context.Background(), token, 1)
+				if err != nil || priceErr != nil || price.String() != "1.1" {
+					t.Fatalf("registry miss blocked ERC4626: %s %v/%v", price, err, priceErr)
+				}
+			} else if err == nil || f.calls[token.Hex()+":asset"] != 0 {
+				t.Fatal("RPC/ABI failure was treated as an unregistered token")
+			}
+			if kind == "http" && !errors.Is(err, ErrPriceRPCUnavailable) {
+				t.Fatal("provider quota error lost", err)
+			}
+		})
 	}
 }
 

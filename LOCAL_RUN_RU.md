@@ -200,6 +200,9 @@ RPC_MAX_RPS ограничивает суммарные HTTP RPC-методы Aa
 
 ## Сохранение регистраций в Postgres
 
+Инструкция выбора пяти разных путей цены приведена в разделе
+[ниже](#пять-пулов-для-проверки-веток-цены).
+
 Один раз примените `migrations/000001_registry.up.sql` в своей базе, затем задайте
 `DATABASE_URL` в терминале/Run Configuration до запуска сервера. Полные команды
 для вашего установленного Postgres (pgAdmin/psql) и необязательного Docker — в
@@ -294,6 +297,32 @@ Multicall тоже расходует CU и не сокращает истори
 загрузке, сохраните последние строки `StakeDAO load`, особенно итоговую с
 `event=request_deadline`/`event=failed`: они покажут этап и объём выполненной работы.
 Повторять массовое сканирование ради сбора логов при нулевом балансе не нужно.
+
+## Пять пулов для проверки веток цены
+
+Обновите проект из одной версии `feat/stakedao-service`. В PowerShell с уже
+заданным `STAKEDAO_ETHEREUM_RPC_URL` выберите пять gauge из сохранённого JSON:
+
+```powershell
+$gauges = @(
+  "0xbe6228125448e40f5dcbb2dbdf7ff3f5721000b4",
+  "0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1",
+  "0x009acd89535dabc270c93f9b39d3232105fef453",
+  "0x52618c40ddba3cbbb69f3aaa4cb26ae649844b17",
+  "0x3285987bbd0b695ac48dc8571f519065b50aba07"
+) -join ","
+go run -mod=readonly ./cmd/stakedao-check -limit 5 -gauges $gauges -output stakedao-price-branches.json
+```
+
+Порядок: evaUSDC/evaUSDT — уже работавший контроль; crvUSD/USDC — старый plain LP;
+FXS/ETH — crypto LP; frxUSD/sUSDS — ERC4626-компонент; avUSD/evaUSDC — проверка
+недоступного USD-anchor. Отсутствие цены в последнем случае не заменяется `$1`.
+Кандидаты проверяются по текущему Controller; состояние/активность может измениться.
+
+Команда не читает историю, ограничена 5 RPC/с и 300 попытками и не использует БД.
+Размер CU зависит от провайдера. Обычный Swagger endpoint автоматически выбирает
+источники цены для всех пулов, без ручного перечисления этих адресов.
+Пример реального ответа PublicNode: `examples/stakedao-price-branches.json`.
 
 ## Автоматические проверки
 

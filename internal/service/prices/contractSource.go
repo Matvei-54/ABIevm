@@ -44,11 +44,23 @@ type SnapshotProvider interface {
 }
 
 var (
-	feedRegistry    = common.HexToAddress("0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf")
-	usdDenomination = common.BigToAddress(big.NewInt(840))
-	curveNGFactory  = common.HexToAddress("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf")
-	errNoUSDFeed    = errors.New("no Chainlink USD feed")
+	feedRegistry      = common.HexToAddress("0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf")
+	usdDenomination   = common.BigToAddress(big.NewInt(840))
+	curveNGFactory    = common.HexToAddress("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf")
+	curveMetaRegistry = common.HexToAddress("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC")
+	errNoUSDFeed      = errors.New("no Chainlink USD feed")
 )
+
+// Ethereum USD feeds published in @stake-dao/constants 0.5.21. These are
+// currency-specific anchors, not Curve's conservative lending LP oracles.
+// Round/decimal/freshness checks below also apply to these explicit feeds.
+var ethereumUSDFeeds = map[common.Address]common.Address{
+	common.HexToAddress("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"): common.HexToAddress("0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"), // ETH
+	common.HexToAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"): common.HexToAddress("0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"), // WETH redeems 1:1 for ETH
+	common.HexToAddress("0x3432B6A60D23Ca0dFCa7761B7ab56459D9C964D0"): common.HexToAddress("0x6Ebc52C8C1089be9eB3945C4350B68B8E4C2233f"), // FXS
+	common.HexToAddress("0xdC035D45d973E3EC169d2276DDab16f1e407384F"): common.HexToAddress("0xfF30586cD0F29eD462364C7e81375FC0C71219b1"), // USDS
+	common.HexToAddress("0xFa2B947eEc368f42195f24F36d2aF29f7c24CeC2"): common.HexToAddress("0xb177857a1799aA5F7fEb5799Fdf12CbE8fdF78B1"), // USDf
+}
 
 // Subsets of the official interfaces; provenance is in README.md.
 const contractPriceABI = `[
@@ -58,6 +70,12 @@ const contractPriceABI = `[
 {"type":"function","name":"asset","inputs":[],"outputs":[{"type":"address"}]},
 {"type":"function","name":"convertToAssets","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
 {"type":"function","name":"get_implementation_address","inputs":[{"type":"address"}],"outputs":[{"type":"address"}]},
+{"type":"function","name":"get_pool_from_lp_token","inputs":[{"type":"address"}],"outputs":[{"type":"address"}]},
+{"type":"function","name":"get_lp_token","inputs":[{"type":"address"}],"outputs":[{"type":"address"}]},
+{"type":"function","name":"get_n_coins","inputs":[{"type":"address"}],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"get_coins","inputs":[{"type":"address"}],"outputs":[{"type":"address[8]"}]},
+{"type":"function","name":"get_balances","inputs":[{"type":"address"}],"outputs":[{"type":"uint256[8]"}]},
+{"type":"function","name":"get_decimals","inputs":[{"type":"address"}],"outputs":[{"type":"uint256[8]"}]},
 {"type":"function","name":"is_meta","inputs":[{"type":"address"}],"outputs":[{"type":"bool"}]},
 {"type":"function","name":"N_COINS","inputs":[],"outputs":[{"type":"uint256"}]},
 {"type":"function","name":"coins","inputs":[{"type":"uint256"}],"outputs":[{"type":"address"}]},
@@ -66,9 +84,10 @@ const contractPriceABI = `[
 ]`
 
 // ContractSource resolves USD prices from Ethereum contracts only. It supports
-// Chainlink USD feeds, ERC4626 shares, and registered plain Curve StableSwap NG
-// pools. Missing or stale USD anchors remain unavailable; no $1/virtual-price
-// substitution, HTTP price fallback, or recursive LP valuation is performed.
+// Chainlink USD feeds, ERC4626 shares, plain Curve StableSwap NG and non-meta
+// pools registered in Curve MetaRegistry. Missing or stale anchors remain
+// unavailable; no $1/virtual-price substitution, HTTP price fallback, or
+// recursive LP valuation is performed.
 type ContractSource struct {
 	store   Store
 	methods abi.ABI
@@ -310,18 +329,7 @@ func (r *contractResolver) price(token common.Address, depth int) (Quote, error)
 	defer delete(r.visiting, token)
 	q, err := r.directUSD(token)
 	if errors.Is(err, errNoUSDFeed) {
-		var implementation common.Address
-		implementation, err = r.address(curveNGFactory, "get_implementation_address", token)
-		if err == nil {
-			if implementation != (common.Address{}) {
-				if depth != 0 {
-					return Quote{}, errors.New("nested Curve LP pricing is not supported")
-				}
-				q, err = r.pool(token)
-			} else {
-				q, err = r.vault(token, depth)
-			}
-		}
+		q, err = r.derivedPrice(token, depth)
 	}
 	if err != nil {
 		return Quote{}, err
@@ -339,17 +347,21 @@ func (r *contractResolver) price(token common.Address, depth int) (Quote, error)
 }
 
 func (r *contractResolver) directUSD(token common.Address) (Quote, error) {
-	feed, err := r.address(feedRegistry, "getFeed", token, usdDenomination)
-	if err != nil {
-		if data, ok := ethclient.RevertErrorData(err); ok {
-			if reason, unpackErr := abi.UnpackRevert(data); unpackErr == nil && reason == "Feed not found" {
+	feed := ethereumUSDFeeds[token]
+	if feed == (common.Address{}) {
+		var err error
+		feed, err = r.address(feedRegistry, "getFeed", token, usdDenomination)
+		if err != nil {
+			if data, ok := ethclient.RevertErrorData(err); ok {
+				if reason, unpackErr := abi.UnpackRevert(data); unpackErr == nil && reason == "Feed not found" {
+					return Quote{}, errNoUSDFeed
+				}
+			}
+			if strings.Contains(err.Error(), "Feed not found") {
 				return Quote{}, errNoUSDFeed
 			}
+			return Quote{}, err
 		}
-		if strings.Contains(err.Error(), "Feed not found") {
-			return Quote{}, errNoUSDFeed
-		}
-		return Quote{}, err
 	}
 	if feed == (common.Address{}) {
 		return Quote{}, errNoUSDFeed
@@ -370,6 +382,131 @@ func (r *contractResolver) directUSD(token common.Address) (Quote, error) {
 		return Quote{}, errors.New("invalid or stale Chainlink USD round")
 	}
 	return Quote{USD: decimal.NewFromBigInt(answer, -int32(d)), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: time.Unix(int64(updated.Uint64()+maxAge), 0)}, nil
+}
+
+func (r *contractResolver) derivedPrice(token common.Address, depth int) (Quote, error) {
+	// Preserve the existing NG fast path; MetaRegistry extends coverage to
+	// older plain/crypto pools, including a pool address different from its LP.
+	implementation, err := r.address(curveNGFactory, "get_implementation_address", token)
+	if err != nil && !isPriceProbeRevert(err) {
+		return Quote{}, err
+	}
+	if err == nil && implementation != (common.Address{}) {
+		if depth != 0 {
+			return Quote{}, errors.New("nested Curve LP pricing is not supported")
+		}
+		return r.pool(token)
+	}
+	pool, err := r.address(curveMetaRegistry, "get_pool_from_lp_token", token)
+	if err != nil && !isPriceProbeRevert(err) {
+		return Quote{}, err
+	}
+	if err == nil && pool != (common.Address{}) {
+		if depth != 0 {
+			return Quote{}, errors.New("nested Curve LP pricing is not supported")
+		}
+		return r.metaPool(token, pool)
+	}
+	return r.vault(token, depth)
+}
+
+func isPriceProbeRevert(err error) bool {
+	// Unknown tokens can revert registry lookups. Transport errors and invalid
+	// ABI data must not turn into a capability miss followed by more requests.
+	var httpErr rpc.HTTPError
+	var netErr net.Error
+	if errors.As(err, &httpErr) || errors.As(err, &netErr) || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var contractErr rpc.Error
+	if errors.As(err, &contractErr) && contractErr.ErrorCode() == 3 {
+		return true
+	}
+	if _, ok := ethclient.RevertErrorData(err); ok {
+		return true
+	}
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "execution reverted")
+}
+
+func (r *contractResolver) metaPool(token, pool common.Address) (Quote, error) {
+	lp, err := r.address(curveMetaRegistry, "get_lp_token", pool)
+	if err != nil {
+		return Quote{}, err
+	}
+	if lp != token {
+		return Quote{}, errors.New("Curve MetaRegistry LP/pool mapping mismatch")
+	}
+	out, err := r.call(curveMetaRegistry, "is_meta", pool)
+	if err != nil {
+		return Quote{}, err
+	}
+	if out[0].(bool) {
+		return Quote{}, errors.New("Curve metapool pricing is not supported")
+	}
+	n, err := r.unsigned(curveMetaRegistry, "get_n_coins", pool)
+	if err != nil {
+		return Quote{}, err
+	}
+	if !n.IsUint64() || n.Uint64() < 2 || n.Uint64() > 8 {
+		return Quote{}, errors.New("invalid Curve MetaRegistry coin count")
+	}
+	coinData, err := r.call(curveMetaRegistry, "get_coins", pool)
+	if err != nil {
+		return Quote{}, err
+	}
+	coins := coinData[0].([8]common.Address)
+	balanceData, err := r.call(curveMetaRegistry, "get_balances", pool)
+	if err != nil {
+		return Quote{}, err
+	}
+	balances := balanceData[0].([8]*big.Int)
+	decimalData, err := r.call(curveMetaRegistry, "get_decimals", pool)
+	if err != nil {
+		return Quote{}, err
+	}
+	decimals := decimalData[0].([8]*big.Int)
+	supply, err := r.unsigned(token, "totalSupply")
+	if err != nil {
+		return Quote{}, err
+	}
+	if supply.Sign() <= 0 {
+		return Quote{}, errors.New("Curve LP supply is zero")
+	}
+	lpDecimals, err := r.tokenDecimals(token)
+	if err != nil {
+		return Quote{}, err
+	}
+	value := decimal.Zero
+	var deadline time.Time
+	seen := make(map[common.Address]bool)
+	for i, coin := range coins {
+		if uint64(i) >= n.Uint64() {
+			if coin != (common.Address{}) {
+				return Quote{}, errors.New("Curve coin count differs from its list")
+			}
+			continue
+		}
+		if coin == (common.Address{}) || seen[coin] {
+			return Quote{}, errors.New("invalid Curve MetaRegistry coin list")
+		}
+		seen[coin] = true
+		if !decimals[i].IsUint64() || decimals[i].Uint64() > 36 || balances[i].Sign() < 0 {
+			return Quote{}, errors.New("invalid Curve balance or decimals")
+		}
+		if balances[i].Sign() == 0 {
+			continue
+		}
+		price, err := r.price(coin, 1)
+		if err != nil {
+			return Quote{}, fmt.Errorf("Curve component %s: %w", coin.Hex(), err)
+		}
+		value = value.Add(decimal.NewFromBigInt(balances[i], -int32(decimals[i].Uint64())).Mul(price.USD))
+		expires := quoteDeadline(price)
+		if deadline.IsZero() || expires.Before(deadline) {
+			deadline = expires
+		}
+	}
+	return Quote{USD: value.DivRound(decimal.NewFromBigInt(supply, -int32(lpDecimals)), 36), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: deadline}, nil
 }
 
 func (r *contractResolver) vault(token common.Address, depth int) (Quote, error) {
