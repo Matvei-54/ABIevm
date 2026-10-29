@@ -208,12 +208,23 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	}
 	tokens := make([]common.Address, 0, len(response.Pools)*2)
 	for _, pool := range response.Pools {
-		tokens = append(tokens, pool.AssetAddress)
-		if pool.RewardToken != nil {
-			tokens = append(tokens, *pool.RewardToken)
+		// A known zero amount has zero TVL without a quote. Unknown/invalid
+		// amounts cannot be valued either, so their prices won't enable APR.
+		if pool.AssetAmount == nil {
+			continue
 		}
+		amount, err := decimal.NewFromString(*pool.AssetAmount)
+		if err != nil || !amount.IsPositive() {
+			continue
+		}
+		tokens = append(tokens, pool.AssetAddress)
 		for _, reward := range pool.Rewards {
-			tokens = append(tokens, reward.Token)
+			if reward.RatePerSecond != nil {
+				rate, err := decimal.NewFromString(*reward.RatePerSecond)
+				if err == nil && rate.IsPositive() {
+					tokens = append(tokens, reward.Token)
+				}
+			}
 		}
 	}
 	priceWorkers := 0
@@ -576,6 +587,15 @@ func (s *StakeDAOService) valuePool(ctx context.Context, pool *dto.StakeDAOPool)
 	if pool.AssetAmount == nil {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Underlying asset amount is unavailable")}
 	}
+	amount, err := decimal.NewFromString(*pool.AssetAmount)
+	if err != nil || amount.IsNegative() {
+		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Invalid underlying asset amount")}
+	}
+	if amount.IsZero() {
+		value := float64(0)
+		pool.TVL = &value
+		return nil
+	}
 	if s.prices == nil {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Token price service is unavailable")}
 	}
@@ -583,8 +603,7 @@ func (s *StakeDAOService) valuePool(ctx context.Context, pool *dto.StakeDAOPool)
 	if err != nil {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Fresh USD price for the underlying asset/LP token is unavailable")}
 	}
-	amount, err := decimal.NewFromString(*pool.AssetAmount)
-	if err != nil || amount.IsNegative() || !price.IsPositive() {
+	if !price.IsPositive() {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Invalid asset amount or USD price")}
 	}
 	value, _ := amount.Mul(price).Float64()

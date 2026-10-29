@@ -50,6 +50,7 @@ type fixtureRPC struct {
 	extraFinish          uint32
 	killed               bool
 	physical             *big.Int
+	totalAssets          *big.Int
 	shutdown             map[common.Address]bool
 }
 
@@ -213,6 +214,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			}
 			return method.Outputs.Pack(uint8(6))
 		case "totalAssets":
+			if f.totalAssets != nil {
+				return method.Outputs.Pack(f.totalAssets)
+			}
 			return method.Outputs.Pack(big.NewInt(1234567))
 		}
 	}
@@ -497,6 +501,74 @@ func TestTVLZeroAssetsAndFractionalDecimals(t *testing.T) {
 		if issues := s.valuePool(context.Background(), &pool); len(issues) != 0 || pool.TVL == nil || *pool.TVL != want {
 			t.Fatalf("TVL for %s: %+v %+v", amount, pool, issues)
 		}
+	}
+}
+
+type recordingPriceProvider struct {
+	tokens []common.Address
+	reads  []common.Address
+}
+
+func (p *recordingPriceProvider) EnsurePrices(_ context.Context, _ int64, tokens []common.Address) error {
+	p.tokens = append(p.tokens, tokens...)
+	return nil
+}
+
+func (p *recordingPriceProvider) GetTokenPrice(_ context.Context, token common.Address, _ int64) (decimal.Decimal, error) {
+	p.reads = append(p.reads, token)
+	return decimal.NewFromInt(2), nil
+}
+
+func TestEmptyVaultHasZeroTVLWithoutFetchingOrReadingPrices(t *testing.T) {
+	s, fixture := newPoolFixture(t)
+	fixture.totalAssets = new(big.Int)
+	provider := &recordingPriceProvider{}
+	s.prices = provider
+	result, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil || result == nil || len(result.Pools) != 1 {
+		t.Fatalf("empty vault load failed: result=%+v err=%v", result, err)
+	}
+	pool := result.Pools[0]
+	if pool.TVL == nil || *pool.TVL != 0 || pool.APR != nil || pool.APRStatus != "unavailable" || pool.Source != "onchain" {
+		t.Fatalf("empty vault value misrepresented: %+v", pool)
+	}
+	if len(provider.tokens) != 0 || len(provider.reads) != 0 {
+		t.Fatalf("empty vault requested USD quotes: fetch=%v reads=%v", provider.tokens, provider.reads)
+	}
+	for _, issue := range result.Errors {
+		if issue.Field == "tvl" {
+			t.Fatalf("known zero TVL reported as unknown: %+v", issue)
+		}
+	}
+}
+
+func TestPriceRequestsIncludeOnlyKnownPositiveRewardRates(t *testing.T) {
+	for _, kind := range []string{"expired", "unreadable"} {
+		t.Run(kind, func(t *testing.T) {
+			s, fixture := newPoolFixture(t)
+			fixture.fullPrimary = true
+			fixture.extraTokens = []common.Address{common.HexToAddress("0xeeee")}
+			fixture.extraFinish, fixture.extraRate = 0, big.NewInt(1000000000000000000)
+			if kind == "unreadable" {
+				fixture.callFailure = "rewardData"
+			}
+			provider := &recordingPriceProvider{}
+			s.prices = provider
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil || result == nil || len(result.Pools) != 1 {
+				t.Fatalf("reward test load failed: %+v %v", result, err)
+			}
+			pool := result.Pools[0]
+			if !reflect.DeepEqual(provider.tokens, []common.Address{pool.AssetAddress, fixture.rewardToken}) {
+				t.Fatalf("unused reward priced or active primary omitted: %v", provider.tokens)
+			}
+			if pool.TVL == nil || pool.APR == nil {
+				t.Fatalf("active primary lost its valuation: %+v", pool)
+			}
+			if kind == "unreadable" && pool.APRStatus != "partial" {
+				t.Fatal("unknown extra reward rate became complete/zero APR")
+			}
+		})
 	}
 }
 
