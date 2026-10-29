@@ -1,5 +1,8 @@
 # Цены токенов: кэш и контракты
 
+Исследование документации, SDK и адресов StakeDAO:
+[STAKE_DAO_PRICING_RESEARCH_RU.md](STAKE_DAO_PRICING_RESEARCH_RU.md).
+
 StakeDAO и `cmd/stakedao-check` используют общий `TokenPriceService` с
 `ContractSource`. В этом workflow DeFiLlama/HTTP-источники не вызываются.
 Старая Curve-реализация и `recursivePools` не менялись; её прежние HTTP-вызовы
