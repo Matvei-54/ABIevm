@@ -14,6 +14,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"strconv"
 	//"strings"
 
 	//decoder "ABIevm/internal/util"
@@ -184,19 +185,57 @@ func (h *Handler) HandleGetCurveReserves(c echo.Context) error {
 }
 
 // @Summary      Получить пулы StakeDAO из блокчейна
-// @Description  Возвращает TVL и оценку APR наград для Curve V2; aprStatus показывает полноту. APY пока недоступен.
+// @Description  По умолчанию: name, apr, symbol, address (vault), apy, status (полнота APR). details=true возвращает TVL, адреса контрактов, награды и диагностику. APR в процентах; APY пока недоступен.
 // @Tags         StakeDao
 // @Accept       json
 // @Produce      json
 // @Param        network  path      string  true  "Поддерживаемая сеть: ethereum"
-// @Success      200      {object}  interface{}
+// @Param        details  query     boolean false "Полный ответ с контрактами, TVL и диагностикой" default(false)
+// @Success      200      {object}  dto.StakeDAOPoolsSummaryResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      502      {object}  map[string]string
 // @Failure      503      {object}  map[string]string
 // @Failure      504      {object}  map[string]string
 // @Router       /reservesStakedao/{network} [get]
 func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
+	details := false
+	if value := c.QueryParam("details"); value != "" {
+		var err error
+		details, err = strconv.ParseBool(value)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "details must be true or false"})
+		}
+	}
 	result, err := h.stakeDao.GetPools(c.Request().Context(), c.Param("network"))
+	if err != nil {
+		return stakeDAOHTTPError(c, err)
+	}
+	if details {
+		return c.JSON(http.StatusOK, result)
+	}
+	return c.JSON(http.StatusOK, result.Summary())
+}
+
+// @Summary      Проверить награды crvUSD/USDC и FXS/ETH
+// @Description  Только два gauge через текущий Controller, без истории и Postgres. Полный ответ с этапом, контрактом и методом ошибки основного CRV-потока. Не более 5 RPC/с и 300 попыток на запрос.
+// @Tags         StakeDao
+// @Produce      json
+// @Param        network  path      string true "Поддерживаемая сеть: ethereum"
+// @Success      200      {object}  dto.StakeDAOPoolsResponse
+// @Failure      400      {object}  map[string]string
+// @Failure      502      {object}  map[string]string
+// @Failure      503      {object}  map[string]string
+// @Failure      504      {object}  map[string]string
+// @Router       /reservesStakedao/{network}/diagnostics [get]
+func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
+	result, err := h.stakeDao.GetRewardDiagnostics(c.Request().Context(), c.Param("network"))
+	if err != nil {
+		return stakeDAOHTTPError(c, err)
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+func stakeDAOHTTPError(c echo.Context, err error) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, stakedao.ErrUnsupportedNetwork):
@@ -210,7 +249,7 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 			return c.JSON(http.StatusBadGateway, map[string]string{"error": "StakeDAO blockchain data could not be loaded"})
 		}
 	}
-	return c.JSON(http.StatusOK, result)
+	return nil
 }
 
 func normalized(balance *big.Int, decimal *big.Int) *big.Float {

@@ -673,7 +673,13 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 	if pool.RewardToken != nil {
 		rate, err := s.curvePrimaryRate(ctx, info, block, pool)
 		if err != nil {
-			issues = append(issues, poolIssue(info.Gauge, "apr", "Primary reward-rate/fee/allocation data is unavailable or unsupported"))
+			issue := poolIssue(info.Gauge, "apr", "Primary reward-rate/fee/allocation data is unavailable or unsupported")
+			var failure *primaryRewardError
+			if errors.As(err, &failure) {
+				issue = failure.issue
+				issue.GaugeAddress = info.Gauge
+			}
+			issues = append(issues, issue)
 		} else {
 			value := rate.String()
 			pool.Rewards = append(pool.Rewards, dto.StakeDAOReward{Token: *pool.RewardToken, Source: "curve-primary-net", RatePerSecond: &value})
@@ -730,12 +736,40 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 	return issues
 }
 
+// primaryRewardError keeps the original error for cancellation checks, but only
+// exposes a controlled reason and onchain call location in JSON. RPC errors can
+// contain credential-bearing URLs and must never be copied into Message.
+type primaryRewardError struct {
+	issue dto.StakeDAOPoolError
+	cause error
+}
+
+func (e *primaryRewardError) Error() string { return e.issue.Message }
+func (e *primaryRewardError) Unwrap() error { return e.cause }
+
 // Snapshot projection of Curve emissions, after Accountant fees. Convex primary
 // CRV is fee-exempt from the protocol fee; CHECKPOINT harvest fees apply to both targets.
-func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVaultInfo, block *big.Int, pool *dto.StakeDAOPool) (decimal.Decimal, error) {
+func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVaultInfo, block *big.Int, pool *dto.StakeDAOPool) (rate decimal.Decimal, err error) {
+	issue := dto.StakeDAOPoolError{Field: "apr"}
+	step := func(stage string, contract common.Address, method, message string) {
+		issue.Stage, issue.Method, issue.Message = stage, method, message
+		issue.Code = "primary_reward_" + stage
+		issue.Contract = nil
+		if contract != (common.Address{}) {
+			address := contract
+			issue.Contract = &address
+		}
+	}
+	defer func() {
+		if err != nil {
+			err = &primaryRewardError{issue: issue, cause: err}
+		}
+	}()
+	step("model", info.Vault, "", "Primary reward model is unsupported for this chain or protocol")
 	if s.chainID != 1 || info.ProtocolID != [4]byte{0xc7, 0x15, 0xe3, 0x73} || pool.AccountantAddress == nil || pool.RewardToken == nil {
 		return decimal.Zero, errors.New("unsupported primary model")
 	}
+	step("strategy", info.Vault, "strategy", "Vault strategy could not be read or is zero")
 	strategy, err := s.snapshotAddress(ctx, block, info.Vault, vaultV2ABI, "strategy")
 	if err != nil || strategy == (common.Address{}) {
 		return decimal.Zero, errors.New("strategy unavailable")
@@ -751,42 +785,52 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 		readContract(info.Vault, vaultV2ABI, "POLICY"),
 		readContract(*pool.RewardToken, erc20DecimalsABI, "decimals"),
 	)
+	step("strategy_accountant", strategy, "ACCOUNTANT", "Strategy Accountant could not be read or differs from the vault Accountant")
 	strategyAccountant, err := data[0].address()
 	if err != nil || strategyAccountant != *pool.AccountantAddress {
 		return decimal.Zero, errors.New("strategy Accountant mismatch")
 	}
+	step("physical_allocation", strategy, "balanceOf", "Strategy physical allocation or vault asset amount is unavailable")
 	physical, err := data[1].unsigned()
 	if err != nil || pool.AssetAmount == nil || pool.AssetDecimals == nil {
 		return decimal.Zero, errors.New("physical allocation unavailable")
 	}
+	step("allocation_match", strategy, "balanceOf", "Vault assets differ from Strategy physical allocation")
 	assets, err := decimal.NewFromString(*pool.AssetAmount)
 	if err != nil || assets.Shift(int32(*pool.AssetDecimals)).BigInt().Cmp(physical) != 0 {
 		return decimal.Zero, errors.New("vault supply differs from physical allocation")
 	}
+	step("strategy_reward_token", strategy, "REWARD_TOKEN", "Strategy reward token could not be read or differs from Accountant reward token")
 	strategyToken, err := data[2].address()
 	if err != nil || strategyToken != *pool.RewardToken {
 		return decimal.Zero, errors.New("strategy reward token mismatch")
 	}
+	step("locker", strategy, "LOCKER", "Strategy Locker could not be read or is zero")
 	locker, err := data[3].address()
 	if err != nil || locker == (common.Address{}) {
 		return decimal.Zero, errors.New("locker unavailable")
 	}
+	step("allocator", info.Vault, "allocator", "Vault allocator could not be read")
 	allocator, err := data[4].address()
 	if err != nil {
 		return decimal.Zero, err
 	}
+	step("allocation_targets", allocator, "getAllocationTargets", "Allocation targets could not be read or decoded")
 	targets, err := s.addressList(ctx, block, allocator, allocatorV2ABI, "getAllocationTargets", info.Gauge)
 	if err != nil {
 		return decimal.Zero, err
 	}
+	step("protocol_fee", *pool.AccountantAddress, "getProtocolFeePercent", "Accountant protocol fee could not be read")
 	protocolFee, err := data[5].unsigned()
 	if err != nil {
 		return decimal.Zero, err
 	}
+	step("harvest_fee", *pool.AccountantAddress, "getHarvestFeePercent", "Accountant harvest fee could not be read")
 	harvestFee, err := data[6].unsigned()
 	if err != nil {
 		return decimal.Zero, err
 	}
+	step("harvest_policy", info.Vault, "POLICY", "Vault harvest policy is unavailable or unsupported")
 	policy, err := data[7].unsigned()
 	if err != nil || !policy.IsUint64() || policy.Uint64() > 1 {
 		return decimal.Zero, errors.New("unsupported harvest policy")
@@ -795,17 +839,20 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 		harvestFee = new(big.Int)
 	}
 	pf, hf := decimal.NewFromBigInt(protocolFee, -18), decimal.NewFromBigInt(harvestFee, -18)
+	step("fee_bounds", *pool.AccountantAddress, "", "Accountant fee fractions are outside supported bounds")
 	if pf.IsNegative() || hf.IsNegative() || pf.Add(hf).GreaterThan(decimal.RequireFromString("0.4")) {
 		return decimal.Zero, errors.New("invalid fee fractions")
 	}
 	lockerRate, sidecarRate := decimal.Zero, decimal.Zero
 	seen := map[common.Address]bool{}
 	for _, target := range targets {
+		step("allocation_target", allocator, "getAllocationTargets", "Allocation target is zero or duplicated")
 		if target == (common.Address{}) || seen[target] {
 			return decimal.Zero, errors.New("invalid allocation target")
 		}
 		seen[target] = true
 		if target == locker {
+			step("gauge_status", info.Gauge, "is_killed", "Curve gauge status could not be read or decoded")
 			out, err := s.snapshotCall(ctx, block, info.Gauge, curveGaugeABI, "is_killed")
 			if err != nil || len(out) != 1 {
 				return decimal.Zero, errors.New("gauge status unavailable")
@@ -823,18 +870,22 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 				readContract(info.Gauge, curveGaugeABI, "working_balances", locker),
 				readContract(info.Gauge, curveGaugeABI, "working_supply"),
 			)
+			step("gauge_inflation", info.Gauge, "inflation_rate", "Curve gauge inflation rate could not be read with the supported ABI")
 			inflation, err := gaugeData[0].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
+			step("gauge_weight", common.HexToAddress("0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB"), "gauge_relative_weight", "Curve gauge relative weight could not be read")
 			weight, err := gaugeData[1].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
+			step("gauge_working_balance", info.Gauge, "working_balances", "Locker working balance could not be read")
 			working, err := gaugeData[2].unsigned()
 			if err != nil {
 				return decimal.Zero, err
 			}
+			step("gauge_working_supply", info.Gauge, "working_supply", "Curve gauge working supply could not be read")
 			supply, err := gaugeData[3].unsigned()
 			if err != nil {
 				return decimal.Zero, err
@@ -842,6 +893,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			if working.Sign() == 0 {
 				continue
 			}
+			step("gauge_working_bounds", info.Gauge, "", "Curve working balance, supply or relative weight is inconsistent")
 			if supply.Sign() == 0 || working.Cmp(supply) > 0 || weight.Cmp(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)) > 0 {
 				return decimal.Zero, errors.New("invalid gauge working supply/weight")
 			}
@@ -853,18 +905,22 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 				readContract(target, sidecarV2ABI, "gauge"),
 				readContract(target, sidecarV2ABI, "baseRewardPool"),
 			)
+			step("sidecar_accountant", target, "ACCOUNTANT", "Sidecar Accountant could not be read or differs from vault Accountant")
 			sidecarAccountant, err := sidecarData[0].address()
 			if err != nil || sidecarAccountant != *pool.AccountantAddress {
 				return decimal.Zero, errors.New("sidecar Accountant mismatch")
 			}
+			step("sidecar_reward_token", target, "REWARD_TOKEN", "Sidecar reward token could not be read or is unsupported")
 			token, err := sidecarData[1].address()
 			if err != nil || token != *pool.RewardToken {
 				return decimal.Zero, errors.New("unsupported sidecar")
 			}
+			step("sidecar_gauge", target, "gauge", "Sidecar gauge could not be read or differs from requested gauge")
 			gauge, err := sidecarData[2].address()
 			if err != nil || gauge != info.Gauge {
 				return decimal.Zero, errors.New("sidecar gauge mismatch")
 			}
+			step("sidecar_reward_pool", target, "baseRewardPool", "Sidecar Convex reward pool could not be read")
 			rewardPool, err := sidecarData[3].address()
 			if err != nil {
 				return decimal.Zero, err
@@ -873,10 +929,12 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 				readContract(rewardPool, convexPoolABI, "rewardToken"),
 				readContract(rewardPool, convexPoolABI, "periodFinish"),
 			)
+			step("convex_reward_token", rewardPool, "rewardToken", "Convex reward token could not be read or differs from primary token")
 			token, err = rewardData[0].address()
 			if err != nil || token != *pool.RewardToken {
 				return decimal.Zero, errors.New("Convex reward token mismatch")
 			}
+			step("convex_reward_period", rewardPool, "periodFinish", "Convex reward period could not be read or is invalid")
 			finish, err := rewardData[1].unsigned()
 			if err != nil || !finish.IsUint64() {
 				return decimal.Zero, errors.New("invalid reward period")
@@ -889,6 +947,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 				readContract(rewardPool, convexPoolABI, "totalSupply"),
 				readContract(rewardPool, convexPoolABI, "rewardRate"),
 			)
+			step("sidecar_balance", target, "balanceOf", "Sidecar staked balance could not be read")
 			balance, err := allocation[0].unsigned()
 			if err != nil {
 				return decimal.Zero, err
@@ -896,10 +955,12 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			if balance.Sign() == 0 {
 				continue
 			}
+			step("convex_supply", rewardPool, "totalSupply", "Convex supply is unavailable or inconsistent with Sidecar balance")
 			supply, err := allocation[1].unsigned()
 			if err != nil || supply == nil || supply.Sign() == 0 || balance.Cmp(supply) > 0 {
 				return decimal.Zero, errors.New("invalid Convex supply")
 			}
+			step("convex_reward_rate", rewardPool, "rewardRate", "Convex reward rate could not be read")
 			rate, err := allocation[2].unsigned()
 			if err != nil {
 				return decimal.Zero, err
@@ -907,6 +968,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			sidecarRate = sidecarRate.Add(decimal.NewFromBigInt(rate, 0).Mul(decimal.NewFromBigInt(balance, 0)).DivRound(decimal.NewFromBigInt(supply, 0), 128))
 		}
 	}
+	step("reward_decimals", *pool.RewardToken, "decimals", "Primary reward token decimals could not be read or are unsupported")
 	decimals, err := data[8].unsigned()
 	if err != nil || decimals.Uint64() > 255 {
 		return decimal.Zero, errors.New("reward decimals unavailable")

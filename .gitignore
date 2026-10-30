@@ -3,3 +3,4 @@
 !.env.example
 /stakedao-sample*.json
 /stakedao-price-branches.json
+/stakedao-reward-diagnostics.json

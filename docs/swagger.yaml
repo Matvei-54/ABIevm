@@ -1,3 +1,125 @@
+definitions:
+  dto.StakeDAOPool:
+    properties:
+      accountantAddress:
+        type: string
+      apr:
+        type: number
+      aprScope:
+        type: string
+      aprStatus:
+        type: string
+      apy:
+        type: number
+      assetAddress:
+        type: string
+      assetAmount:
+        description: AssetAmount is an exact decimal quantity of the underlying token,
+          not USD TVL.
+        type: string
+      assetDecimals:
+        type: integer
+      assetSymbol:
+        type: string
+      gaugeAddress:
+        type: string
+      name:
+        type: string
+      protocolId:
+        type: string
+      rewardMechanism:
+        type: string
+      rewardReceiver:
+        type: string
+      rewardToken:
+        type: string
+      rewards:
+        items:
+          $ref: '#/definitions/dto.StakeDAOReward'
+        type: array
+      source:
+        description: ChainID     int64          `json:"chainId"`
+        type: string
+      symbol:
+        type: string
+      tvl:
+        type: number
+      updatedAt:
+        type: string
+      vaultAddress:
+        type: string
+    type: object
+  dto.StakeDAOPoolError:
+    properties:
+      code:
+        type: string
+      contract:
+        type: string
+      field:
+        type: string
+      gaugeAddress:
+        type: string
+      message:
+        type: string
+      method:
+        type: string
+      stage:
+        type: string
+    type: object
+  dto.StakeDAOPoolSummary:
+    properties:
+      address:
+        type: string
+      apr:
+        type: number
+      apy:
+        type: number
+      name:
+        type: string
+      status:
+        type: string
+      symbol:
+        type: string
+    type: object
+  dto.StakeDAOPoolsResponse:
+    properties:
+      blockNumber:
+        type: integer
+      errors:
+        items:
+          $ref: '#/definitions/dto.StakeDAOPoolError'
+        type: array
+      network:
+        type: string
+      pools:
+        items:
+          $ref: '#/definitions/dto.StakeDAOPool'
+        type: array
+    type: object
+  dto.StakeDAOPoolsSummaryResponse:
+    properties:
+      blockNumber:
+        type: integer
+      network:
+        type: string
+      pools:
+        items:
+          $ref: '#/definitions/dto.StakeDAOPoolSummary'
+        type: array
+    type: object
+  dto.StakeDAOReward:
+    properties:
+      apr:
+        type: number
+      periodFinish:
+        type: integer
+      ratePerSecond:
+        type: string
+      source:
+        type: string
+      token:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
@@ -71,19 +193,27 @@ paths:
     get:
       consumes:
       - application/json
-      description: Возвращает TVL и оценку APR наград для Curve V2; aprStatus показывает полноту. APY пока недоступен.
+      description: 'По умолчанию: name, apr, symbol, address (vault), apy, status
+        (полнота APR). details=true возвращает TVL, адреса контрактов, награды и диагностику.
+        APR в процентах; APY пока недоступен.'
       parameters:
       - description: 'Поддерживаемая сеть: ethereum'
         in: path
         name: network
         required: true
         type: string
+      - default: false
+        description: Полный ответ с контрактами, TVL и диагностикой
+        in: query
+        name: details
+        type: boolean
       produces:
       - application/json
       responses:
         "200":
           description: OK
-          schema: {}
+          schema:
+            $ref: '#/definitions/dto.StakeDAOPoolsSummaryResponse'
         "400":
           description: Bad Request
           schema:
@@ -109,6 +239,51 @@ paths:
               type: string
             type: object
       summary: Получить пулы StakeDAO из блокчейна
+      tags:
+      - StakeDao
+  /reservesStakedao/{network}/diagnostics:
+    get:
+      description: Только два gauge через текущий Controller, без истории и Postgres.
+        Полный ответ с этапом, контрактом и методом ошибки основного CRV-потока. Не
+        более 5 RPC/с и 300 попыток на запрос.
+      parameters:
+      - description: 'Поддерживаемая сеть: ethereum'
+        in: path
+        name: network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.StakeDAOPoolsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "504":
+          description: Gateway Timeout
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Проверить награды crvUSD/USDC и FXS/ETH
       tags:
       - StakeDao
 swagger: "2.0"

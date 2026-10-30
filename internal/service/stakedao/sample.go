@@ -16,6 +16,15 @@ import (
 // MaxSamplePools bounds manual checks without scanning the full registry.
 const MaxSamplePools = 5
 
+// GetRewardDiagnostics checks the two known incomplete primary-reward cases.
+// It uses current Controller registrations and the bounded sample RPC path.
+func (s *StakeDAOService) GetRewardDiagnostics(ctx context.Context, network string) (*dto.StakeDAOPoolsResponse, error) {
+	return s.GetPoolsForGauges(ctx, network, []common.Address{
+		common.HexToAddress("0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1"), // crvUSD/USDC
+		common.HexToAddress("0x009acd89535dabc270c93f9b39d3232105fef453"), // FXS/ETH
+	}, 2)
+}
+
 type poolSample struct {
 	fromBlock, toBlock uint64
 	limit              int

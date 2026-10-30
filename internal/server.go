@@ -35,6 +35,7 @@ func (s *Server) routes(api *Handler) {
 	s.e.GET("/reservesCurve/:network", api.HandleGetCurveReserves)
 
 	s.e.GET("/reservesStakedao/:network", api.HandleGetStakeDaoReserves)
+	s.e.GET("/reservesStakedao/:network/diagnostics", api.HandleGetStakeDaoDiagnostics)
 }
 
 func (s *Server) Start() {

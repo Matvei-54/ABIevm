@@ -24,10 +24,23 @@
 Порядок действий: [локальный запуск](../../../LOCAL_RUN_RU.md#если-ide-не-находит-функции-после-обновления).
 
 `GET /reservesStakedao/ethereum` читает регистрации, метаданные и количество
-активов на одном блоке. Общий `prices.TokenPriceService` сначала проверяет
+активов на одном блоке. По умолчанию HTTP-ответ сокращён до
+`name/apr/symbol/address/apy/status` для каждого пула. `address` — vault,
+`status` — прежний `aprStatus`, не статус активности. Все детали, включая TVL,
+награды и ошибки, возвращаются с `?details=true`. Обёртка краткого ответа
+сохраняет сеть и номер блока. Сервис/ручная команда по-прежнему возвращают полные DTO.
+
+`GET /reservesStakedao/ethereum/diagnostics` читает только crvUSD/USDC и FXS/ETH
+через `GetRewardDiagnostics` и ограниченный sample-путь: без logs/БД,
+5 RPC/с, 300 попыток. Текущие vault/asset проверяются через Controller.
+Эти два пула не исключаются из общего списка. Описание запуска/скачивания:
+[LOCAL_RUN_RU.md](../../../LOCAL_RUN_RU.md#скачать-обновление-и-открыть-swagger).
+
+Общий `prices.TokenPriceService` сначала проверяет
 `MemoryStore`, затем получает отсутствующие цены через `ContractSource` на том же
-блоке: Chainlink USD feeds, ERC4626 conversion и оценка plain Curve StableSwap NG
-LP через состав/балансы и totalSupply. DeFiLlama в StakeDAO больше не используется.
+блоке: Chainlink USD feeds, ERC4626 conversion, оценка plain Curve StableSwap NG
+и неметапулов MetaRegistry через состав/балансы и totalSupply.
+DeFiLlama в StakeDAO больше не используется.
 `GetTokenPrice` читает только кэш, ключ — `(chainID, address)`, TTL — 15 минут с
 дополнительным ограничением срока годности оракула/компонентов (`ValidUntil`).
 Для будущего Redis достаточно реализовать `prices.Store`.
@@ -46,6 +59,18 @@ LP через состав/балансы и totalSupply. DeFiLlama в StakeDAO 
 цену/доходность нулём и не фильтрует сами пулы из ответа.
 
 ## Награды и APR
+
+`rewardMechanism: accountant` обозначает учёт наград через контракт Accountant
+StakeDAO V2. Наличие этого механизма не означает, что прочитаны все скорости
+наград. Полноту отдельно показывает `aprStatus` (в кратком ответе `status`).
+
+`curvePrimaryRate` фиксирует место проверки и возвращает структурированную
+ошибку: `code`, `stage`, `contract`, `method`, безопасное `message`.
+Различаются стратегия/Accountant/токены, физическое размещение и его сверка,
+targets, комиссии/политика harvest, getters Curve gauge и Convex Sidecar.
+Входящие RPC-тексты не копируются в JSON. Ошибки проверки не превращаются в
+нулевой primary rate; остальные известные rewards могут дать только `partial`.
+Конкретный getter или проверка видны в `errors` полного ответа и diagnostic route.
 
 `aprScope: rewards` означает оценку наград, без торговых комиссий/роста стоимости
 LP и без реинвестирования. `apy` остаётся `null`. APR — экстраполяция текущих

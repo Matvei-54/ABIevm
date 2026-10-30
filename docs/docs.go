@@ -113,7 +113,7 @@ const docTemplate = `{
         },
         "/reservesStakedao/{network}": {
             "get": {
-                "description": "Возвращает TVL и оценку APR наград для Curve V2; aprStatus показывает полноту. APY пока недоступен.",
+                "description": "По умолчанию: name, apr, symbol, address (vault), apy, status (полнота APR). details=true возвращает TVL, адреса контрактов, награды и диагностику. APR в процентах; APY пока недоступен.",
                 "consumes": [
                     "application/json"
                 ],
@@ -131,12 +131,21 @@ const docTemplate = `{
                         "name": "network",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Полный ответ с контрактами, TVL и диагностикой",
+                        "name": "details",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {}
+                        "schema": {
+                            "$ref": "#/definitions/dto.StakeDAOPoolsSummaryResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -174,6 +183,255 @@ const docTemplate = `{
                             }
                         }
                     }
+                }
+            }
+        },
+        "/reservesStakedao/{network}/diagnostics": {
+            "get": {
+                "description": "Только два gauge через текущий Controller, без истории и Postgres. Полный ответ с этапом, контрактом и методом ошибки основного CRV-потока. Не более 5 RPC/с и 300 попыток на запрос.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "StakeDao"
+                ],
+                "summary": "Проверить награды crvUSD/USDC и FXS/ETH",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Поддерживаемая сеть: ethereum",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.StakeDAOPoolsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dto.StakeDAOPool": {
+            "type": "object",
+            "properties": {
+                "accountantAddress": {
+                    "type": "string"
+                },
+                "apr": {
+                    "type": "number"
+                },
+                "aprScope": {
+                    "type": "string"
+                },
+                "aprStatus": {
+                    "type": "string"
+                },
+                "apy": {
+                    "type": "number"
+                },
+                "assetAddress": {
+                    "type": "string"
+                },
+                "assetAmount": {
+                    "description": "AssetAmount is an exact decimal quantity of the underlying token, not USD TVL.",
+                    "type": "string"
+                },
+                "assetDecimals": {
+                    "type": "integer"
+                },
+                "assetSymbol": {
+                    "type": "string"
+                },
+                "gaugeAddress": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "protocolId": {
+                    "type": "string"
+                },
+                "rewardMechanism": {
+                    "type": "string"
+                },
+                "rewardReceiver": {
+                    "type": "string"
+                },
+                "rewardToken": {
+                    "type": "string"
+                },
+                "rewards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOReward"
+                    }
+                },
+                "source": {
+                    "description": "ChainID     int64          ` + "`" + `json:\"chainId\"` + "`" + `",
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                },
+                "tvl": {
+                    "type": "number"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "vaultAddress": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOPoolError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "contract": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "gaugeAddress": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "stage": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOPoolSummary": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "apr": {
+                    "type": "number"
+                },
+                "apy": {
+                    "type": "number"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "symbol": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOPoolsResponse": {
+            "type": "object",
+            "properties": {
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOPoolError"
+                    }
+                },
+                "network": {
+                    "type": "string"
+                },
+                "pools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOPool"
+                    }
+                }
+            }
+        },
+        "dto.StakeDAOPoolsSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "network": {
+                    "type": "string"
+                },
+                "pools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOPoolSummary"
+                    }
+                }
+            }
+        },
+        "dto.StakeDAOReward": {
+            "type": "object",
+            "properties": {
+                "apr": {
+                    "type": "number"
+                },
+                "periodFinish": {
+                    "type": "integer"
+                },
+                "ratePerSecond": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
                 }
             }
         }

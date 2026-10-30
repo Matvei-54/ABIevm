@@ -7,10 +7,10 @@ import (
 )
 
 type StakeDAOPool struct {
-	GaugeAddress   common.Address `json:"gaugeAddress"`
-	VaultAddress   common.Address `json:"vaultAddress"`
-	AssetAddress   common.Address `json:"assetAddress"`
-	RewardReceiver common.Address `json:"rewardReceiver"`
+	GaugeAddress   common.Address `json:"gaugeAddress" swaggertype:"string"`
+	VaultAddress   common.Address `json:"vaultAddress" swaggertype:"string"`
+	AssetAddress   common.Address `json:"assetAddress" swaggertype:"string"`
+	RewardReceiver common.Address `json:"rewardReceiver" swaggertype:"string"`
 	ProtocolID     string         `json:"protocolId"`
 
 	Name        string `json:"name"`
@@ -26,8 +26,8 @@ type StakeDAOPool struct {
 	APY           *float64 `json:"apy"`
 
 	RewardMechanism   string           `json:"rewardMechanism"`
-	AccountantAddress *common.Address  `json:"accountantAddress"`
-	RewardToken       *common.Address  `json:"rewardToken"`
+	AccountantAddress *common.Address  `json:"accountantAddress" swaggertype:"string"`
+	RewardToken       *common.Address  `json:"rewardToken" swaggertype:"string"`
 	APRScope          string           `json:"aprScope"`
 	Rewards           []StakeDAOReward `json:"rewards"`
 	RewardsComplete   bool             `json:"-"`
@@ -37,7 +37,7 @@ type StakeDAOPool struct {
 }
 
 type StakeDAOReward struct {
-	Token         common.Address `json:"token"`
+	Token         common.Address `json:"token" swaggertype:"string"`
 	Source        string         `json:"source"`
 	RatePerSecond *string        `json:"ratePerSecond"`
 	PeriodFinish  *uint64        `json:"periodFinish"`
@@ -52,7 +52,39 @@ type StakeDAOPoolsResponse struct {
 }
 
 type StakeDAOPoolError struct {
-	GaugeAddress common.Address `json:"gaugeAddress"`
-	Field        string         `json:"field"`
-	Message      string         `json:"message"`
+	GaugeAddress common.Address  `json:"gaugeAddress" swaggertype:"string"`
+	Field        string          `json:"field"`
+	Message      string          `json:"message"`
+	Code         string          `json:"code,omitempty"`
+	Stage        string          `json:"stage,omitempty"`
+	Contract     *common.Address `json:"contract,omitempty" swaggertype:"string"`
+	Method       string          `json:"method,omitempty"`
+}
+
+// The public list keeps calculation internals in the optional detailed view.
+// Address is the StakeDAO vault; Status describes APR completeness, not activity.
+type StakeDAOPoolSummary struct {
+	Name    string         `json:"name"`
+	APR     *float64       `json:"apr"`
+	Symbol  string         `json:"symbol"`
+	Address common.Address `json:"address" swaggertype:"string"`
+	APY     *float64       `json:"apy"`
+	Status  string         `json:"status"`
+}
+
+type StakeDAOPoolsSummaryResponse struct {
+	Network     string                `json:"network"`
+	BlockNumber uint64                `json:"blockNumber"`
+	Pools       []StakeDAOPoolSummary `json:"pools"`
+}
+
+func (r *StakeDAOPoolsResponse) Summary() StakeDAOPoolsSummaryResponse {
+	result := StakeDAOPoolsSummaryResponse{Network: r.Network, BlockNumber: r.BlockNumber, Pools: make([]StakeDAOPoolSummary, 0, len(r.Pools))}
+	for _, pool := range r.Pools {
+		result.Pools = append(result.Pools, StakeDAOPoolSummary{
+			Name: pool.Name, APR: pool.APR, Symbol: pool.Symbol,
+			Address: pool.VaultAddress, APY: pool.APY, Status: pool.APRStatus,
+		})
+	}
+	return result
 }

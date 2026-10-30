@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -130,6 +131,7 @@ func TestStakeDAORoute(t *testing.T) {
 		}
 		return method.Outputs.Pack(value)
 	}
+	var historyReads atomic.Int64
 	rpcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			ID     json.RawMessage   `json:"id"`
@@ -150,6 +152,7 @@ func TestStakeDAORoute(t *testing.T) {
 		case "eth_getBlockByNumber":
 			result = &types.Header{Number: big.NewInt(10), Difficulty: big.NewInt(0), Extra: []byte{}}
 		case "eth_getCode":
+			historyReads.Add(1)
 			var number string
 			if err := json.Unmarshal(request.Params[1], &number); err != nil {
 				t.Error(err)
@@ -163,6 +166,7 @@ func TestStakeDAORoute(t *testing.T) {
 				result = "0x01"
 			}
 		case "eth_getLogs":
+			historyReads.Add(1)
 			result = []types.Log{entry}
 		case "eth_call":
 			var call struct {
@@ -207,7 +211,7 @@ func TestStakeDAORoute(t *testing.T) {
 	}
 	server := newStakeDAOTestServer(prices.NewTokenPriceService(store, nil))
 	response := httptest.NewRecorder()
-	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum", nil))
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum?details=true", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("HTTP %d: %s", response.Code, response.Body.String())
 	}
@@ -228,6 +232,41 @@ func TestStakeDAORoute(t *testing.T) {
 		t.Fatalf("unexpected body: %s", response.Body.String())
 	}
 	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum", nil))
+	var summary struct {
+		Pools []map[string]json.RawMessage `json:"pools"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &summary) != nil || len(summary.Pools) != 1 {
+		t.Fatalf("invalid compact response: %s", response.Body.String())
+	}
+	row := summary.Pools[0]
+	if len(row) != 6 || string(row["address"]) != `"`+strings.ToLower(vault.Hex())+`"` || string(row["status"]) != `"unavailable"` || string(row["apr"]) != "null" || string(row["apy"]) != "null" || string(row["symbol"]) != `"FIX"` {
+		t.Fatalf("compact schema lost vault identity or unknown APR: %s", response.Body.String())
+	}
+	before := historyReads.Load()
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics", nil))
+	var diagnostic struct {
+		Pools []struct {
+			Gauge common.Address `json:"gaugeAddress"`
+		} `json:"pools"`
+		Errors []struct {
+			Code     string         `json:"code"`
+			Stage    string         `json:"stage"`
+			Contract common.Address `json:"contract"`
+			Method   string         `json:"method"`
+		} `json:"errors"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &diagnostic) != nil || len(diagnostic.Pools) != 2 || historyReads.Load() != before {
+		t.Fatalf("diagnostic route must read only two current registrations without history: %s", response.Body.String())
+	}
+	if diagnostic.Pools[0].Gauge != common.HexToAddress("0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1") || diagnostic.Pools[1].Gauge != common.HexToAddress("0x009acd89535dabc270c93f9b39d3232105fef453") {
+		t.Fatalf("diagnostic route selected other gauges: %+v", diagnostic.Pools)
+	}
+	if len(diagnostic.Errors) != 2 || diagnostic.Errors[0].Code != "primary_reward_strategy" || diagnostic.Errors[0].Stage != "strategy" || diagnostic.Errors[0].Contract != vault || diagnostic.Errors[0].Method != "strategy" {
+		t.Fatalf("missing structured primary diagnostics: %s", response.Body.String())
+	}
+	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/base", nil))
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("unsupported network returned %d", response.Code)
@@ -241,17 +280,27 @@ func TestStakeDAORouteDoesNotExposeRPCSecrets(t *testing.T) {
 	defer rpcServer.Close()
 	t.Setenv("STAKEDAO_ETHEREUM_RPC_URL", rpcServer.URL+"/private-api-key")
 	server := newStakeDAOTestServer(prices.NewTokenPriceService(prices.NewMemoryStore(), nil))
-	response := httptest.NewRecorder()
-	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum", nil))
-	if response.Code != http.StatusBadGateway || strings.Contains(response.Body.String(), "private-api-key") {
-		t.Fatalf("unsafe error response: %d %s", response.Code, response.Body.String())
+	for _, path := range []string{"/reservesStakedao/ethereum", "/reservesStakedao/ethereum/diagnostics"} {
+		response := httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusBadGateway || strings.Contains(response.Body.String(), "private-api-key") {
+			t.Fatalf("unsafe error response: %d %s", response.Code, response.Body.String())
+		}
 	}
+	for _, path := range []string{"/reservesStakedao/base/diagnostics", "/reservesStakedao/ethereum?details=garbage"} {
+		response := httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid selection returned %d: %s", response.Code, response.Body.String())
+		}
+	}
+
 }
 
 func newStakeDAOTestServer(priceService prices.Provider) *Server {
 	server := &Server{e: echo.New()}
 	handler := NewHandler()
 	handler.stakeDao = stakedao.NewStakeDAOService(priceService)
-	server.e.GET("/reservesStakedao/:network", handler.HandleGetStakeDaoReserves)
+	server.routes(handler)
 	return server
 }

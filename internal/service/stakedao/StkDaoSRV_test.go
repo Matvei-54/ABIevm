@@ -672,6 +672,35 @@ func TestKilledGaugeHasKnownZeroPrimaryRate(t *testing.T) {
 	}
 }
 
+func TestPrimaryRewardDiagnosticsIdentifyTheFailedStep(t *testing.T) {
+	for _, tc := range []struct{ method, stage, contract string }{
+		{"inflation_rate", "gauge_inflation", "0xaa"},
+		{"working_supply", "gauge_working_supply", "0xaa"},
+		{"getAllocationTargets", "allocation_targets", "0x1235"},
+		{"getProtocolFeePercent", "protocol_fee", "0x77"},
+		{"getHarvestFeePercent", "harvest_fee", "0x77"},
+		{"POLICY", "harvest_policy", "0xbb"},
+		{"baseRewardPool", "sidecar_reward_pool", "0x1236"},
+		{"rewardRate", "convex_reward_rate", "0x1237"},
+	} {
+		t.Run(tc.stage, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.fullPrimary, f.sidecar, f.callFailure = true, true, tc.method
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil || len(result.Errors) != 1 {
+				t.Fatalf("failed diagnostic load: result=%+v err=%v", result, err)
+			}
+			issue := result.Errors[0]
+			if issue.Code != "primary_reward_"+tc.stage || issue.Stage != tc.stage || issue.Method != tc.method || issue.Contract == nil || *issue.Contract != common.HexToAddress(tc.contract) || issue.GaugeAddress != common.HexToAddress("0xaa") || issue.Field != "apr" {
+				t.Fatalf("wrong failure location: %+v", issue)
+			}
+			if result.Pools[0].APR != nil || result.Pools[0].APRStatus != "unavailable" || result.Pools[0].TVL == nil {
+				t.Fatal("diagnostics changed the reward calculation")
+			}
+		})
+	}
+}
+
 func TestPhysicalAllocationMismatchDoesNotOverstateAPR(t *testing.T) {
 	s, f := newPoolFixture(t)
 	f.fullPrimary = true
@@ -682,6 +711,9 @@ func TestPhysicalAllocationMismatchDoesNotOverstateAPR(t *testing.T) {
 	}
 	if result.Pools[0].APR != nil || result.Pools[0].APRStatus != "unavailable" || result.Pools[0].TVL == nil {
 		t.Fatalf("mismatched allocation accepted: %+v", result)
+	}
+	if len(result.Errors) != 1 || result.Errors[0].Stage != "allocation_match" || result.Errors[0].Method != "balanceOf" {
+		t.Fatalf("allocation mismatch reason was lost: %+v", result.Errors)
 	}
 }
 

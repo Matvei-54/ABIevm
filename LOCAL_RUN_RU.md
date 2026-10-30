@@ -4,6 +4,64 @@
 При первом запуске Go скачает зависимости. Реальный RPC URL храните в переменной
 окружения, не в исходниках. `.env` автоматически не читается.
 
+## Скачать обновление и открыть Swagger
+
+[Скачать ZIP всей ветки feat/stakedao-service](https://github.com/Matvei-54/ABIevm/archive/refs/heads/feat/stakedao-service.zip).
+Это архив проекта, а не страница отдельного commit. Ветка включает изменения
+`59259013653aed00fef1d53dec0fe5eee6cf41e1`: map → проверенные USD-oracles →
+Curve NG/MetaRegistry → ERC4626. Этот поиск используется для всех пулов.
+Распакуйте проект в новую папку и перенесите свои переменные окружения RPC/БД
+в конфигурацию запуска IDE; файлы из разных версий смешивать не требуется.
+
+После запуска сервера откройте `http://localhost:8081/swagger/index.html`.
+
+| Запрос | Результат |
+| --- | --- |
+| `GET /reservesStakedao/ethereum` | Все пулы, краткий ответ |
+| `GET /reservesStakedao/ethereum?details=true` | Все пулы, прежний полный ответ с TVL и диагностикой |
+| `GET /reservesStakedao/ethereum/diagnostics` | Только crvUSD/USDC и FXS/ETH, полный ответ с причинами неполного APR |
+
+В кратком ответе строка пула содержит только `name`, `apr`, `symbol`, `address`,
+`apy`, `status`. `address` — адрес StakeDAO vault, `symbol` — символ vault.
+`apr` измеряется в процентах, `apy` пока `null`. `status` отражает полноту APR:
+`available`, `partial`, `unavailable`; он не означает, что пул включён/выключен.
+`partial` — только известная часть наград: `apr: 0` при таком статусе не
+подтверждает нулевую полную доходность. Обёртка сохраняет `network/blockNumber`.
+Подробности по отдельным полям и ошибки остаются в полном ответе.
+
+Диагностический endpoint проверяет текущую регистрацию двух gauge в Controller:
+`0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1` и
+`0x009acd89535dabc270c93f9b39d3232105fef453`. Он не читает историю событий,
+не использует Postgres и ограничен 5 RPC/с, 300 попытками. Стоимость CU зависит
+от провайдера. Два пула также остаются в основном списке.
+
+Для сохранения подробной диагностики в PowerShell:
+
+```powershell
+Invoke-RestMethod "http://localhost:8081/reservesStakedao/ethereum/diagnostics" |
+  ConvertTo-Json -Depth 30 |
+  Set-Content -Encoding UTF8 stakedao-reward-diagnostics.json
+```
+
+В `errors` основного CRV-потока поля `code`, `stage`, `contract`, `method`
+показывают место отказа. Например, `stage: gauge_inflation` и
+`method: inflation_rate` означают, что текущий ABI не позволил прочитать скорость;
+`stage: allocation_match` — несовпадение активов vault и физического размещения
+Strategy. Это разные причины и требуют разных исправлений. Сообщения не содержат
+адрес RPC или его API key. Диагностика сама не меняет формулу расчёта наград.
+
+Реальная проверка этого endpoint через PublicNode: блок `26307164`, два пула,
+54 RPC-попытки за 10,71 секунды, без GetBlock CU. У crvUSD/USDC получен
+`primary_reward_sidecar_gauge` для `0xbdf7f41e0ffeaa220fa49c4e89490cc6b1d2a961.gauge`;
+у FXS/ETH — `primary_reward_allocation_match` для
+`0xce37598c3b26ecbdf13356f9e1fff2cd36ee602a.balanceOf`. Сохранённый ответ:
+[examples/stakedao-reward-diagnostics.json](examples/stakedao-reward-diagnostics.json).
+Это диагностика причин неполного APR, а не исправление этих двух механизмов.
+
+`rewardMechanism: accountant` в полном ответе — способ учёта наград через
+контракт StakeDAO Accountant. Это не цена, не APR и не признак полноты расчёта.
+В кратком ответе служебное поле отсутствует.
+
 ## Если IDE не находит функции после обновления
 
 `registryService.go` использует функции из других файлов того же Go-пакета:
