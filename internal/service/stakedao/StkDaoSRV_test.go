@@ -44,6 +44,7 @@ type fixtureRPC struct {
 	rewardToken          common.Address
 	fullPrimary          bool
 	sidecar              bool
+	sidecarIdentity      map[string]common.Address
 	policy               uint8
 	extraTokens          []common.Address
 	extraRate            *big.Int
@@ -109,11 +110,14 @@ func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, bloc
 }
 
 func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
-	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveControllerABI, convexPoolABI} {
+	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveControllerABI, convexPoolABI, convexBoosterABI} {
 		parsed, _ := abi.JSON(strings.NewReader(abiJSON))
 		method, err := parsed.MethodById(call.Data[:4])
 		if err != nil {
 			continue
+		}
+		if value, ok := f.sidecarIdentity[method.Name]; ok && *call.To == common.HexToAddress("0x1236") {
+			return method.Outputs.Pack(value)
 		}
 		if method.Name == f.callFailure {
 			return nil, errors.New("fixture call failed")
@@ -125,6 +129,22 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 				address = common.HexToAddress("0x1234")
 			}
 			return method.Outputs.Pack(address)
+		case "PROTOCOL_CONTROLLER":
+			return method.Outputs.Pack(f.controller)
+		case "BOOSTER":
+			return method.Outputs.Pack(common.HexToAddress(convexBoosterEthereum))
+		case "pid":
+			return method.Outputs.Pack(big.NewInt(1))
+		case "rewardReceiver":
+			return method.Outputs.Pack(common.HexToAddress("0x44"))
+		case "poolInfo":
+			values := []common.Address{common.HexToAddress("0xcc"), common.HexToAddress("0xaa"), common.HexToAddress("0x1237")}
+			for i, key := range []string{"poolAsset", "poolGauge", "poolRewards"} {
+				if value, ok := f.sidecarIdentity[key]; ok {
+					values[i] = value
+				}
+			}
+			return method.Outputs.Pack(values[0], common.HexToAddress("0x1238"), values[1], values[2], common.Address{}, false)
 		case "LOCKER":
 			return method.Outputs.Pack(common.HexToAddress("0x99"))
 		case "allocator":
@@ -194,6 +214,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 		case "REWARD_TOKEN":
 			return method.Outputs.Pack(f.rewardToken)
 		case "vault", "asset":
+			if len(method.Inputs) == 0 {
+				return method.Outputs.Pack(common.HexToAddress("0xcc"))
+			}
 			args, err := method.Inputs.Unpack(call.Data[4:])
 			if err != nil {
 				return nil, err
@@ -669,6 +692,44 @@ func TestKilledGaugeHasKnownZeroPrimaryRate(t *testing.T) {
 	pool := result.Pools[0]
 	if pool.APR == nil || *pool.APR != 0 || pool.APRStatus != "available" {
 		t.Fatalf("killed gauge: %+v %+v", pool, result.Errors)
+	}
+}
+
+func TestSidecarIdentityDoesNotRequireGaugeAndRejectsUnrelatedPools(t *testing.T) {
+	for _, tc := range []struct {
+		name, override, stage string
+		value                 common.Address
+	}{
+		{name: "common-getters-without-gauge"},
+		{name: "wrong-asset", override: "asset", stage: "sidecar_asset", value: common.HexToAddress("0xdead")},
+		{name: "wrong-receiver", override: "rewardReceiver", stage: "sidecar_reward_receiver", value: common.HexToAddress("0xdead")},
+		{name: "wrong-controller", override: "PROTOCOL_CONTROLLER", stage: "sidecar_controller", value: common.HexToAddress("0xdead")},
+		{name: "wrong-booster", override: "BOOSTER", stage: "sidecar_booster", value: common.HexToAddress("0xdead")},
+		{name: "zero-reward-pool", override: "baseRewardPool", stage: "sidecar_reward_pool"},
+		{name: "wrong-registered-asset", override: "poolAsset", stage: "sidecar_pool_identity", value: common.HexToAddress("0xdead")},
+		{name: "wrong-registered-gauge", override: "poolGauge", stage: "sidecar_pool_identity", value: common.HexToAddress("0xdead")},
+		{name: "wrong-registered-rewards", override: "poolRewards", stage: "sidecar_pool_identity", value: common.HexToAddress("0xdead")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.fullPrimary, f.sidecar = true, true
+			f.sidecarIdentity = map[string]common.Address{}
+			if tc.override != "" {
+				f.sidecarIdentity[tc.override] = tc.value
+			}
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pool := result.Pools[0]
+			if tc.override == "" {
+				if len(result.Errors) != 0 || pool.APRStatus != "available" || len(pool.Rewards) != 1 || pool.Rewards[0].RatePerSecond == nil || *pool.Rewards[0].RatePerSecond != "1.1688" {
+					t.Fatalf("Sidecar without gauge failed: %+v", result)
+				}
+			} else if len(result.Errors) != 1 || result.Errors[0].Stage != tc.stage || pool.APR != nil || pool.APRStatus != "unavailable" {
+				t.Fatalf("incorrect Sidecar identity accepted: %+v", result)
+			}
+		})
 	}
 }
 

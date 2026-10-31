@@ -30,6 +30,11 @@ const convexPoolABI = `[
 {"name":"rewardRate","type":"function","stateMutability":"view","inputs":[],"outputs":[{"type":"uint256"}]},
 {"name":"periodFinish","type":"function","stateMutability":"view","inputs":[],"outputs":[{"type":"uint256"}]}]`
 
+// Canonical Ethereum Convex registry. poolInfo links the Curve LP/gauge to its
+// Convex reward pool, without requiring a version-specific Sidecar.gauge().
+const convexBoosterEthereum = "0xF403C135812408BFbE8713b5A23a04b3D48AAE31"
+const convexBoosterABI = `[{"name":"poolInfo","type":"function","stateMutability":"view","inputs":[{"type":"uint256"}],"outputs":[{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"bool"}]}]`
+
 const PROTOCOL_CONTROLLER_ETH_ARB = "0x2d8BcE1FaE00a959354aCD9eBf9174337A64d4fb"
 
 // Controller ABI matches contracts/stakedao/CreateVault.json.

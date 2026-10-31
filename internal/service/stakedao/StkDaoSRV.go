@@ -902,7 +902,11 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			sidecarData := s.snapshotCalls(ctx, block,
 				readContract(target, sidecarV2ABI, "ACCOUNTANT"),
 				readContract(target, sidecarV2ABI, "REWARD_TOKEN"),
-				readContract(target, sidecarV2ABI, "gauge"),
+				readContract(target, sidecarV2ABI, "asset"),
+				readContract(target, sidecarV2ABI, "rewardReceiver"),
+				readContract(target, sidecarV2ABI, "PROTOCOL_CONTROLLER"),
+				readContract(target, sidecarV2ABI, "BOOSTER"),
+				readContract(target, sidecarV2ABI, "pid"),
 				readContract(target, sidecarV2ABI, "baseRewardPool"),
 			)
 			step("sidecar_accountant", target, "ACCOUNTANT", "Sidecar Accountant could not be read or differs from vault Accountant")
@@ -915,15 +919,45 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			if err != nil || token != *pool.RewardToken {
 				return decimal.Zero, errors.New("unsupported sidecar")
 			}
-			step("sidecar_gauge", target, "gauge", "Sidecar gauge could not be read or differs from requested gauge")
-			gauge, err := sidecarData[2].address()
-			if err != nil || gauge != info.Gauge {
-				return decimal.Zero, errors.New("sidecar gauge mismatch")
+			// Both deployed Sidecar versions expose these identity getters.
+			// One version has no gauge(); verify the gauge via canonical poolInfo.
+			step("sidecar_asset", target, "asset", "Sidecar asset could not be read or differs from the vault LP token")
+			asset, err := sidecarData[2].address()
+			if err != nil || asset != info.Asset {
+				return decimal.Zero, errors.New("sidecar asset mismatch")
 			}
-			step("sidecar_reward_pool", target, "baseRewardPool", "Sidecar Convex reward pool could not be read")
-			rewardPool, err := sidecarData[3].address()
+			step("sidecar_reward_receiver", target, "rewardReceiver", "Sidecar reward receiver differs from current Controller registration")
+			receiver, err := sidecarData[3].address()
+			if err != nil || receiver == (common.Address{}) || receiver != info.RewardReceiver {
+				return decimal.Zero, errors.New("sidecar reward receiver mismatch")
+			}
+			step("sidecar_controller", target, "PROTOCOL_CONTROLLER", "Sidecar ProtocolController differs from current Controller")
+			controller, err := sidecarData[4].address()
+			if err != nil || controller != s.controller {
+				return decimal.Zero, errors.New("sidecar Controller mismatch")
+			}
+			step("sidecar_booster", target, "BOOSTER", "Sidecar does not use the canonical Ethereum Convex Booster")
+			booster, err := sidecarData[5].address()
+			if err != nil || booster != common.HexToAddress(convexBoosterEthereum) {
+				return decimal.Zero, errors.New("unsupported Convex Booster")
+			}
+			step("sidecar_pid", target, "pid", "Sidecar Convex pool ID could not be read")
+			pid, err := sidecarData[6].unsigned()
 			if err != nil {
 				return decimal.Zero, err
+			}
+			step("sidecar_reward_pool", target, "baseRewardPool", "Sidecar Convex reward pool could not be read")
+			rewardPool, err := sidecarData[7].address()
+			if err != nil || rewardPool == (common.Address{}) {
+				return decimal.Zero, errors.New("invalid Convex reward pool")
+			}
+			step("sidecar_pool_identity", booster, "poolInfo", "Convex registry LP, gauge or reward pool differs from the requested pool")
+			identity, err := s.snapshotCall(ctx, block, booster, convexBoosterABI, "poolInfo", pid)
+			if err != nil {
+				return decimal.Zero, err
+			}
+			if len(identity) != 6 || identity[0].(common.Address) != info.Asset || identity[2].(common.Address) != info.Gauge || identity[3].(common.Address) != rewardPool {
+				return decimal.Zero, errors.New("Convex pool identity mismatch")
 			}
 			rewardData := s.snapshotCalls(ctx, block,
 				readContract(rewardPool, convexPoolABI, "rewardToken"),

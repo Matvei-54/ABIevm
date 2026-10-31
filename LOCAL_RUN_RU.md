@@ -50,13 +50,18 @@ Invoke-RestMethod "http://localhost:8081/reservesStakedao/ethereum/diagnostics" 
 Strategy. Это разные причины и требуют разных исправлений. Сообщения не содержат
 адрес RPC или его API key. Диагностика сама не меняет формулу расчёта наград.
 
-Реальная проверка этого endpoint через PublicNode: блок `26307164`, два пула,
-54 RPC-попытки за 10,71 секунды, без GetBlock CU. У crvUSD/USDC получен
-`primary_reward_sidecar_gauge` для `0xbdf7f41e0ffeaa220fa49c4e89490cc6b1d2a961.gauge`;
-у FXS/ETH — `primary_reward_allocation_match` для
-`0xce37598c3b26ecbdf13356f9e1fff2cd36ee602a.balanceOf`. Сохранённый ответ:
+После поддержки фактической версии Sidecar: реальная проверка через PublicNode
+на блоке `26311074`, два пула, 62 RPC-попытки за 12,423 секунды, без GetBlock CU.
+У crvUSD/USDC получен `aprStatus: available`, APR наград около `4.52%`.
+У FXS/ETH сохраняется `primary_reward_allocation_match` для
+`0xce37598c3b26ecbdf13356f9e1fff2cd36ee602a.balanceOf`: излишек `0.003 LP`
+подтверждён в Locker; историческая транзакция его появления ещё не установлена.
+Сохранённый ответ:
 [examples/stakedao-reward-diagnostics.json](examples/stakedao-reward-diagnostics.json).
-Это диагностика причин неполного APR, а не исправление этих двух механизмов.
+Общие методы двух Sidecar и Convex poolInfo заменяют зависимость от `gauge()`;
+проверки asset/receiver/Controller/Accountant/токенов и принадлежности Convex pool
+сохранены. Расчёт FXS/ETH пока остаётся `partial`, его `apr: 0` не является
+подтверждённой полной доходностью 0%.
 
 `rewardMechanism: accountant` в полном ответе — способ учёта наград через
 контракт StakeDAO Accountant. Это не цена, не APR и не признак полноты расчёта.

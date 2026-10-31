@@ -80,6 +80,33 @@ LP и без реинвестирования. `apy` остаётся `null`. AP
 Locker и allocation targets. Сверяются Accountant/токены/принадлежность Sidecar
 и соответствие физических активов Strategy количеству активов vault.
 
+Sidecar проверяется через общие для двух версий методы `asset/rewardReceiver`,
+`PROTOCOL_CONTROLLER`, `ACCOUNTANT`, `REWARD_TOKEN`, `BOOSTER/pid/baseRewardPool`.
+LP/gauge/rewardPool сверяются с `poolInfo(pid)` канонического Convex Booster.
+Отсутствующий у одной версии `gauge()` не вызывается. Подробности ABI —
+[abi/README.md](abi/README.md).
+
+После изменения реальный crvUSD/USDC на блоке `26311074` получил
+`aprStatus: available`, reward APR `4.522698542150237`. Диагностический HTTP-запрос
+двух пулов: 62 RPC-попытки, 12,423 секунды, PublicNode, без GetBlock CU.
+Ответ сохранён в `examples/stakedao-reward-diagnostics.json`.
+
+Для FXS/ETH на блоке `26311050` отдельно проверены текущие размещения:
+allocator `0xa56b653ce86d1b84b0ac67bd41f007898cfc14e4` возвращает единственный
+target — Locker `0x52f541764e6e90eebc5c21ff570de0e2d63766b6`.
+`gauge.balanceOf(locker)` и `Strategy.balanceOf(gauge)` равны
+`0.150548075075193763 LP`, `vault.totalAssets()` — `0.147548075075193763 LP`.
+Излишек `0.003 LP` находится в Locker, Sidecar у этого gauge отсутствует.
+
+Источник расхождения установленных величин: RewardVault.totalAssets возвращает
+учётный supply Accountant; Strategy.balanceOf суммирует физические LP по targets.
+CurveStrategy._checkpointRewards учитывает pending rewards Locker целиком,
+Accountant.checkpoint распределяет net rewards по учётному supply vault.
+Это разные величины, но конкретная транзакция появления излишка не установлена.
+PublicNode отклонил архивную историю Transfer с требованием personal token;
+исторические остатки/прямые депозиты остаются гипотезами, не выводом исследования.
+Проверка `allocation_match` и недоступность основного APR FXS/ETH пока сохранены.
+
 Основная скорость CRV:
 
 - Locker: `inflation_rate × gauge_relative_weight × working_balance / working_supply`.

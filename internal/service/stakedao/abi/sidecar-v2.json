@@ -1,11 +1,63 @@
 [
   {
     "inputs": [],
+    "name": "ACCOUNTANT",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "BOOSTER",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PROTOCOL_CONTROLLER",
+    "outputs": [
+      {
+        "internalType": "contract IProtocolController",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "REWARD_TOKEN",
     "outputs": [
       {
         "internalType": "contract IERC20",
         "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "asset",
+    "outputs": [
+      {
+        "internalType": "contract IERC20",
+        "name": "_asset",
         "type": "address"
       }
     ],
@@ -40,12 +92,12 @@
   },
   {
     "inputs": [],
-    "name": "gauge",
+    "name": "pid",
     "outputs": [
       {
-        "internalType": "address",
-        "name": "_gauge",
-        "type": "address"
+        "internalType": "uint256",
+        "name": "_pid",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -53,11 +105,11 @@
   },
   {
     "inputs": [],
-    "name": "ACCOUNTANT",
+    "name": "rewardReceiver",
     "outputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "_rewardReceiver",
         "type": "address"
       }
     ],
