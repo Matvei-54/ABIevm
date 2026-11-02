@@ -253,11 +253,32 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "dto.StakeDAOAllocation": {
+            "type": "object",
+            "properties": {
+                "accountedAssets": {
+                    "type": "string"
+                },
+                "physicalAssets": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "covered, surplus, deficit, unverified",
+                    "type": "string"
+                },
+                "surplusAssets": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.StakeDAOPool": {
             "type": "object",
             "properties": {
                 "accountantAddress": {
                     "type": "string"
+                },
+                "allocation": {
+                    "$ref": "#/definitions/dto.StakeDAOAllocation"
                 },
                 "apr": {
                     "type": "number"

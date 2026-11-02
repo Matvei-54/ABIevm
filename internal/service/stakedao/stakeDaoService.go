@@ -33,6 +33,13 @@ const convexPoolABI = `[
 // Canonical Ethereum Convex registry. poolInfo links the Curve LP/gauge to its
 // Convex reward pool, without requiring a version-specific Sidecar.gauge().
 const convexBoosterEthereum = "0xF403C135812408BFbE8713b5A23a04b3D48AAE31"
+
+// Verified non-proxy implementations whose reward flow includes the complete
+// Locker/Sidecar emissions and distributes them over the vault's accounted supply.
+// Surplus support must be reviewed again for a different strategy/accountant.
+const curveSurplusStrategyEthereum = "0xcE37598c3b26eCbdF13356f9E1FFf2Cd36EE602a"
+const curveSurplusAccountantEthereum = "0x93b4B9bd266fFA8AF68e39EDFa8cFe2A62011Ce0"
+
 const convexBoosterABI = `[{"name":"poolInfo","type":"function","stateMutability":"view","inputs":[{"type":"uint256"}],"outputs":[{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"bool"}]}]`
 
 const PROTOCOL_CONTROLLER_ETH_ARB = "0x2d8BcE1FaE00a959354aCD9eBf9174337A64d4fb"

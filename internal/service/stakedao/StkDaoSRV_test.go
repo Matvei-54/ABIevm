@@ -51,6 +51,11 @@ type fixtureRPC struct {
 	extraFinish          uint32
 	killed               bool
 	physical             *big.Int
+	accountantSupply     *big.Int
+	accountantSupplyFail bool
+	accountantSupplyBad  bool
+	assetDecimals        *uint8
+	strategyAddress      common.Address
 	totalAssets          *big.Int
 	shutdown             map[common.Address]bool
 }
@@ -127,6 +132,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			address := common.Address{}
 			if f.fullPrimary {
 				address = common.HexToAddress("0x1234")
+				if f.strategyAddress != (common.Address{}) {
+					address = f.strategyAddress
+				}
 			}
 			return method.Outputs.Pack(address)
 		case "PROTOCOL_CONTROLLER":
@@ -186,7 +194,11 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 		case "rewardToken":
 			return method.Outputs.Pack(f.rewardToken)
 		case "balanceOf":
-			if *call.To == common.HexToAddress("0x1234") {
+			strategy := common.HexToAddress("0x1234")
+			if f.strategyAddress != (common.Address{}) {
+				strategy = f.strategyAddress
+			}
+			if *call.To == strategy {
 				if f.physical != nil {
 					return method.Outputs.Pack(f.physical)
 				}
@@ -194,6 +206,21 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			}
 			return method.Outputs.Pack(big.NewInt(500000))
 		case "totalSupply":
+			if len(method.Inputs) == 1 {
+				if f.accountantSupplyFail {
+					return nil, errors.New("accounting RPC failed: https://rpc.invalid/private-key")
+				}
+				if f.accountantSupplyBad {
+					return []byte{1}, nil
+				}
+				if f.accountantSupply != nil {
+					return method.Outputs.Pack(f.accountantSupply)
+				}
+				if f.totalAssets != nil {
+					return method.Outputs.Pack(f.totalAssets)
+				}
+				return method.Outputs.Pack(big.NewInt(1234567))
+			}
 			return method.Outputs.Pack(big.NewInt(1000000))
 		case "rewardRate":
 			return method.Outputs.Pack(big.NewInt(2000000000000000000))
@@ -234,6 +261,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 		case "decimals":
 			if f.fullPrimary && *call.To == f.rewardToken {
 				return method.Outputs.Pack(uint8(18))
+			}
+			if f.assetDecimals != nil {
+				return method.Outputs.Pack(*f.assetDecimals)
 			}
 			return method.Outputs.Pack(uint8(6))
 		case "totalAssets":
@@ -762,7 +792,119 @@ func TestPrimaryRewardDiagnosticsIdentifyTheFailedStep(t *testing.T) {
 	}
 }
 
-func TestPhysicalAllocationMismatchDoesNotOverstateAPR(t *testing.T) {
+func TestAllocationCoverageKeepsAccountedTVLAndActualNetRewardRate(t *testing.T) {
+	for _, tc := range []struct {
+		name, booked, physical, surplus, status string
+		decimals                                uint8
+	}{
+		{"equal", "1.234567", "1.234567", "0.000000", "covered", 6},
+		{"six-decimal-surplus", "1.234567", "1.237567", "0.003000", "surplus", 6},
+		{"fxs-eth-surplus", "0.147548075075193763", "0.150548075075193763", "0.003000000000000000", "surplus", 18},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.fullPrimary = true
+			f.strategyAddress = common.HexToAddress(curveSurplusStrategyEthereum)
+			f.accountant = common.HexToAddress(curveSurplusAccountantEthereum)
+			f.controllerAccountant = f.accountant
+			f.assetDecimals = &tc.decimals
+			f.totalAssets = decimal.RequireFromString(tc.booked).Shift(int32(tc.decimals)).BigInt()
+			f.physical = decimal.RequireFromString(tc.physical).Shift(int32(tc.decimals)).BigInt()
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pool := result.Pools[0]
+			if len(result.Errors) != 0 || pool.Allocation == nil || pool.Allocation.Status != tc.status || pool.Allocation.AccountedAssets != tc.booked || pool.Allocation.PhysicalAssets != tc.physical || pool.Allocation.SurplusAssets != tc.surplus || pool.APRStatus != "available" || pool.APR == nil {
+				t.Fatalf("wrong coverage or APR: pool=%+v errors=%+v", pool, result.Errors)
+			}
+			if pool.Rewards[0].RatePerSecond == nil || *pool.Rewards[0].RatePerSecond != "0.1698" {
+				t.Fatalf("actual emissions were reduced by the accounted/physical ratio: %+v", pool.Rewards)
+			}
+			wantTVL := decimal.RequireFromString(tc.booked).Mul(decimal.NewFromInt(2))
+			if pool.TVL == nil || !decimal.NewFromFloat(*pool.TVL).Sub(wantTVL).Abs().LessThan(decimal.RequireFromString("0.000000000000001")) {
+				t.Fatal("physical surplus was added to vault TVL", pool.TVL)
+			}
+			wantAPR, _ := decimal.RequireFromString("0.1698").Mul(decimal.NewFromInt(3*31536000*100)).DivRound(wantTVL, 36).Float64()
+			if math.Abs(*pool.APR-wantAPR)/wantAPR > 1e-12 {
+				t.Fatalf("APR used a physical denominator: got %g want %g", *pool.APR, wantAPR)
+			}
+			for _, block := range f.callBlocks {
+				if block != f.latest {
+					t.Fatal("accounting and emissions used different snapshots")
+				}
+			}
+		})
+	}
+}
+
+func TestCoverageRejectsDeficitAndUnverifiedAccounting(t *testing.T) {
+	for _, tc := range []struct{ name, stage string }{
+		{"deficit", "allocation_coverage"},
+		{"accounting-mismatch", "accounting_match"},
+		{"supply-unavailable", "accountant_supply"},
+		{"supply-malformed", "accountant_supply"},
+		{"unknown-strategy", "allocation_model"},
+		{"unknown-accountant", "allocation_model"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.fullPrimary = true
+			f.strategyAddress = common.HexToAddress(curveSurplusStrategyEthereum)
+			f.accountant = common.HexToAddress(curveSurplusAccountantEthereum)
+			f.controllerAccountant = f.accountant
+			f.physical = big.NewInt(1237567)
+			switch tc.name {
+			case "deficit":
+				f.physical = big.NewInt(1234566)
+			case "accounting-mismatch":
+				f.accountantSupply = big.NewInt(1234568)
+			case "supply-unavailable":
+				f.accountantSupplyFail = true
+			case "supply-malformed":
+				f.accountantSupplyBad = true
+			case "unknown-strategy":
+				f.strategyAddress = common.HexToAddress("0x1234")
+			case "unknown-accountant":
+				f.accountant, f.controllerAccountant = common.HexToAddress("0x77"), common.HexToAddress("0x77")
+			}
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pool := result.Pools[0]
+			if len(result.Errors) != 1 || result.Errors[0].Stage != tc.stage || pool.TVL == nil || pool.APR != nil || pool.APRStatus != "unavailable" || len(pool.Rewards) != 0 {
+				t.Fatalf("unverified/deficient assets got primary APR: pool=%+v errors=%+v", pool, result.Errors)
+			}
+			if tc.name == "deficit" && (pool.Allocation == nil || pool.Allocation.Status != "deficit" || pool.Allocation.SurplusAssets != "0.000000") {
+				t.Fatal("deficit was misrepresented as surplus")
+			}
+			if strings.HasPrefix(tc.name, "unknown-") && (pool.Allocation == nil || pool.Allocation.Status != "unverified") {
+				t.Fatal("unknown reward model was called verified")
+			}
+			raw, _ := json.Marshal(result)
+			if strings.Contains(string(raw), "private-key") {
+				t.Fatal("upstream error exposed in diagnostics")
+			}
+		})
+	}
+}
+
+func TestCoveredEmptyVaultKeepsZeroTVLAndUnavailableAPR(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.killed = true, true
+	f.totalAssets, f.physical = new(big.Int), new(big.Int)
+	result, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := result.Pools[0]
+	if pool.Allocation == nil || pool.Allocation.Status != "covered" || pool.TVL == nil || *pool.TVL != 0 || pool.APR != nil || pool.APRStatus != "unavailable" {
+		t.Fatalf("empty vault became a positive APR: %+v", pool)
+	}
+}
+
+func TestUnknownSurplusModelDoesNotOverstateAPR(t *testing.T) {
 	s, f := newPoolFixture(t)
 	f.fullPrimary = true
 	f.physical = big.NewInt(9999999)
@@ -773,7 +915,7 @@ func TestPhysicalAllocationMismatchDoesNotOverstateAPR(t *testing.T) {
 	if result.Pools[0].APR != nil || result.Pools[0].APRStatus != "unavailable" || result.Pools[0].TVL == nil {
 		t.Fatalf("mismatched allocation accepted: %+v", result)
 	}
-	if len(result.Errors) != 1 || result.Errors[0].Stage != "allocation_match" || result.Errors[0].Method != "balanceOf" {
+	if len(result.Errors) != 1 || result.Errors[0].Stage != "allocation_model" || result.Errors[0].Contract == nil {
 		t.Fatalf("allocation mismatch reason was lost: %+v", result.Errors)
 	}
 }

@@ -784,6 +784,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 		readContract(*pool.AccountantAddress, accountantV2ABI, "getHarvestFeePercent"),
 		readContract(info.Vault, vaultV2ABI, "POLICY"),
 		readContract(*pool.RewardToken, erc20DecimalsABI, "decimals"),
+		readContract(*pool.AccountantAddress, accountantV2ABI, "totalSupply", info.Vault),
 	)
 	step("strategy_accountant", strategy, "ACCOUNTANT", "Strategy Accountant could not be read or differs from the vault Accountant")
 	strategyAccountant, err := data[0].address()
@@ -795,10 +796,45 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 	if err != nil || pool.AssetAmount == nil || pool.AssetDecimals == nil {
 		return decimal.Zero, errors.New("physical allocation unavailable")
 	}
-	step("allocation_match", strategy, "balanceOf", "Vault assets differ from Strategy physical allocation")
+	step("accounting_match", info.Vault, "totalAssets", "Vault assets are invalid or differ from Accountant supply")
 	assets, err := decimal.NewFromString(*pool.AssetAmount)
-	if err != nil || assets.Shift(int32(*pool.AssetDecimals)).BigInt().Cmp(physical) != 0 {
-		return decimal.Zero, errors.New("vault supply differs from physical allocation")
+	if err != nil || assets.IsNegative() {
+		return decimal.Zero, errors.New("invalid vault assets")
+	}
+	units := assets.Shift(int32(*pool.AssetDecimals))
+	accounted := units.BigInt()
+	if !units.Equal(decimal.NewFromBigInt(accounted, 0)) {
+		return decimal.Zero, errors.New("vault assets are not an integral LP quantity")
+	}
+	step("accountant_supply", *pool.AccountantAddress, "totalSupply", "Accountant vault supply could not be read or decoded")
+	supply, err := data[9].unsigned()
+	if err != nil {
+		return decimal.Zero, err
+	}
+	step("accounting_match", *pool.AccountantAddress, "totalSupply", "Vault assets differ from Accountant vault supply")
+	if supply.Cmp(accounted) != 0 {
+		return decimal.Zero, errors.New("vault assets differ from Accountant supply")
+	}
+	physicalAmount := decimal.NewFromBigInt(physical, -int32(*pool.AssetDecimals))
+	surplus := decimal.Max(physicalAmount.Sub(assets), decimal.Zero)
+	pool.Allocation = &dto.StakeDAOAllocation{
+		AccountedAssets: assets.StringFixed(int32(*pool.AssetDecimals)),
+		PhysicalAssets:  physicalAmount.StringFixed(int32(*pool.AssetDecimals)),
+		SurplusAssets:   surplus.StringFixed(int32(*pool.AssetDecimals)),
+		Status:          "covered",
+	}
+	step("allocation_coverage", strategy, "balanceOf", "Strategy physical LP balance does not cover accounted vault assets")
+	if physical.Cmp(accounted) < 0 {
+		pool.Allocation.Status = "deficit"
+		return decimal.Zero, errors.New("physical LP deficit")
+	}
+	if physical.Cmp(accounted) > 0 {
+		step("allocation_model", strategy, "", "Surplus reward distribution is unverified for this Strategy/Accountant")
+		pool.Allocation.Status = "unverified"
+		if strategy != common.HexToAddress(curveSurplusStrategyEthereum) || *pool.AccountantAddress != common.HexToAddress(curveSurplusAccountantEthereum) {
+			return decimal.Zero, errors.New("unsupported surplus reward model")
+		}
+		pool.Allocation.Status = "surplus"
 	}
 	step("strategy_reward_token", strategy, "REWARD_TOKEN", "Strategy reward token could not be read or differs from Accountant reward token")
 	strategyToken, err := data[2].address()

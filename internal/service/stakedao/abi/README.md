@@ -36,6 +36,17 @@ JSON содержат только необходимые view-методы из
 `Accountant.checkpoint`: масштаб extra rates равен `1e18`, протокольные fees
 относятся к Locker, harvest fees в CHECKPOINT — ко всему primary amount.
 
+`Accountant.totalSupply(address vault) returns (uint128)` добавлен из того же
+верифицированного ABI. Он сверяет учёт vault с `totalAssets()` в минимальных
+единицах LP. Это другой selector, чем ERC20/Convex `totalSupply()`.
+Физический `Strategy.balanceOf(gauge)` может содержать стейк, существовавший
+до создания vault. Разрешение излишка ограничено проверенной парой CurveStrategy
+`0xce37598c3b26ecbdf13356f9e1fff2cd36ee602a` / Accountant
+`0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0`. В её исходниках
+`CurveStrategy._checkpointRewards` учитывает награды всех targets, а
+`Accountant.checkpoint/harvest` распределяет net rewards по учётному supply.
+Излишек не уменьшает rate пропорционально и не увеличивает учётный TVL.
+
 Адреса в таблице служат источниками интерфейсов, не списком пулов.
 Приложение получает адреса через события/актуальное состояние Controller.
 В случае несовместимого интерфейса возвращается partial/unavailable APR;

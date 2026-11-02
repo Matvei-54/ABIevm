@@ -46,21 +46,30 @@ Invoke-RestMethod "http://localhost:8081/reservesStakedao/ethereum/diagnostics" 
 В `errors` основного CRV-потока поля `code`, `stage`, `contract`, `method`
 показывают место отказа. Например, `stage: gauge_inflation` и
 `method: inflation_rate` означают, что текущий ABI не позволил прочитать скорость;
-`stage: allocation_match` — несовпадение активов vault и физического размещения
-Strategy. Это разные причины и требуют разных исправлений. Сообщения не содержат
+`stage: allocation_coverage` — физические LP не покрывают учётные активы vault;
+`accounting_match` — учёт vault отличается от supply Accountant;
+`allocation_model` — распределение излишка не проверено для этой пары контрактов.
+Это разные причины и требуют разных исправлений. Сообщения не содержат
 адрес RPC или его API key. Диагностика сама не меняет формулу расчёта наград.
 
-После поддержки фактической версии Sidecar: реальная проверка через PublicNode
-на блоке `26311074`, два пула, 62 RPC-попытки за 12,423 секунды, без GetBlock CU.
-У crvUSD/USDC получен `aprStatus: available`, APR наград около `4.52%`.
-У FXS/ETH сохраняется `primary_reward_allocation_match` для
-`0xce37598c3b26ecbdf13356f9e1fff2cd36ee602a.balanceOf`: излишек `0.003 LP`
-подтверждён в Locker; историческая транзакция его появления ещё не установлена.
-Сохранённый ответ:
+В полном ответе появился объект `allocation`: `accountedAssets`,
+`physicalAssets`, `surplusAssets` — количества LP; `status` —
+`covered`, `surplus`, `deficit` или `unverified`. Краткий ответ остаётся прежним.
+`vault.totalAssets()` сверяется с `Accountant.totalSupply(vault)` на одном блоке.
+Излишек разрешается для проверенной пары CurveStrategy/Accountant и не меняет
+TVL вкладчиков; дефицит или ошибка учёта оставляют основной APR недоступным.
+
+Сохранённый пример реального диагностического ответа:
 [examples/stakedao-reward-diagnostics.json](examples/stakedao-reward-diagnostics.json).
+На блоке `26328495` запрос двух пулов завершился за 12,949 секунды и 65
+RPC-попыток через PublicNode, без GetBlock CU и без ошибок полей:
+crvUSD/USDC — APR наград около `4.33%`, `available`, покрытие `covered`;
+FXS/ETH — `0%`, `available`, покрытие `surplus` с излишком `0.003 LP`.
+У FXS/ETH отдельно подтверждён `gauge_relative_weight=0` на том же блоке:
+нулевой APR теперь является результатом чтения данных, а не отсутствия расчёта.
 Общие методы двух Sidecar и Convex poolInfo заменяют зависимость от `gauge()`;
 проверки asset/receiver/Controller/Accountant/токенов и принадлежности Convex pool
-сохранены. Расчёт FXS/ETH пока остаётся `partial`, его `apr: 0` не является
+сохранены. У любой строки с `status: partial` значение `apr: 0` не является
 подтверждённой полной доходностью 0%.
 
 `rewardMechanism: accountant` в полном ответе — способ учёта наград через

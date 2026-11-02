@@ -18,12 +18,13 @@ type StakeDAOPool struct {
 	AssetSymbol string `json:"assetSymbol"`
 
 	// AssetAmount is an exact decimal quantity of the underlying token, not USD TVL.
-	AssetAmount   *string  `json:"assetAmount"`
-	AssetDecimals *uint8   `json:"assetDecimals"`
-	TVL           *float64 `json:"tvl"`
-	APR           *float64 `json:"apr"`
-	APRStatus     string   `json:"aprStatus"`
-	APY           *float64 `json:"apy"`
+	AssetAmount   *string             `json:"assetAmount"`
+	AssetDecimals *uint8              `json:"assetDecimals"`
+	TVL           *float64            `json:"tvl"`
+	APR           *float64            `json:"apr"`
+	APRStatus     string              `json:"aprStatus"`
+	APY           *float64            `json:"apy"`
+	Allocation    *StakeDAOAllocation `json:"allocation,omitempty"`
 
 	RewardMechanism   string           `json:"rewardMechanism"`
 	AccountantAddress *common.Address  `json:"accountantAddress" swaggertype:"string"`
@@ -34,6 +35,14 @@ type StakeDAOPool struct {
 	//	ChainID     int64          `json:"chainId"`
 	Source    string    `json:"source"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Quantities are exact LP amounts, not USD. Surplus does not increase vault TVL.
+type StakeDAOAllocation struct {
+	AccountedAssets string `json:"accountedAssets"`
+	PhysicalAssets  string `json:"physicalAssets"`
+	SurplusAssets   string `json:"surplusAssets"`
+	Status          string `json:"status"` // covered, surplus, deficit, unverified
 }
 
 type StakeDAOReward struct {

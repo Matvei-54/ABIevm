@@ -78,18 +78,52 @@ LP и без реинвестирования. `apy` остаётся `null`. AP
 
 Для Ethereum Curve V2 читаются актуальные Accountant, основной токен, Strategy,
 Locker и allocation targets. Сверяются Accountant/токены/принадлежность Sidecar
-и соответствие физических активов Strategy количеству активов vault.
+и покрытие учётных активов vault физическими LP Strategy.
+
+`vault.totalAssets()` сверяется с `Accountant.totalSupply(vault)` на том же
+snapshot-блоке. Сравнение выполняется точно в целых минимальных единицах LP,
+до вычислений USD/float64. Ошибка чтения или несовпадение учёта оставляет
+основной APR недоступным (`accountant_supply` / `accounting_match`).
+
+- Физический баланс равен учётному: прежняя модель расчёта, `allocation.status=covered`.
+- Физический баланс меньше учётного: основной APR недоступен,
+  `allocation.status=deficit`, диагностика `allocation_coverage`.
+- Излишек разрешён для проверенной Ethereum-пары CurveStrategy
+  `0xce37598c3b26ecbdf13356f9e1fff2cd36ee602a` и Accountant
+  `0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0`, `allocation.status=surplus`.
+  Для другой пары излишек даёт `allocation.status=unverified` и
+  `allocation_model`: семантика распределения наград должна быть проверена заново.
+
+`allocation` появляется только в полном DTO (`?details=true`, diagnostic route
+и ручная команда). `accountedAssets`, `physicalAssets`, `surplusAssets` — точные
+десятичные количества LP, а не USD. Излишек не добавляется в TVL вкладчиков:
+знаменатель APR остаётся `accountedAssets × LP USD price`. Поток наград
+считается по фактическим Locker/Sidecar balances/boost и после комиссий
+Accountant. Пропорция `accounted/physical` не применяется дополнительно.
+Остальные проверки наград/цен сохраняются; статус покрытия сам по себе не
+обещает полного APR. Пустой vault имеет TVL 0 и APR null даже при покрытии.
+
+Реальная проверка диагностического endpoint после перехода на покрытие:
+блок `26328495`, два пула, 65 RPC-попыток за 12,949 секунды через PublicNode,
+без пользовательских GetBlock CU. У обоих `aprStatus: available`, ошибок
+полей нет. crvUSD/USDC: APR наград `4.329176147065612%`, покрытие `covered`.
+FXS/ETH: APR наград `0%`, покрытие `surplus`, излишек
+`0.003000000000000000 LP`. Ответ сохранён в
+`examples/stakedao-reward-diagnostics.json`.
+
+Нулевой APR FXS/ETH дополнительно проверен прямыми чтениями на том же блоке:
+`is_killed=false`, `inflation_rate=3080982847903985532`,
+`working_balances(locker)=150548075075193763`,
+`working_supply=29694623339803328108`, `gauge_relative_weight=0`.
+Основной rate равен нулю из-за веса gauge, дополнительные rewards не активны.
+Это доступная нулевая текущая оценка наград, не подстановка вместо ошибки;
+торговые комиссии и будущие изменения голосования в неё не входят.
 
 Sidecar проверяется через общие для двух версий методы `asset/rewardReceiver`,
 `PROTOCOL_CONTROLLER`, `ACCOUNTANT`, `REWARD_TOKEN`, `BOOSTER/pid/baseRewardPool`.
 LP/gauge/rewardPool сверяются с `poolInfo(pid)` канонического Convex Booster.
 Отсутствующий у одной версии `gauge()` не вызывается. Подробности ABI —
 [abi/README.md](abi/README.md).
-
-После изменения реальный crvUSD/USDC на блоке `26311074` получил
-`aprStatus: available`, reward APR `4.522698542150237`. Диагностический HTTP-запрос
-двух пулов: 62 RPC-попытки, 12,423 секунды, PublicNode, без GetBlock CU.
-Ответ сохранён в `examples/stakedao-reward-diagnostics.json`.
 
 Для FXS/ETH на блоке `26311050` отдельно проверены текущие размещения:
 allocator `0xa56b653ce86d1b84b0ac67bd41f007898cfc14e4` возвращает единственный
@@ -102,10 +136,16 @@ target — Locker `0x52f541764e6e90eebc5c21ff570de0e2d63766b6`.
 учётный supply Accountant; Strategy.balanceOf суммирует физические LP по targets.
 CurveStrategy._checkpointRewards учитывает pending rewards Locker целиком,
 Accountant.checkpoint распределяет net rewards по учётному supply vault.
-Это разные величины, но конкретная транзакция появления излишка не установлена.
-PublicNode отклонил архивную историю Transfer с требованием personal token;
-исторические остатки/прямые депозиты остаются гипотезами, не выводом исследования.
-Проверка `allocation_match` и недоступность основного APR FXS/ETH пока сохранены.
+Это разные величины. Дополнительное подтверждение — транзакция
+[`0xd7e29f…fee8`](https://etherscan.io/tx/0xd7e29f80e6e0d0fe667e5ab2f216a7af03f0c4e6969fef979ed38fe2cb93fee8#eventlog),
+блок `26097288`: логи 257/260 создают vault, 272 подтверждает депозит
+`0.147548075075193763 LP`, 270 показывает физический итог
+`0.150548075075193763 LP`, 278/279 учитывают/выпускают только новую сумму.
+Излишек `0.003 LP` существовал до создания vault. Логи 284/290 показывают
+распределение harvest по учётному supply нового vault; исторический harvest
+не используется как текущая скорость APR. Конкретный первоначальный депозит
+этих `0.003 LP` не установлен, но его поиск не требуется для текущей модели
+покрытия и распределения наград проверенной пары контрактов.
 
 Основная скорость CRV:
 
