@@ -61,16 +61,24 @@ TVL вкладчиков; дефицит или ошибка учёта оста
 
 Сохранённый пример реального диагностического ответа:
 [examples/stakedao-reward-diagnostics.json](examples/stakedao-reward-diagnostics.json).
-На блоке `26328495` запрос двух пулов завершился за 12,949 секунды и 65
+На блоке `26334719` запрос двух пулов завершился за 12.929 секунды и 65
 RPC-попыток через PublicNode, без GetBlock CU и без ошибок полей:
-crvUSD/USDC — APR наград около `4.33%`, `available`, покрытие `covered`;
+crvUSD/USDC — APR наград около `4.23%`, `available`, покрытие `covered`;
 FXS/ETH — `0%`, `available`, покрытие `surplus` с излишком `0.003 LP`.
-У FXS/ETH отдельно подтверждён `gauge_relative_weight=0` на том же блоке:
+У FXS/ETH ранее отдельно подтверждён `gauge_relative_weight=0` на блоке `26328495`:
 нулевой APR теперь является результатом чтения данных, а не отсутствия расчёта.
 Общие методы двух Sidecar и Convex poolInfo заменяют зависимость от `gauge()`;
 проверки asset/receiver/Controller/Accountant/токенов и принадлежности Convex pool
 сохранены. У любой строки с `status: partial` значение `apr: 0` не является
 подтверждённой полной доходностью 0%.
+
+В подробных `rewards` у `vault-extra` добавлен `distributionStatus`:
+`active`, `not_started`, `expired`, `zero_rate`, `unavailable`.
+`not_started` означает `periodFinish=0` и нулевой rate: распределение vault ещё
+не запускалось. Даже при наличии накопленного CVX на Sidecar это не текущий
+поток выплат vault. Краткий endpoint по-прежнему возвращает шесть полей.
+Аудит CVX и сравнение с опубликованным API StakeDAO:
+[internal/service/stakedao/CVX_REWARD_AUDIT_RU.md](internal/service/stakedao/CVX_REWARD_AUDIT_RU.md).
 
 `rewardMechanism: accountant` в полном ответе — способ учёта наград через
 контракт StakeDAO Accountant. Это не цена, не APR и не признак полноты расчёта.

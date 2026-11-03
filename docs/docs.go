@@ -442,6 +442,10 @@ const docTemplate = `{
                 "apr": {
                     "type": "number"
                 },
+                "distributionStatus": {
+                    "description": "Extra rewards describe the vault's actual distribution, not a projected mint.",
+                    "type": "string"
+                },
                 "periodFinish": {
                     "type": "integer"
                 },

@@ -55,6 +55,7 @@ type fixtureRPC struct {
 	accountantSupplyFail bool
 	accountantSupplyBad  bool
 	assetDecimals        *uint8
+	tokenDecimals        map[common.Address]uint8
 	strategyAddress      common.Address
 	totalAssets          *big.Int
 	shutdown             map[common.Address]bool
@@ -259,6 +260,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 		case "symbol":
 			return method.Outputs.Pack("FIX")
 		case "decimals":
+			if value, ok := f.tokenDecimals[*call.To]; ok {
+				return method.Outputs.Pack(value)
+			}
 			if f.fullPrimary && *call.To == f.rewardToken {
 				return method.Outputs.Pack(uint8(18))
 			}
@@ -695,6 +699,90 @@ func TestVaultExtraRateScalingAndExpiredRewards(t *testing.T) {
 		if math.Abs(*pool.APR-wantAPR) > 1e-6 {
 			t.Fatalf("APR %g want %g", *pool.APR, wantAPR)
 		}
+	}
+}
+
+func TestVaultExtraDistributionStatusDescribesOnlyTheScheduledStream(t *testing.T) {
+	for _, tc := range []struct {
+		name, status, rate string
+		finish             uint32
+		raw                int64
+		failure            bool
+	}{
+		{"active", "active", "0.01", 1, 10000, false},
+		{"not-funded", "not_started", "0", 0, 0, false},
+		{"expired", "expired", "0", 0, 10000, false},
+		{"zero-rate-period", "zero_rate", "0", 1, 0, false},
+		{"unreadable", "unavailable", "", 1, 10000, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.extraTokens = []common.Address{common.HexToAddress("0x55")}
+			f.extraFinish = tc.finish
+			f.extraRate = new(big.Int).Mul(big.NewInt(tc.raw), new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+			if tc.failure {
+				f.callFailure = "rewardData"
+			}
+			result, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Pools[0].Rewards) != 1 {
+				t.Fatal("extra reward disappeared")
+			}
+			reward := result.Pools[0].Rewards[0]
+			if reward.DistributionStatus != tc.status {
+				t.Fatalf("wrong distribution state: %+v", reward)
+			}
+			if tc.failure {
+				if reward.RatePerSecond != nil || reward.APR != nil {
+					t.Fatal("unreadable stream became a confirmed zero")
+				}
+			} else if reward.RatePerSecond == nil || *reward.RatePerSecond != tc.rate {
+				t.Fatalf("scheduled rate changed: %+v", reward)
+			}
+		})
+	}
+}
+
+func TestConvexCVXIsCountedOnceAtTheVaultRateWithoutRepeatedFees(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.sidecar = true, true
+	cvx := common.HexToAddress("0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B")
+	f.extraTokens, f.extraFinish = []common.Address{cvx}, 1
+	f.tokenDecimals = map[common.Address]uint8{cvx: 18}
+	f.extraRate = decimal.RequireFromString("0.01").Shift(36).BigInt()
+	store := prices.NewMemoryStore()
+	for token, price := range map[common.Address]int64{common.HexToAddress("0xcc"): 2, f.rewardToken: 3, cvx: 7} {
+		if err := store.Set(context.Background(), prices.TokenKey{ChainID: 1, Address: token}, prices.Quote{USD: decimal.NewFromInt(price), UpdatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.prices = prices.NewTokenPriceService(store, nil)
+	result, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := result.Pools[0]
+	if len(result.Errors) != 0 || len(pool.Rewards) != 2 || pool.APRStatus != "available" {
+		t.Fatalf("incomplete or duplicated rewards: %+v", result)
+	}
+	var extra *dto.StakeDAOReward
+	for i := range pool.Rewards {
+		if pool.Rewards[i].Token == cvx {
+			if extra != nil {
+				t.Fatal("CVX counted more than once")
+			}
+			extra = &pool.Rewards[i]
+		}
+	}
+	if extra == nil || extra.Source != "vault-extra" || extra.DistributionStatus != "active" || extra.RatePerSecond == nil || *extra.RatePerSecond != "0.01" || extra.APR == nil {
+		t.Fatalf("wrong CVX stream: %+v", extra)
+	}
+	wantCVX := 0.01 * 7 * 31536000 / 2.469134 * 100
+	wantCRV := 1.1688 * 3 * 31536000 / 2.469134 * 100
+	if math.Abs(*extra.APR-wantCVX)/wantCVX > 1e-12 || pool.APR == nil || math.Abs(*pool.APR-(wantCVX+wantCRV))/(wantCVX+wantCRV) > 1e-12 {
+		t.Fatalf("vault extra had repeated fees or an additional projected CVX component: %+v", pool)
 	}
 }
 

@@ -51,6 +51,8 @@ type StakeDAOReward struct {
 	RatePerSecond *string        `json:"ratePerSecond"`
 	PeriodFinish  *uint64        `json:"periodFinish"`
 	APR           *float64       `json:"apr"`
+	// Extra rewards describe the vault's actual distribution, not a projected mint.
+	DistributionStatus string `json:"distributionStatus,omitempty"`
 }
 
 type StakeDAOPoolsResponse struct {

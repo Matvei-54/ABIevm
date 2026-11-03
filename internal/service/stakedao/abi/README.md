@@ -36,6 +36,14 @@ JSON содержат только необходимые view-методы из
 `Accountant.checkpoint`: масштаб extra rates равен `1e18`, протокольные fees
 относятся к Locker, harvest fees в CHECKPOINT — ко всему primary amount.
 
+Дополнительно проверены фактический
+[RewardReceiver](https://etherscan.io/address/0x98f38dddea5c07bb934e8c9211b93effc17b57bf#code),
+`ConvexSidecar.claimExtraRewards` и `RewardVault.depositRewards`:
+CVX/extra проходят через Receiver и затем запланированный период vault.
+Токены на Sidecar/Receiver до запуска периода не являются rate vault;
+повторные комиссии Accountant к этому rate не применяются.
+Подробности: [CVX_REWARD_AUDIT_RU.md](../CVX_REWARD_AUDIT_RU.md).
+
 `Accountant.totalSupply(address vault) returns (uint128)` добавлен из того же
 верифицированного ABI. Он сверяет учёт vault с `totalAssets()` в минимальных
 единицах LP. Это другой selector, чем ERC20/Convex `totalSupply()`.

@@ -1,0 +1,126 @@
+{
+  "chainId": 1,
+  "auditSnapshot": {
+    "blockNumber": 26334677,
+    "blockTimestamp": 1793713751,
+    "rpcAttempts": 39
+  },
+  "vaultAddress": "0xd4467fbcbd3511112d2fd1af667e745d4987c8eb",
+  "sidecarAddress": "0xbdf7f41e0ffeaa220fa49c4e89490cc6b1d2a961",
+  "receiverAddress": "0x98f38dddea5c07bb934e8c9211b93effc17b57bf",
+  "rewardPoolAddress": "0x44d8fab7cd8b7877d5f79974c2f501af6e65abba",
+  "receiverVaultVerified": true,
+  "sidecarReceiverVerified": true,
+  "cvx": {
+    "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+    "decimals": 18,
+    "totalSupply": "100000000.000000000000000000",
+    "maxSupply": "100000000.000000000000000000",
+    "sidecarBalance": "296.453034313470865223",
+    "receiverBalance": "0.000000000000000000",
+    "vaultBalance": "0.000000000000000000",
+    "vaultDistributor": "0x98f38dddea5c07bb934e8c9211b93effc17b57bf",
+    "vaultRawRewardRate": "0",
+    "vaultPeriodFinish": 0,
+    "distributionStatus": "not_started",
+    "distributionDurationSeconds": 604800,
+    "includedInCurrentAPR": false,
+    "virtualPool": {
+      "address": "0xac183f7cd62d5b04fa40362eb67249a80339541a",
+      "rewardWrapper": "0xc8dc88896aac1a94aa42b89d65aa5fd4984cb71d",
+      "underlyingToken": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+      "rawRewardRate": "826719576719576",
+      "periodFinish": 1686098747,
+      "sidecarEarned": "0.000000000000000000"
+    }
+  },
+  "yb": {
+    "token": "0x01791f726b4103694969820be083196cc7c045ff",
+    "registeredInVault": false,
+    "sidecarBalance": "0.000000000000000000",
+    "receiverBalance": "0.000000000000000000",
+    "vaultBalance": "0.000000000000000000",
+    "virtualPool": {
+      "address": "0x2c657d22b97f1678f9e6f3a19014914083ec615d",
+      "rewardWrapper": "0x6c29412588efa1ff1bc74c0ea8d0451518798baf",
+      "underlyingToken": "0x01791f726b4103694969820be083196cc7c045ff",
+      "rawRewardRate": "0",
+      "periodFinish": 0,
+      "sidecarEarned": "0.000000000000000000"
+    }
+  },
+  "fees": {
+    "primaryProtocolFraction": "0.165000000000000000",
+    "primaryHarvestFraction": "0.000250000000000000",
+    "vaultPolicy": 0,
+    "extraVaultFeesAppliedAgain": false
+  },
+  "comparison": {
+    "applicationBlockNumber": 26334719,
+    "sameBlockVerified": false,
+    "publishedApiSource": "https://raw.githubusercontent.com/stake-dao/api/9b038fcf46de16aeee8f01b714c4dc18f5f99632/api/strategies/v2/curve/1.json",
+    "publishedApiCommit": "9b038fcf46de16aeee8f01b714c4dc18f5f99632",
+    "publishedApiSha256": "a5cb522f50ba1880bee3dcd3e6e9084fe3907c50f7a78e04642835cf93417adf",
+    "publishedApiHasBlockNumber": false,
+    "liveHubAccessible": false,
+    "rows": [
+      {
+        "vaultAddress": "0xd4467fbcbd3511112d2fd1af667e745d4987c8eb",
+        "name": "crvUSDUSDC-f",
+        "applicationRewardApr": 4.228391917600849,
+        "applicationAprStatus": "available",
+        "applicationTVL": 3921165.822210765,
+        "publishedCRVApr": 4.214031209116835,
+        "publishedTradingAPY": 1.83,
+        "publishedDisplayedTotal": 6.044031209116835,
+        "publishedTVL": 3924001.0348952594,
+        "publishedDetails": [
+          {
+            "label": "Trading Fees (APY)",
+            "value": [
+              1.83
+            ]
+          },
+          {
+            "label": "CRV APR (incl. 2.07x boost)",
+            "value": [
+              4.214031209116835
+            ]
+          }
+        ]
+      },
+      {
+        "vaultAddress": "0x35930db0c72609c39f29ba6266e09019a620b803",
+        "name": "FXSETH-f",
+        "applicationRewardApr": 0,
+        "applicationAprStatus": "available",
+        "applicationTVL": 8.729757384364719,
+        "publishedCRVApr": 0,
+        "publishedTradingAPY": 0.97,
+        "publishedDisplayedTotal": 0.97,
+        "publishedTVL": 8.761349318494634,
+        "publishedDetails": [
+          {
+            "label": "Trading Fees (APY)",
+            "value": [
+              0.97
+            ]
+          },
+          {
+            "label": "CRV APR (incl. 2.50x boost)",
+            "value": [
+              0
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "conclusions": [
+    "No missing active CVX or YB stream at the audited block.",
+    "Unforwarded CVX at Sidecar is a token balance, not a vault reward rate.",
+    "CVX is counted once through the scheduled vault-extra stream, without repeating Accountant fees.",
+    "Trading APY is separate from the application rewards APR.",
+    "Published API is an external comparison snapshot, not same-block validation of the live UI."
+  ]
+}

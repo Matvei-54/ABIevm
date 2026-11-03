@@ -706,7 +706,7 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 			continue
 		}
 		seen[token] = true
-		reward := dto.StakeDAOReward{Token: token, Source: "vault-extra"}
+		reward := dto.StakeDAOReward{Token: token, Source: "vault-extra", DistributionStatus: "unavailable"}
 		out, err := extra[index].values, extra[index].err
 		decimals, decErr := extra[index+1].unsigned()
 		index += 2
@@ -714,15 +714,24 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 			finish, okFinish := out[2].(uint32)
 			raw, okRate := out[3].(*big.Int)
 			distributor, okDistributor := out[0].(common.Address)
-			if okFinish && okRate && raw != nil && okDistributor && distributor != (common.Address{}) {
+			if okFinish && okRate && raw != nil && raw.Sign() >= 0 && okDistributor && distributor != (common.Address{}) {
 				period := uint64(finish)
 				reward.PeriodFinish = &period
 				value := "0"
-				if period <= s.snapshotTime || raw.Sign() == 0 {
+				switch {
+				case period == 0 && raw.Sign() == 0:
+					reward.DistributionStatus = "not_started"
 					reward.RatePerSecond = &value
-				} else if decErr == nil && decimals.IsUint64() && decimals.Uint64() <= 255 {
+				case period <= s.snapshotTime:
+					reward.DistributionStatus = "expired"
+					reward.RatePerSecond = &value
+				case raw.Sign() == 0:
+					reward.DistributionStatus = "zero_rate"
+					reward.RatePerSecond = &value
+				case decErr == nil && decimals.IsUint64() && decimals.Uint64() <= 255:
 					// Verified RewardVault rate is scaled by 1e18 in addition to ERC20 decimals.
 					value = decimal.NewFromBigInt(raw, -18-int32(decimals.Uint64())).String()
+					reward.DistributionStatus = "active"
 					reward.RatePerSecond = &value
 				}
 			}
