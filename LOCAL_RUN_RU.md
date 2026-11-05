@@ -20,6 +20,7 @@ Curve NG/MetaRegistry → ERC4626. Этот поиск используется 
 | `GET /reservesStakedao/ethereum` | Все пулы, краткий ответ |
 | `GET /reservesStakedao/ethereum?details=true` | Все пулы, прежний полный ответ с TVL и диагностикой |
 | `GET /reservesStakedao/ethereum/diagnostics` | Только crvUSD/USDC и FXS/ETH, полный ответ с причинами неполного APR |
+| `GET /reservesStakedao/ethereum/diagnostics?limit=5` | Пять контрольных пулов, составляющие APR, источники цен и сравнение с PoolUtilities |
 
 В кратком ответе строка пула содержит только `name`, `apr`, `symbol`, `address`,
 `apy`, `status`. `address` — адрес StakeDAO vault, `symbol` — символ vault.
@@ -145,6 +146,10 @@ go run -mod=readonly ./cmd/stakedao-check -limit 1 -output stakedao-sample.json
 ```
 
 После успешного запуска появится `stakedao-sample.json` в текущей папке.
+
+Пять выбранных контрольных пулов со составляющими APR и проверкой PoolUtilities:
+`go run -mod=readonly ./cmd/stakedao-check -diagnostics -limit 5 -output stakedao-validation-5.json`.
+[Инструкция, сохранённый результат и сравнение со StakeDAO](internal/service/stakedao/VALIDATION_5_POOLS_RU.md).
 Команда напечатает полный путь. При ошибке новый файл не создаётся, предыдущий
 успешный результат не перезаписывается. Это также относится к случаю, когда
 команда завершилась с `exit status 1`: отсутствие JSON тогда ожидаемо.

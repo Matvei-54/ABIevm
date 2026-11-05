@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -381,7 +382,7 @@ func (r *contractResolver) directUSD(token common.Address) (Quote, error) {
 	if round.Sign() <= 0 || answer.Sign() <= 0 || answered.Cmp(round) < 0 || !updated.IsUint64() || updated.Sign() <= 0 || started.Sign() <= 0 || started.Cmp(updated) > 0 || updated.Uint64() > r.snapshot.Timestamp || r.snapshot.Timestamp-updated.Uint64() >= maxAge {
 		return Quote{}, errors.New("invalid or stale Chainlink USD round")
 	}
-	return Quote{USD: decimal.NewFromBigInt(answer, -int32(d)), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: time.Unix(int64(updated.Uint64()+maxAge), 0)}, nil
+	return Quote{USD: decimal.NewFromBigInt(answer, -int32(d)), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: time.Unix(int64(updated.Uint64()+maxAge), 0), Source: "chainlink_usd", SourceContract: feed, BlockNumber: r.snapshot.Block}, nil
 }
 
 func (r *contractResolver) derivedPrice(token common.Address, depth int) (Quote, error) {
@@ -506,7 +507,7 @@ func (r *contractResolver) metaPool(token, pool common.Address) (Quote, error) {
 			deadline = expires
 		}
 	}
-	return Quote{USD: value.DivRound(decimal.NewFromBigInt(supply, -int32(lpDecimals)), 36), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: deadline}, nil
+	return Quote{USD: value.DivRound(decimal.NewFromBigInt(supply, -int32(lpDecimals)), 36), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: deadline, Source: "curve_metaregistry_nav", SourceContract: pool, BlockNumber: r.snapshot.Block, Components: append([]common.Address(nil), coins[:n.Uint64()]...)}, nil
 }
 
 func (r *contractResolver) vault(token common.Address, depth int) (Quote, error) {
@@ -534,7 +535,7 @@ func (r *contractResolver) vault(token common.Address, depth int) (Quote, error)
 	if err != nil {
 		return Quote{}, err
 	}
-	return Quote{USD: decimal.NewFromBigInt(assets, -int32(underlyingDecimals)).Mul(base.USD), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: quoteDeadline(base)}, nil
+	return Quote{USD: decimal.NewFromBigInt(assets, -int32(underlyingDecimals)).Mul(base.USD), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: quoteDeadline(base), Source: "erc4626_conversion", SourceContract: token, BlockNumber: r.snapshot.Block, Components: []common.Address{underlying}}, nil
 }
 
 func (r *contractResolver) pool(token common.Address) (Quote, error) {
@@ -593,7 +594,12 @@ func (r *contractResolver) pool(token common.Address) (Quote, error) {
 			deadline = expires
 		}
 	}
-	return Quote{USD: value.DivRound(decimal.NewFromBigInt(supply, -int32(d)), 36), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: deadline}, nil
+	components := make([]common.Address, 0, len(seen))
+	for coin := range seen {
+		components = append(components, coin)
+	}
+	sort.Slice(components, func(i, j int) bool { return components[i].Hex() < components[j].Hex() })
+	return Quote{USD: value.DivRound(decimal.NewFromBigInt(supply, -int32(d)), 36), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: deadline, Source: "curve_stableswap_ng_nav", SourceContract: token, BlockNumber: r.snapshot.Block, Components: components}, nil
 }
 
 func quoteDeadline(q Quote) time.Time {

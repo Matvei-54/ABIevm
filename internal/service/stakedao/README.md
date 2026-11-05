@@ -33,10 +33,13 @@
 награды и ошибки, возвращаются с `?details=true`. Обёртка краткого ответа
 сохраняет сеть и номер блока. Сервис/ручная команда по-прежнему возвращают полные DTO.
 
-`GET /reservesStakedao/ethereum/diagnostics` читает только crvUSD/USDC и FXS/ETH
-через `GetRewardDiagnostics` и ограниченный sample-путь: без logs/БД,
-5 RPC/с, 300 попыток. Текущие vault/asset проверяются через Controller.
-Эти два пула не исключаются из общего списка. Описание запуска/скачивания:
+`GET /reservesStakedao/ethereum/diagnostics` по умолчанию читает crvUSD/USDC и FXS/ETH;
+`?limit=5` добавляет evaUSDC/evaUSDT, frxUSD/sUSDS и crvUSD/USDT.
+Ограниченный sample-путь: без logs/БД, 5 RPC/с, 300 попыток.
+Текущие vault/asset проверяются через Controller. Состав APR, происхождение цен
+и контроль PoolUtilities находятся в `diagnostics` каждого пула; обычная загрузка
+не делает контрольных запросов. [Результат пяти пулов и сравнение](VALIDATION_5_POOLS_RU.md).
+Эти пулы не исключаются из общего списка. Описание запуска/скачивания:
 [LOCAL_RUN_RU.md](../../../LOCAL_RUN_RU.md#скачать-обновление-и-открыть-swagger).
 
 Общий `prices.TokenPriceService` сначала проверяет

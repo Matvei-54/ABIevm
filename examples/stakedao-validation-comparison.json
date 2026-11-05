@@ -1,0 +1,254 @@
+{
+  "onchainResult": "stakedao-validation-5.json",
+  "onchainBlockNumber": 26349407,
+  "onchainBlockTimestamp": 1793891015,
+  "rpcAttempts": 178,
+  "source": {
+    "kind": "published_stakedao_api_snapshot",
+    "url": "https://github.com/stake-dao/api/blob/cc776d695be8c2d79e05c340866f6e1d6247c97d/api/strategies/v2/curve/1.json",
+    "commit": "cc776d695be8c2d79e05c340866f6e1d6247c97d",
+    "sha256": "6da562d8e6d1927ce7f795d2e726298f9c208ef938e224986bdd1157e849d582",
+    "liveUiRead": false,
+    "snapshotBlockNumber": null,
+    "sameBlockConfirmed": false
+  },
+  "pools": [
+    {
+      "name": "USDC/crvUSD",
+      "gaugeAddress": "0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1",
+      "vaultAddress": "0xd4467fbcbd3511112d2fd1af667e745d4987c8eb",
+      "assetAmount": "5306247.029447122184283680",
+      "ourRewardsAprPercent": 3.715847976378245,
+      "publishedCrvAprPercent": 3.806459556604564,
+      "differencePercentagePoints": -0.090611580226319,
+      "publishedTradingApyPercent": 1.98,
+      "publishedDisplayTotalPercent": 5.786459556604564,
+      "ourTvlUsd": 5451775.421003926,
+      "publishedTvlUsd": 5452084.7834931025,
+      "ourLpPriceUsd": "1.027425860641087882663250784883443263",
+      "publishedLpPriceUsd": 1.0274841622028998,
+      "ourCrvPriceUsd": "0.26617941",
+      "publishedCrvPriceUsd": 0.26894947,
+      "ourCrvAprUsingPublishedPricesPercent": 3.754304802305252,
+      "convexControlStatus": "matched",
+      "priceSources": [
+        "chainlink_usd",
+        "curve_metaregistry_nav"
+      ],
+      "checks": {
+        "positiveAssetAmount": true,
+        "pricesReadAtResultBlock": true,
+        "tvlRecalculated": true,
+        "lockerRateRecalculated": true,
+        "feesReconciled": true,
+        "rewardsAprRecalculated": true,
+        "helperCrvRateMatched": true,
+        "sourcesNotAddedTwice": true
+      },
+      "publishedAprDetails": [
+        {
+          "label": "Trading Fees (APY)",
+          "value": [
+            1.98
+          ]
+        },
+        {
+          "label": "CRV APR (incl. 2.06x boost)",
+          "value": [
+            3.806459556604564
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WETH/FXS",
+      "gaugeAddress": "0x009acd89535dabc270c93f9b39d3232105fef453",
+      "vaultAddress": "0x35930db0c72609c39f29ba6266e09019a620b803",
+      "assetAmount": "0.147548075075193763",
+      "ourRewardsAprPercent": 0,
+      "publishedCrvAprPercent": 0,
+      "differencePercentagePoints": 0.0,
+      "publishedTradingApyPercent": 0.86,
+      "publishedDisplayTotalPercent": 0.86,
+      "ourTvlUsd": 8.98065216729935,
+      "publishedTvlUsd": 9.152353210817932,
+      "ourLpPriceUsd": "60.865939204714196154546118605861144906",
+      "publishedLpPriceUsd": 62.02963478956733,
+      "ourCrvPriceUsd": "0.26617941",
+      "publishedCrvPriceUsd": 0.26894947,
+      "ourCrvAprUsingPublishedPricesPercent": 0.0,
+      "convexControlStatus": "matched",
+      "priceSources": [
+        "chainlink_usd",
+        "curve_metaregistry_nav"
+      ],
+      "checks": {
+        "positiveAssetAmount": true,
+        "pricesReadAtResultBlock": true,
+        "tvlRecalculated": true,
+        "lockerRateRecalculated": true,
+        "feesReconciled": true,
+        "rewardsAprRecalculated": true,
+        "helperCrvRateMatched": true,
+        "sourcesNotAddedTwice": true
+      },
+      "publishedAprDetails": [
+        {
+          "label": "Trading Fees (APY)",
+          "value": [
+            0.86
+          ]
+        },
+        {
+          "label": "CRV APR (incl. 2.50x boost)",
+          "value": [
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "evaUSDT/evaUSDC",
+      "gaugeAddress": "0xbe6228125448e40f5dcbb2dbdf7ff3f5721000b4",
+      "vaultAddress": "0x08c5e4f760cb2efdb69865ed2d3a6eb2796be799",
+      "assetAmount": "3846830.938326570532666625",
+      "ourRewardsAprPercent": 9.889507009337011,
+      "publishedCrvAprPercent": 9.731369945376498,
+      "differencePercentagePoints": 0.158137063960513,
+      "publishedTradingApyPercent": 0.01,
+      "publishedDisplayTotalPercent": 9.741369945376498,
+      "ourTvlUsd": 3845003.643811617,
+      "publishedTvlUsd": 3829908.502302997,
+      "ourLpPriceUsd": "0.999524987049275327365679604178444901",
+      "publishedLpPriceUsd": 0.9956009410616482,
+      "ourCrvPriceUsd": "0.26617941",
+      "publishedCrvPriceUsd": 0.26894947,
+      "ourCrvAprUsingPublishedPricesPercent": 10.031808526636363,
+      "convexControlStatus": "matched",
+      "priceSources": [
+        "chainlink_usd",
+        "curve_stableswap_ng_nav",
+        "erc4626_conversion"
+      ],
+      "checks": {
+        "positiveAssetAmount": true,
+        "pricesReadAtResultBlock": true,
+        "tvlRecalculated": true,
+        "lockerRateRecalculated": true,
+        "feesReconciled": true,
+        "rewardsAprRecalculated": true,
+        "helperCrvRateMatched": true,
+        "sourcesNotAddedTwice": true
+      },
+      "publishedAprDetails": [
+        {
+          "label": "Trading Fees (APY)",
+          "value": [
+            0.01
+          ]
+        },
+        {
+          "label": "CRV APR (incl. 1.79x boost)",
+          "value": [
+            9.731369945376498
+          ]
+        }
+      ]
+    },
+    {
+      "name": "frxUSD/sUSDS",
+      "gaugeAddress": "0x52618c40ddba3cbbb69f3aaa4cb26ae649844b17",
+      "vaultAddress": "0x5e1dacdbef6bceba53600d0bce33fd30ee09fa82",
+      "assetAmount": "925076.343895992113349207",
+      "ourRewardsAprPercent": 1.4783964838195258,
+      "publishedCrvAprPercent": 1.6128602874277278,
+      "differencePercentagePoints": -0.134463803608202,
+      "publishedTradingApyPercent": 3.1,
+      "publishedDisplayTotalPercent": 4.712860287427728,
+      "ourTvlUsd": 967371.8057712363,
+      "publishedTvlUsd": 967119.3034029084,
+      "ourLpPriceUsd": "1.045721050110432393647176167049829227",
+      "publishedLpPriceUsd": 1.0454480971049922,
+      "ourCrvPriceUsd": "0.26617941",
+      "publishedCrvPriceUsd": 0.26894947,
+      "ourCrvAprUsingPublishedPricesPercent": 1.4941717792672435,
+      "convexControlStatus": "matched",
+      "priceSources": [
+        "chainlink_usd",
+        "curve_stableswap_ng_nav",
+        "erc4626_conversion"
+      ],
+      "checks": {
+        "positiveAssetAmount": true,
+        "pricesReadAtResultBlock": true,
+        "tvlRecalculated": true,
+        "lockerRateRecalculated": true,
+        "feesReconciled": true,
+        "rewardsAprRecalculated": true,
+        "helperCrvRateMatched": true,
+        "sourcesNotAddedTwice": true
+      },
+      "publishedAprDetails": [
+        {
+          "label": "Trading Fees (APY)",
+          "value": [
+            3.1
+          ]
+        },
+        {
+          "label": "CRV APR (incl. 2.31x boost)",
+          "value": [
+            1.6128602874277278
+          ]
+        }
+      ]
+    },
+    {
+      "name": "USDT/crvUSD",
+      "gaugeAddress": "0x4e6bb6b7447b7b2aa268c16ab87f4bb48bf57939",
+      "vaultAddress": "0xf980f195a93577dcce48e91e98124d3b71c4a066",
+      "assetAmount": "3471570.640172304654933069",
+      "ourRewardsAprPercent": 4.403545543660891,
+      "publishedCrvAprPercent": 4.462936814153024,
+      "differencePercentagePoints": -0.059391270492133,
+      "publishedTradingApyPercent": 2.41,
+      "publishedDisplayTotalPercent": 6.872936814153024,
+      "ourTvlUsd": 3566468.5205749474,
+      "publishedTvlUsd": 3568110.9531640946,
+      "ourLpPriceUsd": "1.027335719257590179875689516394317992",
+      "publishedLpPriceUsd": 1.0278088286249012,
+      "ourCrvPriceUsd": "0.26617941",
+      "publishedCrvPriceUsd": 0.26894947,
+      "ourCrvAprUsingPublishedPricesPercent": 4.447324013867649,
+      "convexControlStatus": "matched",
+      "priceSources": [
+        "chainlink_usd",
+        "curve_metaregistry_nav"
+      ],
+      "checks": {
+        "positiveAssetAmount": true,
+        "pricesReadAtResultBlock": true,
+        "tvlRecalculated": true,
+        "lockerRateRecalculated": true,
+        "feesReconciled": true,
+        "rewardsAprRecalculated": true,
+        "helperCrvRateMatched": true,
+        "sourcesNotAddedTwice": true
+      },
+      "publishedAprDetails": [
+        {
+          "label": "Trading Fees (APY)",
+          "value": [
+            2.41
+          ]
+        },
+        {
+          "label": "CRV APR (incl. 2.04x boost)",
+          "value": [
+            4.462936814153024
+          ]
+        }
+      ]
+    }
+  ]
+}

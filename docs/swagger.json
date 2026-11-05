@@ -177,7 +177,7 @@
         },
         "/reservesStakedao/{network}/diagnostics": {
             "get": {
-                "description": "Только два gauge через текущий Controller, без истории и Postgres. Полный ответ с этапом, контрактом и методом ошибки основного CRV-потока. Не более 5 RPC/с и 300 попыток на запрос.",
+                "description": "Два или пять выбранных gauge через текущий Controller, без истории и Postgres. Состав APR, происхождение цен и контроль Convex PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.",
                 "produces": [
                     "application/json"
                 ],
@@ -192,6 +192,17 @@
                         "name": "network",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "enum": [
+                            2,
+                            5
+                        ],
+                        "type": "integer",
+                        "default": 2,
+                        "description": "Количество контрольных пулов",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -242,6 +253,181 @@
         }
     },
     "definitions": {
+        "dto.ConvexPlacement": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "pid": {
+                    "type": "string"
+                },
+                "rewardPool": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ConvexRateDiagnostic": {
+            "type": "object",
+            "properties": {
+                "expectedCrvRateRaw": {
+                    "type": "string"
+                },
+                "helperCrvRateRaw": {
+                    "type": "string"
+                },
+                "helperOwnSidecarRate": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "ownSidecarRate": {
+                    "type": "string"
+                },
+                "periodFinish": {
+                    "type": "integer"
+                },
+                "pid": {
+                    "type": "string"
+                },
+                "rewardPool": {
+                    "type": "string"
+                },
+                "rewardRateRaw": {
+                    "type": "string"
+                },
+                "roundingDifference": {
+                    "type": "string"
+                },
+                "sidecarBalanceRaw": {
+                    "type": "string"
+                },
+                "slots": {
+                    "description": "This helper rate is raw reward units per 1e18 raw LP units per second.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ConvexRewardSlot"
+                    }
+                },
+                "stakedSupplyRaw": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "utility": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ConvexRewardSlot": {
+            "type": "object",
+            "properties": {
+                "rateRaw": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.LockerRateDiagnostic": {
+            "type": "object",
+            "properties": {
+                "inflationRaw": {
+                    "type": "string"
+                },
+                "killed": {
+                    "type": "boolean"
+                },
+                "relativeWeightRaw": {
+                    "type": "string"
+                },
+                "workingBalanceRaw": {
+                    "type": "string"
+                },
+                "workingSupplyRaw": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.PriceDiagnostic": {
+            "type": "object",
+            "properties": {
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "components": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
+                },
+                "sourceContract": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "usd": {
+                    "type": "string"
+                },
+                "validUntil": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.PrimaryRateDiagnostic": {
+            "type": "object",
+            "properties": {
+                "convexGrossRate": {
+                    "type": "string"
+                },
+                "harvestFeeFraction": {
+                    "type": "string"
+                },
+                "harvestFeeRate": {
+                    "type": "string"
+                },
+                "locker": {
+                    "type": "string"
+                },
+                "lockerGrossRate": {
+                    "type": "string"
+                },
+                "lockerInputs": {
+                    "$ref": "#/definitions/dto.LockerRateDiagnostic"
+                },
+                "netRate": {
+                    "type": "string"
+                },
+                "protocolFeeFraction": {
+                    "type": "string"
+                },
+                "protocolFeeRate": {
+                    "type": "string"
+                },
+                "sidecars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ConvexPlacement"
+                    }
+                },
+                "unit": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.StakeDAOAllocation": {
             "type": "object",
             "properties": {
@@ -294,6 +480,9 @@
                 "assetSymbol": {
                     "type": "string"
                 },
+                "diagnostics": {
+                    "$ref": "#/definitions/dto.StakeDAOPoolDiagnostics"
+                },
                 "gaugeAddress": {
                     "type": "string"
                 },
@@ -333,6 +522,23 @@
                 },
                 "vaultAddress": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOPoolDiagnostics": {
+            "type": "object",
+            "properties": {
+                "convex": {
+                    "$ref": "#/definitions/dto.ConvexRateDiagnostic"
+                },
+                "prices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.PriceDiagnostic"
+                    }
+                },
+                "primary": {
+                    "$ref": "#/definitions/dto.PrimaryRateDiagnostic"
                 }
             }
         },
@@ -391,6 +597,9 @@
                 "blockNumber": {
                     "type": "integer"
                 },
+                "blockTimestamp": {
+                    "type": "integer"
+                },
                 "errors": {
                     "type": "array",
                     "items": {
@@ -405,6 +614,9 @@
                     "items": {
                         "$ref": "#/definitions/dto.StakeDAOPool"
                     }
+                },
+                "rpcAttempts": {
+                    "type": "integer"
                 }
             }
         },

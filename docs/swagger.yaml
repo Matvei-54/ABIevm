@@ -1,4 +1,120 @@
 definitions:
+  dto.ConvexPlacement:
+    properties:
+      address:
+        type: string
+      pid:
+        type: string
+      rewardPool:
+        type: string
+    type: object
+  dto.ConvexRateDiagnostic:
+    properties:
+      expectedCrvRateRaw:
+        type: string
+      helperCrvRateRaw:
+        type: string
+      helperOwnSidecarRate:
+        type: string
+      message:
+        type: string
+      ownSidecarRate:
+        type: string
+      periodFinish:
+        type: integer
+      pid:
+        type: string
+      rewardPool:
+        type: string
+      rewardRateRaw:
+        type: string
+      roundingDifference:
+        type: string
+      sidecarBalanceRaw:
+        type: string
+      slots:
+        description: This helper rate is raw reward units per 1e18 raw LP units per
+          second.
+        items:
+          $ref: '#/definitions/dto.ConvexRewardSlot'
+        type: array
+      stakedSupplyRaw:
+        type: string
+      status:
+        type: string
+      utility:
+        type: string
+    type: object
+  dto.ConvexRewardSlot:
+    properties:
+      rateRaw:
+        type: string
+      source:
+        type: string
+      token:
+        type: string
+    type: object
+  dto.LockerRateDiagnostic:
+    properties:
+      inflationRaw:
+        type: string
+      killed:
+        type: boolean
+      relativeWeightRaw:
+        type: string
+      workingBalanceRaw:
+        type: string
+      workingSupplyRaw:
+        type: string
+    type: object
+  dto.PriceDiagnostic:
+    properties:
+      blockNumber:
+        type: integer
+      components:
+        items:
+          type: string
+        type: array
+      source:
+        type: string
+      sourceContract:
+        type: string
+      token:
+        type: string
+      updatedAt:
+        type: string
+      usd:
+        type: string
+      validUntil:
+        type: string
+    type: object
+  dto.PrimaryRateDiagnostic:
+    properties:
+      convexGrossRate:
+        type: string
+      harvestFeeFraction:
+        type: string
+      harvestFeeRate:
+        type: string
+      locker:
+        type: string
+      lockerGrossRate:
+        type: string
+      lockerInputs:
+        $ref: '#/definitions/dto.LockerRateDiagnostic'
+      netRate:
+        type: string
+      protocolFeeFraction:
+        type: string
+      protocolFeeRate:
+        type: string
+      sidecars:
+        items:
+          $ref: '#/definitions/dto.ConvexPlacement'
+        type: array
+      unit:
+        type: string
+    type: object
   dto.StakeDAOAllocation:
     properties:
       accountedAssets:
@@ -35,6 +151,8 @@ definitions:
         type: integer
       assetSymbol:
         type: string
+      diagnostics:
+        $ref: '#/definitions/dto.StakeDAOPoolDiagnostics'
       gaugeAddress:
         type: string
       name:
@@ -62,6 +180,17 @@ definitions:
         type: string
       vaultAddress:
         type: string
+    type: object
+  dto.StakeDAOPoolDiagnostics:
+    properties:
+      convex:
+        $ref: '#/definitions/dto.ConvexRateDiagnostic'
+      prices:
+        items:
+          $ref: '#/definitions/dto.PriceDiagnostic'
+        type: array
+      primary:
+        $ref: '#/definitions/dto.PrimaryRateDiagnostic'
     type: object
   dto.StakeDAOPoolError:
     properties:
@@ -99,6 +228,8 @@ definitions:
     properties:
       blockNumber:
         type: integer
+      blockTimestamp:
+        type: integer
       errors:
         items:
           $ref: '#/definitions/dto.StakeDAOPoolError'
@@ -109,6 +240,8 @@ definitions:
         items:
           $ref: '#/definitions/dto.StakeDAOPool'
         type: array
+      rpcAttempts:
+        type: integer
     type: object
   dto.StakeDAOPoolsSummaryResponse:
     properties:
@@ -261,15 +394,23 @@ paths:
       - StakeDao
   /reservesStakedao/{network}/diagnostics:
     get:
-      description: Только два gauge через текущий Controller, без истории и Postgres.
-        Полный ответ с этапом, контрактом и методом ошибки основного CRV-потока. Не
-        более 5 RPC/с и 300 попыток на запрос.
+      description: Два или пять выбранных gauge через текущий Controller, без истории
+        и Postgres. Состав APR, происхождение цен и контроль Convex PoolUtilities.
+        Не более 5 RPC/с и 300 попыток на запрос.
       parameters:
       - description: 'Поддерживаемая сеть: ethereum'
         in: path
         name: network
         required: true
         type: string
+      - default: 2
+        description: Количество контрольных пулов
+        enum:
+        - 2
+        - 5
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:

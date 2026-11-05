@@ -52,6 +52,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	from := flags.Uint64("from", 0, "optional first registration block; requires -to")
 	to := flags.Uint64("to", 0, "optional last registration block; requires -from; at most 100 blocks")
 	filename := flags.String("output", "", "save JSON to this file only after a successful check")
+	withDiagnostics := flags.Bool("diagnostics", false, "check the fixed 2- or 5-pool set with price provenance and PoolUtilities comparison")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -73,11 +74,14 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 			explicitGauges = true
 		}
 	})
+	if *withDiagnostics && (windowFlags != 0 || explicitGauges || (*limit != 2 && *limit != 5)) {
+		return fmt.Errorf("use -diagnostics -limit 2 or 5 without -gauges/-from/-to")
+	}
 	if windowFlags > 0 && (windowFlags != 2 || explicitGauges || *from > *to || *to-*from >= 100) {
 		return fmt.Errorf("use both -from and -to for a window of at most 100 blocks, or use -gauges")
 	}
 	var gauges []common.Address
-	if windowFlags == 0 {
+	if windowFlags == 0 && !*withDiagnostics {
 		seen := make(map[common.Address]bool)
 		for _, text := range strings.Split(*gaugeList, ",") {
 			text = strings.TrimSpace(text)
@@ -103,7 +107,10 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	var result *dto.StakeDAOPoolsResponse
 	var err error
 	fmt.Fprintln(diagnostics, "At most 5 RPC requests/sec and 300 attempts; CU cost depends on the provider.")
-	if windowFlags == 0 {
+	if *withDiagnostics {
+		fmt.Fprintf(diagnostics, "Checking %d reference pools with APR components, cached quote provenance and Convex control rates.\n", *limit)
+		result, err = service.GetPoolDiagnostics(ctx, "ethereum", *limit)
+	} else if windowFlags == 0 {
 		fmt.Fprintf(diagnostics, "Checking %d explicit gauge(s) using current Controller state; no log scan or historical eth_getCode.\n", len(gauges))
 		result, err = service.GetPoolsForGauges(ctx, "ethereum", gauges, *limit)
 	} else {

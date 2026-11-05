@@ -217,10 +217,11 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 }
 
 // @Summary      Проверить награды crvUSD/USDC и FXS/ETH
-// @Description  Только два gauge через текущий Controller, без истории и Postgres. Полный ответ с этапом, контрактом и методом ошибки основного CRV-потока. Не более 5 RPC/с и 300 попыток на запрос.
+// @Description  Два или пять выбранных gauge через текущий Controller, без истории и Postgres. Состав APR, происхождение цен и контроль Convex PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.
 // @Tags         StakeDao
 // @Produce      json
 // @Param        network  path      string true "Поддерживаемая сеть: ethereum"
+// @Param        limit    query     int false "Количество контрольных пулов" Enums(2,5) default(2)
 // @Success      200      {object}  dto.StakeDAOPoolsResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      502      {object}  map[string]string
@@ -228,7 +229,15 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 // @Failure      504      {object}  map[string]string
 // @Router       /reservesStakedao/{network}/diagnostics [get]
 func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
-	result, err := h.stakeDao.GetRewardDiagnostics(c.Request().Context(), c.Param("network"))
+	limit := 2
+	if text := c.QueryParam("limit"); text != "" {
+		var err error
+		limit, err = strconv.Atoi(text)
+		if err != nil || (limit != 2 && limit != 5) {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "diagnostics limit must be 2 or 5"})
+		}
+	}
+	result, err := h.stakeDao.GetPoolDiagnostics(c.Request().Context(), c.Param("network"), limit)
 	if err != nil {
 		return stakeDAOHTTPError(c, err)
 	}

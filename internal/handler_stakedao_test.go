@@ -46,6 +46,7 @@ func TestStakeDAORoute(t *testing.T) {
 		Topics: []common.Hash{event.ID, common.BytesToHash(gauge.Bytes()), common.BytesToHash(vault.Bytes()), common.BytesToHash(asset.Bytes())},
 	}
 	tokenABI, err := abi.JSON(strings.NewReader(`[
+		{"type":"function","name":"poolInfo","inputs":[{"type":"uint256"}],"outputs":[{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"bool"}]},
 		{"type":"function","name":"strategy","inputs":[],"outputs":[{"type":"address"}]},
 		{"type":"function","name":"getRewardTokens","inputs":[],"outputs":[{"type":"address[]"}]},
 		{"type":"function","name":"ACCOUNTANT","inputs":[],"outputs":[{"type":"address"}]},
@@ -104,6 +105,8 @@ func TestStakeDAORoute(t *testing.T) {
 		}
 		var value interface{}
 		switch method.Name {
+		case "poolInfo":
+			return method.Outputs.Pack(common.Address{}, common.Address{}, common.Address{}, common.Address{}, common.Address{}, false)
 		case "gauge":
 			return method.Outputs.Pack(vault, asset, common.HexToAddress("0x44"), [4]byte{0xc7, 0x15, 0xe3, 0x73}, false)
 		case "strategy":
@@ -265,6 +268,19 @@ func TestStakeDAORoute(t *testing.T) {
 	}
 	if len(diagnostic.Errors) != 2 || diagnostic.Errors[0].Code != "primary_reward_strategy" || diagnostic.Errors[0].Stage != "strategy" || diagnostic.Errors[0].Contract != vault || diagnostic.Errors[0].Method != "strategy" {
 		t.Fatalf("missing structured primary diagnostics: %s", response.Body.String())
+	}
+	before = historyReads.Load()
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?limit=5", nil))
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &diagnostic) != nil || len(diagnostic.Pools) != 5 || historyReads.Load() != before {
+		t.Fatalf("five-pool diagnostics used history or returned wrong selection: %s", response.Body.String())
+	}
+	for _, limit := range []string{"1", "6", "bad"} {
+		response = httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?limit="+limit, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid diagnostics limit accepted: %s", limit)
+		}
 	}
 	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/base", nil))

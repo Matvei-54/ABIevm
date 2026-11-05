@@ -18,13 +18,14 @@ type StakeDAOPool struct {
 	AssetSymbol string `json:"assetSymbol"`
 
 	// AssetAmount is an exact decimal quantity of the underlying token, not USD TVL.
-	AssetAmount   *string             `json:"assetAmount"`
-	AssetDecimals *uint8              `json:"assetDecimals"`
-	TVL           *float64            `json:"tvl"`
-	APR           *float64            `json:"apr"`
-	APRStatus     string              `json:"aprStatus"`
-	APY           *float64            `json:"apy"`
-	Allocation    *StakeDAOAllocation `json:"allocation,omitempty"`
+	AssetAmount   *string                  `json:"assetAmount"`
+	AssetDecimals *uint8                   `json:"assetDecimals"`
+	TVL           *float64                 `json:"tvl"`
+	APR           *float64                 `json:"apr"`
+	APRStatus     string                   `json:"aprStatus"`
+	APY           *float64                 `json:"apy"`
+	Allocation    *StakeDAOAllocation      `json:"allocation,omitempty"`
+	Diagnostics   *StakeDAOPoolDiagnostics `json:"diagnostics,omitempty"`
 
 	RewardMechanism   string           `json:"rewardMechanism"`
 	AccountantAddress *common.Address  `json:"accountantAddress" swaggertype:"string"`
@@ -56,10 +57,12 @@ type StakeDAOReward struct {
 }
 
 type StakeDAOPoolsResponse struct {
-	Network     string              `json:"network"`
-	BlockNumber uint64              `json:"blockNumber"`
-	Pools       []StakeDAOPool      `json:"pools"`
-	Errors      []StakeDAOPoolError `json:"errors,omitempty"`
+	Network        string              `json:"network"`
+	BlockNumber    uint64              `json:"blockNumber"`
+	BlockTimestamp uint64              `json:"blockTimestamp,omitempty"`
+	RPCAttempts    int                 `json:"rpcAttempts,omitempty"`
+	Pools          []StakeDAOPool      `json:"pools"`
+	Errors         []StakeDAOPoolError `json:"errors,omitempty"`
 }
 
 type StakeDAOPoolError struct {

@@ -58,6 +58,7 @@ type StakeDAOService struct {
 	snapshotTime    uint64
 	deploymentBlock uint64
 	configErr       error
+	diagnostics     bool
 	batches         *snapshotBatcher
 	networks        map[string]stakeDAONetwork
 	dial            func(context.Context, string) (stakeDAORPC, error)
@@ -137,6 +138,7 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 		return nil, fmt.Errorf("%w: expected chain ID %d", ErrRPCUnavailable, config.chainID)
 	}
 	worker := &StakeDAOService{registry: s.registry, client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock}
+	worker.diagnostics = sample != nil && sample.diagnostics
 	return worker.getPoolsSelected(ctx, network, sample)
 }
 
@@ -255,6 +257,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	for i := range response.Pools {
 		response.Errors = append(response.Errors, s.valuePool(ctx, &response.Pools[i])...)
 		response.Errors = append(response.Errors, s.valueRewards(ctx, &response.Pools[i])...)
+		if s.diagnostics {
+			s.addPoolDiagnostics(ctx, block, &response.Pools[i])
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -269,6 +274,12 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	}
 	if finalHeader == nil || finalHeader.Hash() != header.Hash() {
 		return nil, errors.New("StakeDAO snapshot block was reorganized; retry the request")
+	}
+	if s.diagnostics {
+		response.BlockTimestamp = s.snapshotTime
+		if client, ok := s.client.(*sampleRPC); ok {
+			response.RPCAttempts = 300 - client.remaining
+		}
 	}
 	return response, nil
 }
@@ -599,7 +610,7 @@ func (s *StakeDAOService) valuePool(ctx context.Context, pool *dto.StakeDAOPool)
 	if s.prices == nil {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Token price service is unavailable")}
 	}
-	price, err := s.prices.GetTokenPrice(ctx, pool.AssetAddress, s.chainID)
+	price, err := s.valuationPrice(ctx, pool, pool.AssetAddress)
 	if err != nil {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Fresh USD price for the underlying asset/LP token is unavailable")}
 	}
@@ -889,6 +900,8 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 		return decimal.Zero, errors.New("invalid fee fractions")
 	}
 	lockerRate, sidecarRate := decimal.Zero, decimal.Zero
+	var placements []dto.ConvexPlacement
+	var lockerInputs *dto.LockerRateDiagnostic
 	seen := map[common.Address]bool{}
 	for _, target := range targets {
 		step("allocation_target", allocator, "getAllocationTargets", "Allocation target is zero or duplicated")
@@ -905,6 +918,9 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			killed, ok := out[0].(bool)
 			if !ok {
 				return decimal.Zero, errors.New("invalid gauge status")
+			}
+			if s.diagnostics {
+				lockerInputs = &dto.LockerRateDiagnostic{Killed: killed}
 			}
 			if killed {
 				continue
@@ -934,6 +950,10 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			supply, err := gaugeData[3].unsigned()
 			if err != nil {
 				return decimal.Zero, err
+			}
+			if lockerInputs != nil {
+				lockerInputs.InflationRaw, lockerInputs.RelativeWeightRaw = inflation.String(), weight.String()
+				lockerInputs.WorkingBalanceRaw, lockerInputs.WorkingSupplyRaw = working.String(), supply.String()
 			}
 			if working.Sign() == 0 {
 				continue
@@ -1004,6 +1024,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			if len(identity) != 6 || identity[0].(common.Address) != info.Asset || identity[2].(common.Address) != info.Gauge || identity[3].(common.Address) != rewardPool {
 				return decimal.Zero, errors.New("Convex pool identity mismatch")
 			}
+			placements = append(placements, dto.ConvexPlacement{Address: target, PID: pid.String(), RewardPool: rewardPool})
 			rewardData := s.snapshotCalls(ctx, block,
 				readContract(rewardPool, convexPoolABI, "rewardToken"),
 				readContract(rewardPool, convexPoolABI, "periodFinish"),
@@ -1053,6 +1074,17 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 		return decimal.Zero, errors.New("reward decimals unavailable")
 	}
 	net := netPrimaryRate(lockerRate, sidecarRate, pf, hf)
+	if s.diagnostics {
+		shift := -int32(decimals.Uint64())
+		pool.Diagnostics = &dto.StakeDAOPoolDiagnostics{Primary: &dto.PrimaryRateDiagnostic{
+			Unit: "reward tokens/second", Locker: locker, LockerInputs: lockerInputs,
+			LockerGrossRate: lockerRate.Shift(shift).String(), ConvexGrossRate: sidecarRate.Shift(shift).String(),
+			ProtocolFeeFraction: pf.String(), HarvestFeeFraction: hf.String(),
+			ProtocolFeeRate: lockerRate.Mul(pf).Shift(shift).String(),
+			HarvestFeeRate:  lockerRate.Add(sidecarRate).Mul(hf).Shift(shift).String(),
+			NetRate:         net.Shift(shift).String(), Sidecars: placements,
+		}}
+	}
 	return net.Shift(-int32(decimals.Uint64())), nil
 }
 
@@ -1089,7 +1121,7 @@ func (s *StakeDAOService) valueRewards(ctx context.Context, pool *dto.StakeDAOPo
 				complete = false
 				continue
 			}
-			price, err := s.prices.GetTokenPrice(ctx, reward.Token, s.chainID)
+			price, err := s.valuationPrice(ctx, pool, reward.Token)
 			if err != nil || !price.IsPositive() {
 				complete = false
 				issues = append(issues, poolIssue(pool.GaugeAddress, "apr", "Active reward token USD price is unavailable"))

@@ -488,6 +488,9 @@ func TestMetaRegistryValuesAllComponentsAndUsesTheLPTokenSupply(t *testing.T) {
 				t.Fatalf("wrong NAV: sameAddress=%t decimals=%d price=%s err=%v", sameAddress, lpDecimals, price, err)
 			}
 			quote, _, _ := store.Get(context.Background(), TokenKey{1, lp})
+			if quote.Source != "curve_metaregistry_nav" || quote.SourceContract != pool || quote.BlockNumber != snapshot.Block || len(quote.Components) != 2 {
+				t.Fatalf("MetaRegistry provenance lost: %+v", quote)
+			}
 			if quote.ValidUntil.After(quote.UpdatedAt.Add(15*time.Minute)) || f.calls[pool.Hex()+":get_balances"] != 0 || f.calls[lp.Hex()+":totalSupply"] != 1 {
 				t.Fatal("units, quote freshness or contract targets were lost")
 			}
@@ -658,6 +661,18 @@ func TestContractLPPriceUsesAllBalancesAndSupply(t *testing.T) {
 			t.Fatal("component price not cached")
 		}
 		q, _, _ := store.Get(context.Background(), TokenKey{1, pool})
+		if q.Source != "curve_stableswap_ng_nav" || q.BlockNumber != snapshot.Block || len(q.Components) != 2 || component.Source != "erc4626_conversion" || len(component.Components) != 1 || component.Components[0] != usdt {
+			t.Fatalf("NG/ERC4626 provenance lost: %+v %+v", q, component)
+		}
+		provenance, err := s.GetTokenQuote(context.Background(), pool, 1)
+		if err != nil || provenance.Source != q.Source || !provenance.USD.Equal(p) {
+			t.Fatal("price and quote disagree")
+		}
+		provenance.Components[0] = common.Address{}
+		again, _ := s.GetTokenQuote(context.Background(), pool, 1)
+		if again.Components[0] == (common.Address{}) {
+			t.Fatal("caller modified shared cached provenance")
+		}
 		if q.ValidUntil.After(component.UpdatedAt.Add(15 * time.Minute)) {
 			t.Fatal("LP quote extended component freshness")
 		}

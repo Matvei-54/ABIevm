@@ -21,6 +21,11 @@ type TokenKey struct {
 type Quote struct {
 	USD       decimal.Decimal
 	UpdatedAt time.Time
+	// Provenance is optional for older/custom sources. Zero block means unknown.
+	Source         string
+	SourceContract common.Address
+	BlockNumber    uint64
+	Components     []common.Address
 	// ValidUntil bounds the oracle validity of a derived quote, independently
 	// of the cache refresh interval. Zero preserves sources without this field.
 	ValidUntil time.Time
@@ -46,6 +51,7 @@ func (m *MemoryStore) Get(ctx context.Context, key TokenKey) (Quote, bool, error
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	quote, ok := m.quotes[key]
+	quote.Components = append([]common.Address(nil), quote.Components...)
 	return quote, ok, nil
 }
 
@@ -58,6 +64,7 @@ func (m *MemoryStore) Set(ctx context.Context, key TokenKey, quote Quote) error 
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	quote.Components = append([]common.Address(nil), quote.Components...)
 	m.quotes[key] = quote
 	return nil
 }
@@ -86,15 +93,21 @@ func NewTokenPriceService(store Store, source Source) *TokenPriceService {
 }
 
 func (s *TokenPriceService) GetTokenPrice(ctx context.Context, token common.Address, chainID int64) (decimal.Decimal, error) {
+	quote, err := s.GetTokenQuote(ctx, token, chainID)
+	return quote.USD, err
+}
+
+// GetTokenQuote exposes the same validated cache entry, without extra RPC.
+func (s *TokenPriceService) GetTokenQuote(ctx context.Context, token common.Address, chainID int64) (Quote, error) {
 	quote, found, err := s.store.Get(ctx, TokenKey{ChainID: chainID, Address: token})
 	if err != nil {
-		return decimal.Zero, err
+		return Quote{}, err
 	}
 	age := s.now().Sub(quote.UpdatedAt)
 	if !found || !quote.USD.IsPositive() || age > s.maxAge || age < -time.Minute || (!quote.ValidUntil.IsZero() && !s.now().Before(quote.ValidUntil)) {
-		return decimal.Zero, fmt.Errorf("%w: chain %d token %s", ErrPriceUnavailable, chainID, token.Hex())
+		return Quote{}, fmt.Errorf("%w: chain %d token %s", ErrPriceUnavailable, chainID, token.Hex())
 	}
-	return quote.USD, nil
+	return quote, nil
 }
 
 func (s *TokenPriceService) EnsurePrices(ctx context.Context, chainID int64, tokens []common.Address) error {

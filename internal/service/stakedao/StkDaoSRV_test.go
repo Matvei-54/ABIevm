@@ -59,6 +59,9 @@ type fixtureRPC struct {
 	strategyAddress      common.Address
 	totalAssets          *big.Int
 	shutdown             map[common.Address]bool
+	utilityRate          *big.Int
+	utilityCalls         int
+	convexSupply         *big.Int
 }
 
 func (f *fixtureRPC) ChainID(context.Context) (*big.Int, error)   { return big.NewInt(1), nil }
@@ -116,7 +119,7 @@ func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, bloc
 }
 
 func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
-	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveControllerABI, convexPoolABI, convexBoosterABI} {
+	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI} {
 		parsed, _ := abi.JSON(strings.NewReader(abiJSON))
 		method, err := parsed.MethodById(call.Data[:4])
 		if err != nil {
@@ -129,6 +132,14 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			return nil, errors.New("fixture call failed")
 		}
 		switch method.Name {
+		case "rewardRates":
+			f.utilityCalls++
+			rate := f.utilityRate
+			if rate == nil {
+				rate = helperCRVRate(big.NewInt(2000000000000000000), big.NewInt(1000000), 10000, 0)
+			}
+			cvx := common.HexToAddress("0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B")
+			return method.Outputs.Pack([]common.Address{f.rewardToken, cvx, cvx}, []*big.Int{rate, new(big.Int), big.NewInt(7)})
 		case "strategy":
 			address := common.Address{}
 			if f.fullPrimary {
@@ -207,6 +218,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			}
 			return method.Outputs.Pack(big.NewInt(500000))
 		case "totalSupply":
+			if *call.To == common.HexToAddress("0x1237") && f.convexSupply != nil {
+				return method.Outputs.Pack(f.convexSupply)
+			}
 			if len(method.Inputs) == 1 {
 				if f.accountantSupplyFail {
 					return nil, errors.New("accounting RPC failed: https://rpc.invalid/private-key")
@@ -1021,5 +1035,105 @@ func TestMissingActiveExtraPriceMakesAPRPartial(t *testing.T) {
 	pool := result.Pools[0]
 	if pool.APR == nil || pool.APRStatus != "partial" || len(pool.Rewards) != 2 || pool.Rewards[1].APR != nil {
 		t.Fatalf("missing active price treated as zero/complete: %+v", pool)
+	}
+}
+
+func TestConvexDiagnosticsRetainSourcesAndNeverChangeRewardAmounts(t *testing.T) {
+	for _, tc := range []struct{ name, status string }{
+		{"matched", "matched"}, {"different-rate", "mismatch"}, {"unreadable", "unavailable"}, {"zero-supply", "zero_supply"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			s.client, s.chainID, s.snapshotTime = f, 1, 1
+			f.rewardToken = common.HexToAddress("0xD533a949740bb3306d119CC777fa900bA034cd52")
+			switch tc.name {
+			case "different-rate":
+				f.utilityRate = big.NewInt(1)
+			case "unreadable":
+				f.callFailure = "rewardRates"
+			case "zero-supply":
+				f.convexSupply = new(big.Int)
+			}
+			pool := dto.StakeDAOPool{GaugeAddress: common.HexToAddress("0xaa"), AssetAddress: common.HexToAddress("0xcc"), Diagnostics: &dto.StakeDAOPoolDiagnostics{
+				Primary: &dto.PrimaryRateDiagnostic{ConvexGrossRate: "1", NetRate: "1.1688", Sidecars: []dto.ConvexPlacement{{Address: common.HexToAddress("0x1236"), PID: "1", RewardPool: common.HexToAddress("0x1237")}}},
+			}}
+			s.addPoolDiagnostics(context.Background(), big.NewInt(4500), &pool)
+			d := pool.Diagnostics.Convex
+			if d == nil || d.Status != tc.status || pool.Diagnostics.Primary.NetRate != "1.1688" || len(pool.Rewards) != 0 {
+				t.Fatalf("control changed accounting or status: %+v", d)
+			}
+			if tc.name == "matched" {
+				if len(d.Slots) != 3 || d.Slots[1].Token != d.Slots[2].Token || d.Slots[1].Source == d.Slots[2].Source || d.RoundingDifference == nil || *d.RoundingDifference != "0" || *d.OwnSidecarRate != "1" {
+					t.Fatalf("units, duplicate source or placement lost: %+v", d)
+				}
+			}
+			for _, number := range f.callBlocks {
+				if number != 4500 {
+					t.Fatal("control used another block")
+				}
+			}
+		})
+	}
+}
+
+func TestPrimaryDiagnosticBreakdownIsOptionalAndReconcilesFees(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		s, f := newPoolFixture(t)
+		f.fullPrimary, f.sidecar = true, true
+		s.client, s.controller, s.chainID, s.diagnostics = f, f.controller, 1, enabled
+		result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{limit: 1, gauges: []common.Address{common.HexToAddress("0xaa")}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := result.Pools[0]
+		if !enabled {
+			if p.Diagnostics != nil || f.utilityCalls != 0 {
+				t.Fatal("normal sample added control requests")
+			}
+			continue
+		}
+		d := p.Diagnostics.Primary
+		if d == nil || d.LockerGrossRate != "0.2" || d.ConvexGrossRate != "1" || d.ProtocolFeeRate != "0.03" || d.HarvestFeeRate != "0.0012" || d.NetRate != "1.1688" {
+			t.Fatalf("fee breakdown incorrect: %+v", d)
+		}
+		if len(p.Rewards) != 1 || p.Rewards[0].Source != "curve-primary-net" || *p.Rewards[0].RatePerSecond != d.NetRate {
+			t.Fatal("diagnostic net differs from actual reward")
+		}
+	}
+}
+
+func TestHelperRateRespectsExpiryAndIntegerRounding(t *testing.T) {
+	raw, supply := big.NewInt(7), big.NewInt(3)
+	want := "2333333333333333333"
+	if helperCRVRate(raw, supply, 10, 10).String() != want || helperCRVRate(raw, supply, 10, 11).Sign() != 0 || helperCRVRate(raw, new(big.Int), 10, 1).Sign() != 0 {
+		t.Fatal("expiry/units/zero-supply comparison incorrect")
+	}
+	if raw.Int64() != 7 || supply.Int64() != 3 {
+		t.Fatal("comparison mutated original inputs")
+	}
+}
+
+func TestDiagnosticQuoteRetainsThePriceActuallyUsed(t *testing.T) {
+	ctx := context.Background()
+	store := prices.NewMemoryStore()
+	token := common.HexToAddress("0xaa")
+	q := prices.Quote{USD: decimal.NewFromInt(2), UpdatedAt: time.Now(), Source: "original", BlockNumber: 100}
+	if err := store.Set(ctx, prices.TokenKey{ChainID: 1, Address: token}, q); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStakeDAOService(prices.NewTokenPriceService(store, nil))
+	s.chainID, s.diagnostics = 1, true
+	pool := dto.StakeDAOPool{AssetAddress: token}
+	used, err := s.valuationPrice(ctx, &pool, token)
+	if err != nil || used.String() != "2" {
+		t.Fatal("initial valuation failed")
+	}
+	q.USD, q.Source, q.BlockNumber = decimal.NewFromInt(3), "refreshed", 101
+	if err := store.Set(ctx, prices.TokenKey{ChainID: 1, Address: token}, q); err != nil {
+		t.Fatal(err)
+	}
+	s.addPoolDiagnostics(ctx, big.NewInt(100), &pool)
+	if len(pool.Diagnostics.Prices) != 1 || pool.Diagnostics.Prices[0].USD != "2" || pool.Diagnostics.Prices[0].BlockNumber != 100 {
+		t.Fatal("report substituted a later quote")
 	}
 }
