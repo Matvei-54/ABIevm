@@ -1,0 +1,149 @@
+{
+  "coverage": {
+    "requestedWebsite": "https://docs.convexfinance.com/convexfinance",
+    "websitePagesRead": 0,
+    "websiteStatus": "blocked_http_403",
+    "officialWebsiteExportAvailable": false,
+    "officialReadmes": [
+      {
+        "url": "https://github.com/convex-eth/platform/blob/4f22038387ca4ce014dec3d7f5781a8e28051c13/README.md",
+        "bytes": 4447,
+        "sha256": "ffa335b620938bde8d5394500129a0de26e9960109b32153f588cffddeae748d",
+        "substantive": true
+      },
+      {
+        "url": "https://github.com/convex-eth/sidechain-platform/blob/72ef3da1e27d2fd515368bbfbfd364e80e40fb04/README.md",
+        "bytes": 4849,
+        "sha256": "00c8df1b708cfd6e3d24a177176b72966af23312217213debe760b6a851c00ae",
+        "substantive": true
+      },
+      {
+        "url": "https://github.com/convex-eth/frax-cvx-platform/blob/main/README.md",
+        "bytes": 2815,
+        "sha256": "35c0e86fb6dc74766ec0221f1f45e0e3a3cb62e4ea1c22450897310ea44fa348",
+        "substantive": true
+      },
+      {
+        "url": "https://github.com/convex-eth/function_x/blob/main/README.md",
+        "bytes": 3243,
+        "sha256": "fbcfcef32e04c4e1fe9fb0b8fc60b1768d23a69c6ce4f9489b0400025feb3d74",
+        "substantive": true
+      },
+      {
+        "url": "https://github.com/convex-eth/voting/blob/main/README.md",
+        "bytes": 18072,
+        "sha256": "ece4644181599a9ddf515590f13ac5c34bf0ef39c5873d41ba61c4bd14186fbf",
+        "substantive": true
+      },
+      {
+        "url": "https://github.com/convex-eth/utilities/blob/main/README.md",
+        "bytes": 18,
+        "sha256": "95988530dfa7f9c3cd5b1c526503da6520104189b02108442c4759a2a42b9448",
+        "substantive": false
+      },
+      {
+        "url": "https://github.com/convex-eth/prisma/blob/main/README.md",
+        "bytes": 24,
+        "sha256": "486fbdef2a3e8142696884c0c585e97575cf9dcea2894c3dd02d69951196ebb2",
+        "substantive": false
+      }
+    ],
+    "contractFilesReviewed": [
+      "PoolUtilities.sol",
+      "CvxCrvUtilities.sol",
+      "Booster.sol",
+      "BaseRewardPool.sol",
+      "VirtualBalanceRewardPool.sol",
+      "Cvx.sol",
+      "StashTokenWrapper.sol",
+      "CvxMining.source.sol"
+    ],
+    "platformCommit": "4f22038387ca4ce014dec3d7f5781a8e28051c13",
+    "sidechainCommit": "72ef3da1e27d2fd515368bbfbfd364e80e40fb04"
+  },
+  "onchain": {
+    "chainId": 1,
+    "blockNumber": 26348670,
+    "blockTimestamp": 1793882147,
+    "rpcAttempts": 21,
+    "poolUtilities": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+    "cvxMining": "0x3c75bfe6fbfda3a94e7e7e8c2216afc684de5343",
+    "utilityBooster": "0xf403c135812408bfbe8713b5a23a04b3d48aae31",
+    "utilityCvxMining": "0x3c75bfe6fbfda3a94e7e7e8c2216afc684de5343",
+    "pools": [
+      {
+        "pid": 182,
+        "lpToken": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+        "convexDepositToken": "0x75a2f59ec37c18962c53b0244d60b53f749df25e",
+        "gauge": "0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1",
+        "crvRewards": "0x44d8fab7cd8b7877d5f79974c2f501af6e65abba",
+        "stash": "0x0ff5ebe7e04523e35a46544201190be12a51d5f8",
+        "shutdown": false,
+        "rewardTokens": [
+          "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "0x01791f726b4103694969820be083196cc7c045ff"
+        ],
+        "ratesRaw": [
+          "5122580168",
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      {
+        "pid": 69,
+        "lpToken": "0x90244f43d548a4f8dfecfad91a193465b1fad6f7",
+        "convexDepositToken": "0x7e72dda16b916c986972b1c9f3fbfae67d96d733",
+        "gauge": "0x009acd89535dabc270c93f9b39d3232105fef453",
+        "crvRewards": "0xaa0e8ef60babda02ef11c89a061d82b1d61a462c",
+        "stash": "0xac86e1b070b8364d49fa34cdc3e2fa6e98674873",
+        "shutdown": false,
+        "rewardTokens": [
+          "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b"
+        ],
+        "ratesRaw": [
+          "0",
+          "0"
+        ]
+      }
+    ],
+    "referenceRewardPool": {
+      "rewardRateRaw": "40573308640085120",
+      "totalSupplyRaw": "7920482901851079219537010",
+      "periodFinish": 1794094067,
+      "utilityCrvRateMatchesIntegerFormula": true
+    },
+    "oneCrvToMintedCvxRaw": "0",
+    "cvxSupplyRaw": "100000000000000000000000000",
+    "cvxMaxSupplyRaw": "100000000000000000000000000",
+    "aprCalculatorExample": {
+      "rateRaw": "1000000000",
+      "rewardPriceRaw": "200000000",
+      "depositPriceRaw": "100000000",
+      "resultRaw": "63072000000000000",
+      "assumedLpDecimals": 18,
+      "assumedRewardDecimals": 18,
+      "annualFraction": "0.063072",
+      "percent": "6.3072"
+    },
+    "boosterFeeParameters": {
+      "lockIncentive": "1000",
+      "stakerIncentive": "450",
+      "earmarkIncentive": "50",
+      "platformFee": "200",
+      "FEE_DENOMINATOR": "10000"
+    },
+    "boosterFeeTotalNumerator": "1700",
+    "boosterFeePercent": "17",
+    "treasury": "0x1389388d01708118b497f59521f6943be2541bb7"
+  },
+  "sourceVerification": {
+    "poolUtilitiesGithubMatchesVerifiedExplorerSource": true,
+    "staticAddressBookPoolCount": 66,
+    "staticPoolListIncludesPid182": false
+  },
+  "runtimeChanged": false
+}
