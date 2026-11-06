@@ -115,6 +115,37 @@ definitions:
       unit:
         type: string
     type: object
+  dto.ReaderModelDiagnostic:
+    properties:
+      actualCrvApr:
+        type: number
+      cappedReferenceSidecarCrvRate:
+        type: string
+      differencePercentagePoints:
+        type: number
+      globalPoolCrvRate:
+        type: string
+      globalProtocolFeeApr:
+        type: number
+      grossMinApr:
+        type: number
+      message:
+        type: string
+      ownSidecarCrvRate:
+        type: string
+      referenceApr:
+        type: number
+      scope:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      weightedBoost:
+        type: number
+      withoutHarvestFeeApr:
+        type: number
+    type: object
   dto.StakeDAOAllocation:
     properties:
       accountedAssets:
@@ -191,6 +222,8 @@ definitions:
         type: array
       primary:
         $ref: '#/definitions/dto.PrimaryRateDiagnostic'
+      readerModel:
+        $ref: '#/definitions/dto.ReaderModelDiagnostic'
     type: object
   dto.StakeDAOPoolError:
     properties:
@@ -226,6 +259,8 @@ definitions:
     type: object
   dto.StakeDAOPoolsResponse:
     properties:
+      blockHash:
+        type: string
       blockNumber:
         type: integer
       blockTimestamp:
@@ -242,6 +277,8 @@ definitions:
         type: array
       rpcAttempts:
         type: integer
+      strictPrices:
+        type: boolean
     type: object
   dto.StakeDAOPoolsSummaryResponse:
     properties:
@@ -411,6 +448,15 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: Десятичный номер блока; включает строгие цены этого блока
+        in: query
+        name: block
+        type: string
+      - default: false
+        description: Изолированные цены выбранного блока без общего кэша
+        in: query
+        name: strictPrices
+        type: boolean
       produces:
       - application/json
       responses:

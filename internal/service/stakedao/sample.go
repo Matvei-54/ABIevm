@@ -25,6 +25,17 @@ func (s *StakeDAOService) GetRewardDiagnostics(ctx context.Context, network stri
 // GetPoolDiagnostics checks a fixed, bounded set; every hint is verified against
 // current Controller state. The extra reference reads never run in GetPools.
 func (s *StakeDAOService) GetPoolDiagnostics(ctx context.Context, network string, limit int) (*dto.StakeDAOPoolsResponse, error) {
+	return s.GetPoolDiagnosticsAt(ctx, network, limit, DiagnosticOptions{})
+}
+
+// DiagnosticOptions never affect the ordinary full-registry request. An
+// explicit block always enables isolated prices; zero selects the current head.
+type DiagnosticOptions struct {
+	BlockNumber  uint64
+	StrictPrices bool
+}
+
+func (s *StakeDAOService) GetPoolDiagnosticsAt(ctx context.Context, network string, limit int, options DiagnosticOptions) (*dto.StakeDAOPoolsResponse, error) {
 	if limit != 2 && limit != 5 {
 		return nil, errors.New("diagnostics limit must be 2 or 5")
 	}
@@ -35,7 +46,8 @@ func (s *StakeDAOService) GetPoolDiagnostics(ctx context.Context, network string
 		common.HexToAddress("0x52618c40ddba3cbbb69f3aaa4cb26ae649844b17"), // frxUSD/sUSDS: NG + ERC4626 component
 		common.HexToAddress("0x4e6bb6b7447b7b2aa268c16ab87f4bb48bf57939"), // crvUSD/USDT: MetaRegistry, mixed decimals
 	}
-	return s.getPoolsWithSelection(ctx, network, &poolSample{limit: limit, gauges: gauges[:limit], diagnostics: true})
+	return s.getPoolsWithSelection(ctx, network, &poolSample{limit: limit, gauges: gauges[:limit], diagnostics: true,
+		blockNumber: options.BlockNumber, strictPrices: options.StrictPrices || options.BlockNumber != 0})
 }
 
 type poolSample struct {
@@ -43,6 +55,8 @@ type poolSample struct {
 	limit              int
 	gauges             []common.Address
 	diagnostics        bool
+	blockNumber        uint64
+	strictPrices       bool
 }
 
 // GetPoolsForGauges checks explicitly selected gauges against current Controller

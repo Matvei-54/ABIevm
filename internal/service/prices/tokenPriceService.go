@@ -92,6 +92,17 @@ func NewTokenPriceService(store Store, source Source) *TokenPriceService {
 	return &TokenPriceService{store: store, source: source, maxAge: 15 * time.Minute, now: time.Now, refresh: make(chan struct{}, 1)}
 }
 
+// NewSnapshotPriceService isolates diagnostic quotes from the application's
+// current-price cache. Freshness is evaluated at the requested block's time,
+// so a historical comparison never substitutes today's price or expires merely
+// because the block is old. Oracle validity is still checked by ContractSource.
+func NewSnapshotPriceService(timestamp uint64) *TokenPriceService {
+	store := NewMemoryStore()
+	s := NewTokenPriceService(store, NewContractSource(store))
+	s.now = func() time.Time { return time.Unix(int64(timestamp), 0) }
+	return s
+}
+
 func (s *TokenPriceService) GetTokenPrice(ctx context.Context, token common.Address, chainID int64) (decimal.Decimal, error) {
 	quote, err := s.GetTokenQuote(ctx, token, chainID)
 	return quote.USD, err

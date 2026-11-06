@@ -282,6 +282,18 @@ func TestStakeDAORoute(t *testing.T) {
 			t.Fatalf("invalid diagnostics limit accepted: %s", limit)
 		}
 	}
+	for _, query := range []string{"block=0", "block=-1", "block=", "block=latest", "block=0xff", "block=18446744073709551616", "strictPrices=bad", "strictPrices="} {
+		response = httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?"+query, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid snapshot argument accepted: %s: %s", query, response.Body.String())
+		}
+	}
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?block=18446744073709551615", nil))
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "beyond the current head") {
+		t.Fatalf("future snapshot error lost: %s", response.Body.String())
+	}
 	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/base", nil))
 	if response.Code != http.StatusBadRequest {

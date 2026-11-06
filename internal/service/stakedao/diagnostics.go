@@ -2,6 +2,7 @@ package stakedao
 
 import (
 	"context"
+	"math"
 	"math/big"
 	"strconv"
 
@@ -219,4 +220,101 @@ func helperCRVRate(raw, supply *big.Int, finish, timestamp uint64) *big.Int {
 		return new(big.Int)
 	}
 	return new(big.Int).Quo(new(big.Int).Mul(raw, new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)), supply)
+}
+
+// Public @stake-dao/reader@0.5.52 getOnlyboostData uses the whole stored
+// BaseRewardPool rate divided by Sidecar TVL, then caps at maxApr. Published
+// Hub samples satisfy CRV APR = minApr * weighted boost * (1 - protocolFee).
+// Keep this reference out of actual rewards and label the private-Hub gap.
+func addReaderModel(block uint64, pool *dto.StakeDAOPool) {
+	d := &dto.ReaderModelDiagnostic{
+		Status: "unavailable", Source: "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+		Scope:   "CRV only; public-reader reference, not a block-verified live UI value",
+		Message: "Complete CRV inputs and prices from the selected block are required",
+	}
+	pool.Diagnostics.ReaderModel = d
+	p := pool.Diagnostics.Primary
+	crv := common.HexToAddress("0xD533a949740bb3306d119CC777fa900bA034cd52")
+	if p == nil || p.LockerInputs == nil || pool.RewardToken == nil || *pool.RewardToken != crv || pool.AssetDecimals == nil || *pool.AssetDecimals != 18 || pool.AssetAmount == nil {
+		return
+	}
+	var lpPrice, crvPrice decimal.Decimal
+	for _, q := range pool.Diagnostics.Prices {
+		if q.BlockNumber != block {
+			return
+		}
+		if q.Token == pool.AssetAddress {
+			lpPrice, _ = decimal.NewFromString(q.USD)
+		}
+		if q.Token == crv {
+			crvPrice, _ = decimal.NewFromString(q.USD)
+		}
+	}
+	assets, err := decimal.NewFromString(*pool.AssetAmount)
+	if err != nil || !assets.IsPositive() || !lpPrice.IsPositive() || !crvPrice.IsPositive() {
+		return
+	}
+	locker, errL := decimal.NewFromString(p.LockerGrossRate)
+	own, errO := decimal.NewFromString(p.ConvexGrossRate)
+	pf, errP := decimal.NewFromString(p.ProtocolFeeFraction)
+	hf, errH := decimal.NewFromString(p.HarvestFeeFraction)
+	if errL != nil || errO != nil || errP != nil || errH != nil {
+		return
+	}
+	unitMinRate := decimal.Zero
+	if !p.LockerInputs.Killed {
+		i, errI := decimal.NewFromString(p.LockerInputs.InflationRaw)
+		w, errW := decimal.NewFromString(p.LockerInputs.RelativeWeightRaw)
+		s, errS := decimal.NewFromString(p.LockerInputs.WorkingSupplyRaw)
+		if errI != nil || errW != nil || errS != nil || !s.IsPositive() {
+			return
+		}
+		unitMinRate = i.Mul(w.Shift(-18)).Mul(decimal.RequireFromString("0.4")).DivRound(s, 128)
+	}
+	tvl := assets.Mul(lpPrice)
+	annualFactor := crvPrice.Mul(decimal.NewFromInt(31536000)).Mul(decimal.NewFromInt(100)).DivRound(tvl, 128)
+	global, candidate, sidecarAssets := decimal.Zero, decimal.Zero, decimal.Zero
+	if len(p.Sidecars) != 0 {
+		c := pool.Diagnostics.Convex
+		if len(p.Sidecars) != 1 || c == nil || c.Status != "matched" || c.RewardRateRaw == nil || c.SidecarBalanceRaw == nil || pool.Allocation == nil || pool.Allocation.Status != "covered" {
+			return
+		}
+		raw, errR := decimal.NewFromString(*c.RewardRateRaw)
+		balance, errB := decimal.NewFromString(*c.SidecarBalanceRaw)
+		if errR != nil || errB != nil || balance.IsNegative() {
+			return
+		}
+		global = raw.Shift(-18)
+		sidecarAssets = balance.Shift(-18)
+		if sidecarAssets.GreaterThan(assets) {
+			return
+		}
+		candidate = decimal.Min(global, unitMinRate.Mul(decimal.RequireFromString("2.5")).Mul(sidecarAssets))
+	}
+	// Separate the policy differences instead of silently changing our APR.
+	actual := netPrimaryRate(locker, own, pf, hf).Mul(annualFactor)
+	noHarvest := locker.Add(own).Sub(locker.Mul(pf)).Mul(annualFactor)
+	globalFee := locker.Add(own).Mul(decimal.NewFromInt(1).Sub(pf)).Mul(annualFactor)
+	reference := locker.Add(candidate).Mul(decimal.NewFromInt(1).Sub(pf)).Mul(annualFactor)
+	minAPR := unitMinRate.Mul(crvPrice).Mul(decimal.NewFromInt(3153600000)).DivRound(lpPrice, 128)
+	boost := decimal.RequireFromString("2.5")
+	if unitMinRate.IsPositive() {
+		boost = locker.Add(candidate).DivRound(assets.Mul(unitMinRate), 128)
+	}
+	f := func(v decimal.Decimal) *float64 {
+		x, _ := v.Float64()
+		if math.IsInf(x, 0) || math.IsNaN(x) {
+			return nil
+		}
+		return &x
+	}
+	actualOwn, globalText, candidateText := own.String(), global.String(), candidate.String()
+	d.Status, d.Message = "available", "Private Hub formula and live UI block are not verified; reference values are not included in pool APR"
+	d.GrossMinAPR, d.WeightedBoost, d.ActualCRVAPR = f(minAPR), f(boost), f(actual)
+	d.WithoutHarvestFeeAPR, d.GlobalProtocolFeeAPR, d.ReferenceAPR = f(noHarvest), f(globalFee), f(reference)
+	d.DifferencePercentagePoints = f(reference.Sub(actual))
+	d.OwnSidecarCRVRate, d.GlobalPoolCRVRate, d.CappedReferenceSidecarCRVRate = &actualOwn, &globalText, &candidateText
+	if d.GrossMinAPR == nil || d.WeightedBoost == nil || d.ActualCRVAPR == nil || d.WithoutHarvestFeeAPR == nil || d.GlobalProtocolFeeAPR == nil || d.ReferenceAPR == nil || d.DifferencePercentagePoints == nil {
+		d.Status, d.Message = "unavailable", "Reference arithmetic cannot be represented as finite JSON numbers"
+	}
 }

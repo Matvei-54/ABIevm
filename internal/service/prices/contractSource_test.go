@@ -787,3 +787,32 @@ func TestContractSourceRequiresSnapshotAndHonorsCancellation(t *testing.T) {
 		t.Fatal("invalid request made RPC calls")
 	}
 }
+
+func TestIsolatedSnapshotPricesUseHistoricalTimeAndValidateOracles(t *testing.T) {
+	_, f, _, snapshot := newContractPriceFixture(t)
+	f.timestamp = uint64(time.Now().Add(-24 * time.Hour).Unix())
+	snapshot.Timestamp = f.timestamp
+	token := priceAddress(1)
+	feed := f.addFeed(token, 125000000, 8)
+	service := NewSnapshotPriceService(snapshot.Timestamp)
+	if err := service.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	quote, err := service.GetTokenQuote(context.Background(), token, 1)
+	if err != nil || quote.USD.String() != "1.25" || quote.BlockNumber != snapshot.Block || quote.UpdatedAt.Unix() != int64(snapshot.Timestamp) {
+		t.Fatalf("historical snapshot quote lost: %+v %v", quote, err)
+	}
+	// Another request gets a different map, even for the exact same token.
+	other := NewSnapshotPriceService(snapshot.Timestamp)
+	if _, err := other.GetTokenPrice(context.Background(), token, 1); !errors.Is(err, ErrPriceUnavailable) {
+		t.Fatal("snapshot caches leaked between requests")
+	}
+	// The historical clock does not bypass future/stale oracle round checks.
+	for _, invalidTime := range []uint64{snapshot.Timestamp + 1, snapshot.Timestamp - 7*24*3600} {
+		f.updated[feed] = invalidTime
+		s := NewSnapshotPriceService(snapshot.Timestamp)
+		if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot); err == nil {
+			t.Fatal("invalid oracle round accepted in strict mode")
+		}
+	}
+}

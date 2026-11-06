@@ -24,6 +24,11 @@ func TestInvalidCheckDoesNotMakeRequests(t *testing.T) {
 			t.Fatalf("invalid diagnostics selection accepted: %v", args)
 		}
 	}
+	for _, args := range [][]string{{"-block", "1"}, {"-strict-prices"}, {"-diagnostics", "-limit", "2", "-block", "0"}, {"-diagnostics", "-limit", "2", "-block", "-1"}} {
+		if err := run(context.Background(), args, io.Discard, io.Discard); err == nil {
+			t.Fatalf("invalid snapshot arguments accepted: %v", args)
+		}
+	}
 }
 
 func TestFileIsSavedOnlyAfterSuccessAndCanBeReplaced(t *testing.T) {

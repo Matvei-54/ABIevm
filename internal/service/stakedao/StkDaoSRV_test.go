@@ -62,13 +62,14 @@ type fixtureRPC struct {
 	utilityRate          *big.Int
 	utilityCalls         int
 	convexSupply         *big.Int
+	headerTime           uint64
 }
 
 func (f *fixtureRPC) ChainID(context.Context) (*big.Int, error)   { return big.NewInt(1), nil }
 func (f *fixtureRPC) BlockNumber(context.Context) (uint64, error) { return f.latest, nil }
 func (f *fixtureRPC) HeaderByNumber(_ context.Context, number *big.Int) (*types.Header, error) {
 	f.headerReads++
-	h := &types.Header{Number: new(big.Int).Set(number)}
+	h := &types.Header{Number: new(big.Int).Set(number), Time: f.headerTime}
 	if f.reorg && f.headerReads > 1 {
 		h.Extra = []byte("reorg")
 	}
@@ -1135,5 +1136,39 @@ func TestDiagnosticQuoteRetainsThePriceActuallyUsed(t *testing.T) {
 	s.addPoolDiagnostics(ctx, big.NewInt(100), &pool)
 	if len(pool.Diagnostics.Prices) != 1 || pool.Diagnostics.Prices[0].USD != "2" || pool.Diagnostics.Prices[0].BlockNumber != 100 {
 		t.Fatal("report substituted a later quote")
+	}
+}
+
+func TestReaderReferenceSeparatesGlobalRateCapAndFeePolicies(t *testing.T) {
+	for _, globalRate := range []string{"1000000000000000000", "2000000000000000000"} {
+		crv := common.HexToAddress("0xd533a949740bb3306d119cc777fa900ba034cd52")
+		asset := common.HexToAddress("0xcc")
+		amount, balance, own, net := "100", "10000000000000000000", "0.1", "1.769475"
+		d18 := uint8(18)
+		p := dto.StakeDAOPool{AssetAddress: asset, AssetAmount: &amount, AssetDecimals: &d18, RewardToken: &crv,
+			Allocation: &dto.StakeDAOAllocation{Status: "covered"},
+			Diagnostics: &dto.StakeDAOPoolDiagnostics{
+				Primary: &dto.PrimaryRateDiagnostic{LockerGrossRate: "2", ConvexGrossRate: own, ProtocolFeeFraction: "0.165", HarvestFeeFraction: "0.00025", NetRate: net, Sidecars: []dto.ConvexPlacement{{PID: "1"}},
+					LockerInputs: &dto.LockerRateDiagnostic{InflationRaw: "10000000000000000000", RelativeWeightRaw: "1000000000000000000", WorkingSupplyRaw: "100000000000000000000"}},
+				Convex: &dto.ConvexRateDiagnostic{Status: "matched", RewardRateRaw: &globalRate, SidecarBalanceRaw: &balance},
+				Prices: []dto.PriceDiagnostic{{Token: asset, USD: "1", BlockNumber: 123}, {Token: crv, USD: "1", BlockNumber: 123}},
+			}}
+		addReaderModel(123, &p)
+		r := p.Diagnostics.ReaderModel
+		if r.Status != "available" || r.ReferenceAPR == nil {
+			t.Fatalf("reference missing: %+v", r)
+		}
+		factor := 31536000.0
+		if math.Abs(*r.ActualCRVAPR-1.769475*factor) > 1e-7 || math.Abs(*r.WithoutHarvestFeeAPR-1.77*factor) > 1e-7 || math.Abs(*r.GlobalProtocolFeeAPR-1.7535*factor) > 1e-7 || math.Abs(*r.ReferenceAPR-2.505*factor) > 1e-7 {
+			t.Fatalf("rate allocation / cap / fees mixed: %+v", r)
+		}
+		if *r.CappedReferenceSidecarCRVRate != "1" || p.Diagnostics.Primary.NetRate != net || len(p.Rewards) != 0 {
+			t.Fatal("reference changed actual rewards or did not cap the whole pool rate")
+		}
+		p.Diagnostics.Prices[0].BlockNumber = 122
+		addReaderModel(123, &p)
+		if p.Diagnostics.ReaderModel.Status != "unavailable" {
+			t.Fatal("reference accepted another block's price")
+		}
 	}
 }

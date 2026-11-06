@@ -214,6 +214,19 @@ const docTemplate = `{
                         "description": "Количество контрольных пулов",
                         "name": "limit",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Десятичный номер блока; включает строгие цены этого блока",
+                        "name": "block",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Изолированные цены выбранного блока без общего кэша",
+                        "name": "strictPrices",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -439,6 +452,53 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.ReaderModelDiagnostic": {
+            "type": "object",
+            "properties": {
+                "actualCrvApr": {
+                    "type": "number"
+                },
+                "cappedReferenceSidecarCrvRate": {
+                    "type": "string"
+                },
+                "differencePercentagePoints": {
+                    "type": "number"
+                },
+                "globalPoolCrvRate": {
+                    "type": "string"
+                },
+                "globalProtocolFeeApr": {
+                    "type": "number"
+                },
+                "grossMinApr": {
+                    "type": "number"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "ownSidecarCrvRate": {
+                    "type": "string"
+                },
+                "referenceApr": {
+                    "type": "number"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "weightedBoost": {
+                    "type": "number"
+                },
+                "withoutHarvestFeeApr": {
+                    "type": "number"
+                }
+            }
+        },
         "dto.StakeDAOAllocation": {
             "type": "object",
             "properties": {
@@ -550,6 +610,9 @@ const docTemplate = `{
                 },
                 "primary": {
                     "$ref": "#/definitions/dto.PrimaryRateDiagnostic"
+                },
+                "readerModel": {
+                    "$ref": "#/definitions/dto.ReaderModelDiagnostic"
                 }
             }
         },
@@ -605,6 +668,9 @@ const docTemplate = `{
         "dto.StakeDAOPoolsResponse": {
             "type": "object",
             "properties": {
+                "blockHash": {
+                    "type": "string"
+                },
                 "blockNumber": {
                     "type": "integer"
                 },
@@ -628,6 +694,9 @@ const docTemplate = `{
                 },
                 "rpcAttempts": {
                     "type": "integer"
+                },
+                "strictPrices": {
+                    "type": "boolean"
                 }
             }
         },

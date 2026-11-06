@@ -8,9 +8,29 @@ import (
 
 // Optional diagnostics never change the compact pool schema or calculated APR.
 type StakeDAOPoolDiagnostics struct {
-	Primary *PrimaryRateDiagnostic `json:"primary,omitempty"`
-	Convex  *ConvexRateDiagnostic  `json:"convex,omitempty"`
-	Prices  []PriceDiagnostic      `json:"prices,omitempty"`
+	Primary     *PrimaryRateDiagnostic `json:"primary,omitempty"`
+	Convex      *ConvexRateDiagnostic  `json:"convex,omitempty"`
+	Prices      []PriceDiagnostic      `json:"prices,omitempty"`
+	ReaderModel *ReaderModelDiagnostic `json:"readerModel,omitempty"`
+}
+
+// A public-reader reference and an observed Hub fee identity, not a claim that
+// the private Hub implementation or a live UI snapshot was obtained.
+type ReaderModelDiagnostic struct {
+	Status                        string   `json:"status"`
+	Source                        string   `json:"source"`
+	Scope                         string   `json:"scope"`
+	Message                       string   `json:"message,omitempty"`
+	GrossMinAPR                   *float64 `json:"grossMinApr"`
+	WeightedBoost                 *float64 `json:"weightedBoost"`
+	ActualCRVAPR                  *float64 `json:"actualCrvApr"`
+	WithoutHarvestFeeAPR          *float64 `json:"withoutHarvestFeeApr"`
+	GlobalProtocolFeeAPR          *float64 `json:"globalProtocolFeeApr"`
+	ReferenceAPR                  *float64 `json:"referenceApr"`
+	DifferencePercentagePoints    *float64 `json:"differencePercentagePoints"`
+	OwnSidecarCRVRate             *string  `json:"ownSidecarCrvRate"`
+	GlobalPoolCRVRate             *string  `json:"globalPoolCrvRate"`
+	CappedReferenceSidecarCRVRate *string  `json:"cappedReferenceSidecarCrvRate"`
 }
 
 type PrimaryRateDiagnostic struct {

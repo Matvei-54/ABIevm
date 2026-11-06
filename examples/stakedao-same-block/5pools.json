@@ -1,0 +1,856 @@
+{
+  "network": "ethereum",
+  "blockNumber": 26357109,
+  "blockTimestamp": 1793983739,
+  "blockHash": "0xf78c44fa843de3f97b27e97c509754e3d0584f3751e7bc1c81b8c471c6dd7741",
+  "strictPrices": true,
+  "rpcAttempts": 178,
+  "pools": [
+    {
+      "gaugeAddress": "0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1",
+      "vaultAddress": "0xd4467fbcbd3511112d2fd1af667e745d4987c8eb",
+      "assetAddress": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+      "rewardReceiver": "0x98f38dddea5c07bb934e8c9211b93effc17b57bf",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO Curve.fi Factory Plain Pool: crvUSD/USDC Vault",
+      "symbol": "sd-crvUSDUSDC-f-vault",
+      "assetSymbol": "crvUSDUSDC-f",
+      "assetAmount": "5306247.029447122184283680",
+      "assetDecimals": 18,
+      "tvl": 5444318.4093536,
+      "apr": 3.6693612604111103,
+      "aprStatus": "available",
+      "apy": null,
+      "allocation": {
+        "accountedAssets": "5306247.029447122184283680",
+        "physicalAssets": "5306247.029447122184283680",
+        "surplusAssets": "0.000000000000000000",
+        "status": "covered"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "24124417227633464",
+            "workingBalanceRaw": "3573026282607693750399851",
+            "workingSupplyRaw": "11049889729385333630554496"
+          },
+          "lockerGrossRate": "0.02403390710530338057550851232647347512951134633763270331543842154172840927254996795902237419169220292841628747470916612630855929899028140472371121",
+          "convexGrossRate": "0.00407896709377825554974429516929540511389109933847929048432964599504863312942056034537661797824318825571879493244505410997414077000582993313000352",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0.00396559467237505779495890453386812339636937214570939604704733955438518752997074471323869174162921348318868743332701241084091228433339643177941234965",
+          "harvestFeeRate": "0.0000070282185497704090313132018739422200608506114190279984499420168841942606004926320760997480424838477960337706017885550590706750172490278344634286825",
+          "netRate": "0.0241402513081568079212625897600268146269722229189835697542707859655076606113992909590842006802636938531503612032254192703827171096454658782398389516675",
+          "sidecars": [
+            {
+              "address": "0xbdf7f41e0ffeaa220fa49c4e89490cc6b1d2a961",
+              "pid": "182",
+              "rewardPool": "0x44d8fab7cd8b7877d5f79974c2f501af6e65abba"
+            }
+          ]
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "182",
+          "status": "matched",
+          "rewardPool": "0x44d8fab7cd8b7877d5f79974c2f501af6e65abba",
+          "rewardRateRaw": "40573308640085120",
+          "stakedSupplyRaw": "7920482901851079219537010",
+          "periodFinish": 1794094067,
+          "expectedCrvRateRaw": "5122580168",
+          "helperCrvRateRaw": "5122580168",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "5122580168"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "convex_extra:0",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x01791f726b4103694969820be083196cc7c045ff",
+              "source": "convex_extra:1",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": "0.00407896709377825554974429516929540511389109933847929048432964599504863312942056034537661797824318825571879493244505410997414077000582993313000352",
+          "helperOwnSidecarRate": "0.00407896709316704436754371834209964",
+          "roundingDifference": "0.00000000000061121118220057682719576511389109933847929048432964599504863312942056034537661797824318825571879493244505410997414077000582993313000352",
+          "sidecarBalanceRaw": "796271987825148736167855"
+        },
+        "prices": [
+          {
+            "token": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+            "usd": "1.026020533748287238582564002550474133",
+            "source": "curve_metaregistry_nav",
+            "sourceContract": "0x4dece678ceceb27446b35c672dc7d61f30bad69e",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e"
+            ]
+          },
+          {
+            "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+            "usd": "0.26241315",
+            "source": "chainlink_usd",
+            "sourceContract": "0xda0da298550e8e449b935cea865c8100f3ca1b73",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:12:11Z"
+          },
+          {
+            "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "usd": "0.99973",
+            "source": "chainlink_usd",
+            "sourceContract": "0x54bcc589d9743e521c64233706fc8cb36d275b07",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T10:51:11Z"
+          },
+          {
+            "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "usd": "0.99748968",
+            "source": "chainlink_usd",
+            "sourceContract": "0xf3a0a2363ee3e5fc1ccf923f4ea9c06bac1a6834",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T02:38:11Z"
+          }
+        ],
+        "readerModel": {
+          "status": "available",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Private Hub formula and live UI block are not verified; reference values are not included in pool APR",
+          "grossMinApr": 2.1701227899729085,
+          "weightedBoost": 2.0585633528675427,
+          "actualCrvApr": 3.6693612604111103,
+          "withoutHarvestFeeApr": 3.6704295621676675,
+          "globalProtocolFeeApr": 3.568127866900236,
+          "referenceApr": 3.730224930961849,
+          "differencePercentagePoints": 0.06086367055073852,
+          "ownSidecarCrvRate": "0.00407896709377825554974429516929540511389109933847929048432964599504863312942056034537661797824318825571879493244505410997414077000582993313000352",
+          "globalPoolCrvRate": "0.04057330864008512",
+          "cappedReferenceSidecarCrvRate": "0.005356111450704972370185210459144183409187582788286819246741013387421970671912502552356147888163558475106102789568838805626697704013915979445645375"
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.0241402513081568079212625897600268146269722229189835697542707859655076606113992909590842006802636938531503612032254192703827171096454658782398389516675",
+          "periodFinish": null,
+          "apr": 3.6693612604111103
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-11-06T16:49:01.908608984Z"
+    },
+    {
+      "gaugeAddress": "0x009acd89535dabc270c93f9b39d3232105fef453",
+      "vaultAddress": "0x35930db0c72609c39f29ba6266e09019a620b803",
+      "assetAddress": "0x90244f43d548a4f8dfecfad91a193465b1fad6f7",
+      "rewardReceiver": "0x6c1b8b59f9b4fc318dd96588910d9e95ada20427",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO Curve.fi Factory Crypto Pool: FXS/ETH Vault",
+      "symbol": "sd-FXSETH-f-vault",
+      "assetSymbol": "FXSETH-f",
+      "assetAmount": "0.147548075075193763",
+      "assetDecimals": 18,
+      "tvl": 8.645996396544048,
+      "apr": 0,
+      "aprStatus": "available",
+      "apy": null,
+      "allocation": {
+        "accountedAssets": "0.147548075075193763",
+        "physicalAssets": "0.150548075075193763",
+        "surplusAssets": "0.003000000000000000",
+        "status": "surplus"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "0",
+            "workingBalanceRaw": "150548075075193763",
+            "workingSupplyRaw": "29694623339803328108"
+          },
+          "lockerGrossRate": "0",
+          "convexGrossRate": "0",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0",
+          "harvestFeeRate": "0",
+          "netRate": "0",
+          "sidecars": null
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "69",
+          "status": "matched",
+          "message": "Convex pool reference only; no verified single Sidecar placement for this vault",
+          "rewardPool": "0xaa0e8ef60babda02ef11c89a061d82b1d61a462c",
+          "rewardRateRaw": "6331603197498358",
+          "stakedSupplyRaw": "40956596999650152103",
+          "periodFinish": 1686803891,
+          "expectedCrvRateRaw": "0",
+          "helperCrvRateRaw": "0",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": null,
+          "helperOwnSidecarRate": null,
+          "roundingDifference": null,
+          "sidecarBalanceRaw": null
+        },
+        "prices": [
+          {
+            "token": "0x90244f43d548a4f8dfecfad91a193465b1fad6f7",
+            "usd": "58.597825773991678275988736458554690531",
+            "source": "curve_metaregistry_nav",
+            "sourceContract": "0x941eb6f616114e4ecaa85377945ea306002612fe",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0"
+            ]
+          },
+          {
+            "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "usd": "2225.0666024",
+            "source": "chainlink_usd",
+            "sourceContract": "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:07:47Z"
+          },
+          {
+            "token": "0x3432b6a60d23ca0dfca7761b7ab56459d9c964d0",
+            "usd": "0.24382285",
+            "source": "chainlink_usd",
+            "sourceContract": "0x6ebc52c8c1089be9eb3945c4350b68b8e4c2233f",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:28:23Z"
+          },
+          {
+            "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+            "usd": "0.26241315",
+            "source": "chainlink_usd",
+            "sourceContract": "0xda0da298550e8e449b935cea865c8100f3ca1b73",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:12:11Z"
+          }
+        ],
+        "readerModel": {
+          "status": "available",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Private Hub formula and live UI block are not verified; reference values are not included in pool APR",
+          "grossMinApr": 0,
+          "weightedBoost": 2.5,
+          "actualCrvApr": 0,
+          "withoutHarvestFeeApr": 0,
+          "globalProtocolFeeApr": 0,
+          "referenceApr": 0,
+          "differencePercentagePoints": 0,
+          "ownSidecarCrvRate": "0",
+          "globalPoolCrvRate": "0",
+          "cappedReferenceSidecarCrvRate": "0"
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0",
+          "periodFinish": null,
+          "apr": 0
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-11-06T16:49:04.984127807Z"
+    },
+    {
+      "gaugeAddress": "0xbe6228125448e40f5dcbb2dbdf7ff3f5721000b4",
+      "vaultAddress": "0x08c5e4f760cb2efdb69865ed2d3a6eb2796be799",
+      "assetAddress": "0x3c0965582db7a0f660d491aa6174b9438f911c21",
+      "rewardReceiver": "0xbca59ad0270f1ece6a671d24dccf54e9d146b5d7",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO evaUSDC/evaUSDT Vault",
+      "symbol": "sd-evaUSDMAIN-vault",
+      "assetSymbol": "evaUSDMAIN",
+      "assetAmount": "3834044.453419549608053057",
+      "assetDecimals": 18,
+      "tvl": 3831278.729911575,
+      "apr": 9.207868258823366,
+      "aprStatus": "available",
+      "apy": null,
+      "allocation": {
+        "accountedAssets": "3834044.453419549608053057",
+        "physicalAssets": "3834044.453419549608053057",
+        "surplusAssets": "0.000000000000000000",
+        "status": "covered"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "18842853730713377",
+            "workingBalanceRaw": "1259763225259463052392546",
+            "workingSupplyRaw": "3541499661199379390819868"
+          },
+          "lockerGrossRate": "0.02065083797375097981926995941382201617603493172110063388157582491655157193312275126086749634756523667973049189855734782032170726210328239801905771",
+          "convexGrossRate": "0.02539760218032434645672156372370852411393533956275905894309065777478370585660086163884021375388246777295196669778180893083135820407006047548997143",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0.00340738826566891167017954330328063266904576373398160459046001111123100936896525395804313689734826405215553116326196239035308169824704159567314452215",
+          "harvestFeeRate": "0.000011512110038518831568997880784382635072492567820964923206166620672833819447430903224926927525361926113170614649084789187788266366543335718377257285",
+          "netRate": "0.042629539778367895774242981953465524985852014982057123311000304959431434601310928038439646276574078474413756818428109571612195501559757942117507360565",
+          "sidecars": [
+            {
+              "address": "0x9d3b01faab890a6ef5a965baf61964aebf2e9ea1",
+              "pid": "559",
+              "rewardPool": "0x630491d35e11724ce02117337c4157eaf118bf41"
+            }
+          ]
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "559",
+          "status": "matched",
+          "rewardPool": "0x630491d35e11724ce02117337c4157eaf118bf41",
+          "rewardRateRaw": "28352399219291376",
+          "stakedSupplyRaw": "2358346882243799768850044",
+          "periodFinish": 1794081671,
+          "expectedCrvRateRaw": "12022149681",
+          "helperCrvRateRaw": "12022149681",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "12022149681"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "convex_extra:0",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": "0.02539760218032434645672156372370852411393533956275905894309065777478370585660086163884021375388246777295196669778180893083135820407006047548997143",
+          "helperOwnSidecarRate": "0.025397602179216500908025702543638071",
+          "roundingDifference": "0.00000000000110784554869586118007045311393533956275905894309065777478370585660086163884021375388246777295196669778180893083135820407006047548997143",
+          "sidecarBalanceRaw": "2112567456996088028329191"
+        },
+        "prices": [
+          {
+            "token": "0x3c0965582db7a0f660d491aa6174b9438f911c21",
+            "usd": "0.999278640730023916772228865630938229",
+            "source": "curve_stableswap_ng_nav",
+            "sourceContract": "0x3c0965582db7a0f660d491aa6174b9438f911c21",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0x501ebf66d76a96d4fb26ccead42957653e16b8b8",
+              "0x741bd193b6b40f8703d2e116fd1965421f290f58"
+            ]
+          },
+          {
+            "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+            "usd": "0.26241315",
+            "source": "chainlink_usd",
+            "sourceContract": "0xda0da298550e8e449b935cea865c8100f3ca1b73",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:12:11Z"
+          },
+          {
+            "token": "0x501ebf66d76a96d4fb26ccead42957653e16b8b8",
+            "usd": "0.99869582",
+            "source": "erc4626_conversion",
+            "sourceContract": "0x501ebf66d76a96d4fb26ccead42957653e16b8b8",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7"
+            ]
+          },
+          {
+            "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "usd": "0.99869582",
+            "source": "chainlink_usd",
+            "sourceContract": "0x9c41663bb8d6800c8050e2fbf98e86ad01c973e3",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T15:49:11Z"
+          },
+          {
+            "token": "0x741bd193b6b40f8703d2e116fd1965421f290f58",
+            "usd": "0.99973",
+            "source": "erc4626_conversion",
+            "sourceContract": "0x741bd193b6b40f8703d2e116fd1965421f290f58",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            ]
+          },
+          {
+            "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "usd": "0.99973",
+            "source": "chainlink_usd",
+            "sourceContract": "0x54bcc589d9743e521c64233706fc8cb36d275b07",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T10:51:11Z"
+          }
+        ],
+        "readerModel": {
+          "status": "available",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Private Hub formula and live UI block are not verified; reference values are not included in pool APR",
+          "grossMinApr": 5.430181440588123,
+          "weightedBoost": 1.9492111305743294,
+          "actualCrvApr": 9.207868258823366,
+          "withoutHarvestFeeApr": 9.210354844256068,
+          "globalProtocolFeeApr": 8.305195345230894,
+          "referenceApr": 8.83811603770215,
+          "differencePercentagePoints": -0.36975222112121453,
+          "ownSidecarCrvRate": "0.02539760218032434645672156372370852411393533956275905894309065777478370585660086163884021375388246777295196669778180893083135820407006047548997143",
+          "globalPoolCrvRate": "0.028352399219291376",
+          "cappedReferenceSidecarCrvRate": "0.028352399219291376"
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.042629539778367895774242981953465524985852014982057123311000304959431434601310928038439646276574078474413756818428109571612195501559757942117507360565",
+          "periodFinish": null,
+          "apr": 9.207868258823366
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-11-06T16:49:06.982071814Z"
+    },
+    {
+      "gaugeAddress": "0x52618c40ddba3cbbb69f3aaa4cb26ae649844b17",
+      "vaultAddress": "0x5e1dacdbef6bceba53600d0bce33fd30ee09fa82",
+      "assetAddress": "0x81a2612f6dea269a6dd1f6deab45c5424ee2c4b7",
+      "rewardReceiver": "0xccaed33e77ae3a7e5ef1b554b34a01f47eb4b1f5",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO frxUSD/sUSDS Vault",
+      "symbol": "sd-frxsUSDS-vault",
+      "assetSymbol": "frxsUSDS",
+      "assetAmount": "925076.343895992113349207",
+      "assetDecimals": 18,
+      "tvl": 967363.1918328259,
+      "apr": 1.45741541219447,
+      "aprStatus": "available",
+      "apy": null,
+      "allocation": {
+        "accountedAssets": "925076.343895992113349207",
+        "physicalAssets": "925076.343895992113349207",
+        "surplusAssets": "0.000000000000000000",
+        "status": "covered"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "1062614022032331",
+            "workingBalanceRaw": "432190603106345629225915",
+            "workingSupplyRaw": "1265855533321506995347003"
+          },
+          "lockerGrossRate": "0.00111777913527763157207290609426656775361178951778968141899047866067309155630274958847431516520488541491621852053742024688570497095545929758278958",
+          "convexGrossRate": "0.00077077788441214430844905796372466698033438427818676898628080337189792187394105821949031248609902046539360345484772512639373389950690321428382564",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0.0001844335573208092093920295055539836793459452704352974341334289790110601067899536820982620022588060934611760558886743407361413202076507841011602807",
+          "harvestFeeRate": "0.000000472139254922443970130491014497808683486543448994112601317820508142753357560951951991156912825976470077455493846286343319859717615590627966653805",
+          "netRate": "0.001703651323114044227159804061422753245916741982092158858536535233051810570096293173914374492132273810378568464002624746199977690537096137137488285495",
+          "sidecars": [
+            {
+              "address": "0x699e3173891a35f4626f629e907d0860c85b92bd",
+              "pid": "430",
+              "rewardPool": "0x44be1a72619edddccab744ee9e1e69a0b639f85f"
+            }
+          ]
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "430",
+          "status": "matched",
+          "rewardPool": "0x44be1a72619edddccab744ee9e1e69a0b639f85f",
+          "rewardRateRaw": "2092676630466881",
+          "stakedSupplyRaw": "1144483753343933728315374",
+          "periodFinish": 1794353003,
+          "expectedCrvRateRaw": "1828489591",
+          "helperCrvRateRaw": "1828489591",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "1828489591"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "convex_extra:0",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": "0.00077077788441214430844905796372466698033438427818676898628080337189792187394105821949031248609902046539360345484772512639373389950690321428382564",
+          "helperOwnSidecarRate": "0.000770777884261542515601218949761843",
+          "roundingDifference": "0.00000000000015060179284783901396282398033438427818676898628080337189792187394105821949031248609902046539360345484772512639373389950690321428382564",
+          "sidecarBalanceRaw": "421538021356744226388773"
+        },
+        "prices": [
+          {
+            "token": "0x81a2612f6dea269a6dd1f6deab45c5424ee2c4b7",
+            "usd": "1.045711738513106122664657305912797086",
+            "source": "curve_stableswap_ng_nav",
+            "sourceContract": "0x81a2612f6dea269a6dd1f6deab45c5424ee2c4b7",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xcacd6fd266af91b8aed52accc382b4e165586e29",
+              "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd"
+            ]
+          },
+          {
+            "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+            "usd": "0.26241315",
+            "source": "chainlink_usd",
+            "sourceContract": "0xda0da298550e8e449b935cea865c8100f3ca1b73",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:12:11Z"
+          },
+          {
+            "token": "0xcacd6fd266af91b8aed52accc382b4e165586e29",
+            "usd": "1.00005301",
+            "source": "chainlink_usd",
+            "sourceContract": "0x62a897c3e81d809c7444bb63d7d51e1f2ebb6c3d",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T22:33:59Z"
+          },
+          {
+            "token": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "usd": "1.11512930067184339947617854",
+            "source": "erc4626_conversion",
+            "sourceContract": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xdc035d45d973e3ec169d2276ddab16f1e407384f"
+            ]
+          },
+          {
+            "token": "0xdc035d45d973e3ec169d2276ddab16f1e407384f",
+            "usd": "0.99973958",
+            "source": "chainlink_usd",
+            "sourceContract": "0xff30586cd0f29ed462364c7e81375fc0c71219b1",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T12:51:59Z"
+          }
+        ],
+        "readerModel": {
+          "status": "available",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Private Hub formula and live UI block are not verified; reference values are not included in pool APR",
+          "grossMinApr": 0.8186926441632083,
+          "weightedBoost": 2.3071842397017233,
+          "actualCrvApr": 1.45741541219447,
+          "withoutHarvestFeeApr": 1.45781931117162,
+          "globalProtocolFeeApr": 1.3490225836809548,
+          "referenceApr": 1.5772104294205262,
+          "differencePercentagePoints": 0.11979501722605626,
+          "ownSidecarCrvRate": "0.00077077788441214430844905796372466698033438427818676898628080337189792187394105821949031248609902046539360345484772512639373389950690321428382564",
+          "globalPoolCrvRate": "0.002092676630466881",
+          "cappedReferenceSidecarCrvRate": "0.001090228250249217801883213623904847833008674514673891114060173547739216711418879574365918125086908447587894900812799480823549311377832609859758325"
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.001703651323114044227159804061422753245916741982092158858536535233051810570096293173914374492132273810378568464002624746199977690537096137137488285495",
+          "periodFinish": null,
+          "apr": 1.45741541219447
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-11-06T16:49:09.773474457Z"
+    },
+    {
+      "gaugeAddress": "0x4e6bb6b7447b7b2aa268c16ab87f4bb48bf57939",
+      "vaultAddress": "0xf980f195a93577dcce48e91e98124d3b71c4a066",
+      "assetAddress": "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+      "rewardReceiver": "0x7803185b6d2ec50bb49b3199a2d3359074fdbc69",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO Curve.fi Factory Plain Pool: crvUSD/USDT Vault",
+      "symbol": "sd-crvUSDUSDT-f-vault",
+      "assetSymbol": "crvUSDUSDT-f",
+      "assetAmount": "3471593.664096374439123761",
+      "assetDecimals": 18,
+      "tvl": 3562086.0689715478,
+      "apr": 4.3052989947479405,
+      "aprStatus": "available",
+      "apy": null,
+      "allocation": {
+        "accountedAssets": "3471593.664096374439123761",
+        "physicalAssets": "3471593.664096374439123761",
+        "surplusAssets": "0.000000000000000000",
+        "status": "covered"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "21539988405809785",
+            "workingBalanceRaw": "2673753940291125907841550",
+            "workingSupplyRaw": "8478412282531855435154239"
+          },
+          "lockerGrossRate": "0.02092867105456108894551289337313893411643294682815613832851760882504559001976866962620750610692265219625714785102028685537066265460933810523428614",
+          "convexGrossRate": "0.00106176855149667761754959213159779948704839560225760208630343510283905489348774949571141906633980685628766515593898637468937738799098899037643191",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0.0034532307240025796760096274065679241292114362266457628242054054561325223532618304883242385076422376123824293954183473311361593380105407873636572131",
+          "harvestFeeRate": "0.0000054976099015144416407656213761841834008703356076034351037052609819711612283141047804797312933156147631362032517398183075150100106500817739026795125",
+          "netRate": "0.0185317112721536724454120924767926252908690358681603741555119332107701513987662745288142069343269058253992474082891860806163656945791362264731581573875",
+          "sidecars": [
+            {
+              "address": "0x94a5d7ac8a67c9d54101843d11972cdc7c90f2e7",
+              "pid": "179",
+              "rewardPool": "0xd1ddb0a0815fd28932fbb194c84003683af8a824"
+            }
+          ]
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "179",
+          "status": "matched",
+          "rewardPool": "0xd1ddb0a0815fd28932fbb194c84003683af8a824",
+          "rewardRateRaw": "36989381558734657",
+          "stakedSupplyRaw": "6279131445104137164894382",
+          "periodFinish": 1794492947,
+          "expectedCrvRateRaw": "5890843643",
+          "helperCrvRateRaw": "5890843643",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "5890843643"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "convex_extra:0",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x01791f726b4103694969820be083196cc7c045ff",
+              "source": "convex_extra:1",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": "0.00106176855149667761754959213159779948704839560225760208630343510283905489348774949571141906633980685628766515593898637468937738799098899037643191",
+          "helperOwnSidecarRate": "0.001061768551445538868702560756204089",
+          "roundingDifference": "0.00000000000005113874884703137539371048704839560225760208630343510283905489348774949571141906633980685628766515593898637468937738799098899037643191",
+          "sidecarBalanceRaw": "180240491140385691052123"
+        },
+        "prices": [
+          {
+            "token": "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+            "usd": "1.026066531291105953353274646897037012",
+            "source": "curve_metaregistry_nav",
+            "sourceContract": "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-06T17:03:59Z",
+            "components": [
+              "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e"
+            ]
+          },
+          {
+            "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+            "usd": "0.26241315",
+            "source": "chainlink_usd",
+            "sourceContract": "0xda0da298550e8e449b935cea865c8100f3ca1b73",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T17:12:11Z"
+          },
+          {
+            "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "usd": "0.99869582",
+            "source": "chainlink_usd",
+            "sourceContract": "0x9c41663bb8d6800c8050e2fbf98e86ad01c973e3",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T15:49:11Z"
+          },
+          {
+            "token": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+            "usd": "0.99748968",
+            "source": "chainlink_usd",
+            "sourceContract": "0xf3a0a2363ee3e5fc1ccf923f4ea9c06bac1a6834",
+            "blockNumber": 26357109,
+            "updatedAt": "2026-11-06T16:48:59Z",
+            "validUntil": "2026-11-07T02:38:11Z"
+          }
+        ],
+        "readerModel": {
+          "status": "available",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Private Hub formula and live UI block are not verified; reference values are not included in pool APR",
+          "grossMinApr": 2.525206423616084,
+          "weightedBoost": 2.0552480413735155,
+          "actualCrvApr": 4.3052989947479405,
+          "withoutHarvestFeeApr": 4.306576202990337,
+          "globalProtocolFeeApr": 4.265875529604248,
+          "referenceApr": 4.333587839427648,
+          "differencePercentagePoints": 0.028288844679706965,
+          "ownSidecarCrvRate": "0.00106176855149667761754959213159779948704839560225760208630343510283905489348774949571141906633980685628766515593898637468937738799098899037643191",
+          "globalPoolCrvRate": "0.036989381558734657",
+          "cappedReferenceSidecarCrvRate": "0.00141082314754024719275383692947572602443036209598430691651173469938868669236014186516261157738534375658624827730829011032105535634212060951385835"
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.0185317112721536724454120924767926252908690358681603741555119332107701513987662745288142069343269058253992474082891860806163656945791362264731581573875",
+          "periodFinish": null,
+          "apr": 4.3052989947479405
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-11-06T16:49:12.58080536Z"
+    }
+  ]
+}

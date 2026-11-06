@@ -222,6 +222,8 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 // @Produce      json
 // @Param        network  path      string true "Поддерживаемая сеть: ethereum"
 // @Param        limit    query     int false "Количество контрольных пулов" Enums(2,5) default(2)
+// @Param        block    query     string false "Десятичный номер блока; включает строгие цены этого блока"
+// @Param        strictPrices query bool false "Изолированные цены выбранного блока без общего кэша" default(false)
 // @Success      200      {object}  dto.StakeDAOPoolsResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      502      {object}  map[string]string
@@ -237,7 +239,22 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "diagnostics limit must be 2 or 5"})
 		}
 	}
-	result, err := h.stakeDao.GetPoolDiagnostics(c.Request().Context(), c.Param("network"), limit)
+	options := stakedao.DiagnosticOptions{}
+	if c.QueryParams().Has("block") {
+		value, err := strconv.ParseUint(c.QueryParam("block"), 10, 64)
+		if err != nil || value == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "block must be a positive decimal block number"})
+		}
+		options.BlockNumber = value
+	}
+	if c.QueryParams().Has("strictPrices") {
+		value, err := strconv.ParseBool(c.QueryParam("strictPrices"))
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "strictPrices must be true or false"})
+		}
+		options.StrictPrices = value
+	}
+	result, err := h.stakeDao.GetPoolDiagnosticsAt(c.Request().Context(), c.Param("network"), limit, options)
 	if err != nil {
 		return stakeDAOHTTPError(c, err)
 	}
@@ -247,6 +264,8 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 func stakeDAOHTTPError(c echo.Context, err error) error {
 	if err != nil {
 		switch {
+		case errors.Is(err, stakedao.ErrInvalidDiagnosticBlock):
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "diagnostic block is beyond the current head"})
 		case errors.Is(err, stakedao.ErrUnsupportedNetwork):
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "StakeDAO currently supports only ethereum"})
 		case errors.Is(err, context.DeadlineExceeded):

@@ -53,6 +53,8 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	to := flags.Uint64("to", 0, "optional last registration block; requires -from; at most 100 blocks")
 	filename := flags.String("output", "", "save JSON to this file only after a successful check")
 	withDiagnostics := flags.Bool("diagnostics", false, "check the fixed 2- or 5-pool set with price provenance and PoolUtilities comparison")
+	blockNumber := flags.Uint64("block", 0, "diagnostics snapshot block; implies strict prices; default latest")
+	strictPrices := flags.Bool("strict-prices", false, "diagnostics only: read all prices at the snapshot block in an isolated cache")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -65,7 +67,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	if *limit < 1 || *limit > stakedao.MaxSamplePools {
 		return fmt.Errorf("use -limit 1..5")
 	}
-	windowFlags, explicitGauges := 0, false
+	windowFlags, explicitGauges, blockFlag, strictFlag := 0, false, false, false
 	flags.Visit(func(f *flag.Flag) {
 		if f.Name == "from" || f.Name == "to" {
 			windowFlags++
@@ -73,7 +75,16 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 		if f.Name == "gauges" {
 			explicitGauges = true
 		}
+		if f.Name == "block" {
+			blockFlag = true
+		}
+		if f.Name == "strict-prices" {
+			strictFlag = true
+		}
 	})
+	if (blockFlag || strictFlag) && !*withDiagnostics || blockFlag && *blockNumber == 0 {
+		return fmt.Errorf("-block must be positive and -block/-strict-prices require -diagnostics")
+	}
 	if *withDiagnostics && (windowFlags != 0 || explicitGauges || (*limit != 2 && *limit != 5)) {
 		return fmt.Errorf("use -diagnostics -limit 2 or 5 without -gauges/-from/-to")
 	}
@@ -109,7 +120,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	fmt.Fprintln(diagnostics, "At most 5 RPC requests/sec and 300 attempts; CU cost depends on the provider.")
 	if *withDiagnostics {
 		fmt.Fprintf(diagnostics, "Checking %d reference pools with APR components, cached quote provenance and Convex control rates.\n", *limit)
-		result, err = service.GetPoolDiagnostics(ctx, "ethereum", *limit)
+		result, err = service.GetPoolDiagnosticsAt(ctx, "ethereum", *limit, stakedao.DiagnosticOptions{BlockNumber: *blockNumber, StrictPrices: *strictPrices})
 	} else if windowFlags == 0 {
 		fmt.Fprintf(diagnostics, "Checking %d explicit gauge(s) using current Controller state; no log scan or historical eth_getCode.\n", len(gauges))
 		result, err = service.GetPoolsForGauges(ctx, "ethereum", gauges, *limit)

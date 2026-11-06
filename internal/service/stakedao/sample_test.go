@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -245,5 +246,55 @@ func TestSampleDoesNotReturnSuccessWhenBudgetRunsOutDuringMetadata(t *testing.T)
 	result, err := s.getPoolsSelected(context.Background(), "ethereum", &poolSample{fromBlock: 123, toBlock: 222, limit: 1})
 	if err == nil || result != nil || !strings.Contains(err.Error(), "budget") {
 		t.Fatalf("exhausted sample returned success: result=%+v err=%v", result, err)
+	}
+}
+
+// Failed capability probes are contract reverts, not transport failures.
+type diagnosticPriceRevertRPC struct{ *fixtureRPC }
+
+func (r *diagnosticPriceRevertRPC) CallContract(ctx context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	out, err := r.fixtureRPC.CallContract(ctx, call, block)
+	if err != nil {
+		return nil, errors.New("execution reverted")
+	}
+	return out, nil
+}
+
+func TestExplicitDiagnosticBlockIsPinnedAndDoesNotUseSharedPrices(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.headerTime = uint64(time.Now().Add(-time.Hour).Unix())
+	for _, gauge := range []common.Address{common.HexToAddress("0x95f00391cb5eebcd190eb58728b4ce23dbfa6ac1"), common.HexToAddress("0x009acd89535dabc270c93f9b39d3232105fef453")} {
+		f.vaults[gauge], f.assets[gauge] = common.HexToAddress("0xbb"), common.HexToAddress("0xcc")
+	}
+	s.dial = func(context.Context, string) (stakeDAORPC, error) { return &diagnosticPriceRevertRPC{f}, nil }
+	result, err := s.GetPoolDiagnosticsAt(context.Background(), "ethereum", 2, DiagnosticOptions{BlockNumber: 4490})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.BlockNumber != 4490 || result.BlockHash == nil || !result.StrictPrices || result.BlockTimestamp != f.headerTime || len(f.queries) != 0 || f.codeReads != 0 {
+		t.Fatalf("strict snapshot identity lost: %+v", result)
+	}
+	for _, block := range f.callBlocks {
+		if block != 4490 {
+			t.Fatalf("mixed block %d into 4490", block)
+		}
+	}
+	for _, p := range result.Pools {
+		if p.TVL != nil || len(p.Diagnostics.Prices) != 0 {
+			t.Fatal("strict mode substituted the shared cached USD price")
+		}
+	}
+	// The application's good current quote remains in its original cache.
+	price, err := s.prices.GetTokenPrice(context.Background(), common.HexToAddress("0xcc"), 1)
+	if err != nil || price.String() != "2" {
+		t.Fatal("historical diagnostics modified shared current prices")
+	}
+}
+
+func TestFutureDiagnosticBlockFailsBeforeRegistrations(t *testing.T) {
+	s, f := newPoolFixture(t)
+	_, err := s.GetPoolDiagnosticsAt(context.Background(), "ethereum", 2, DiagnosticOptions{BlockNumber: f.latest + 1})
+	if !errors.Is(err, ErrInvalidDiagnosticBlock) || len(f.callBlocks) != 0 || f.headerReads != 0 {
+		t.Fatalf("future block was read or error lost: %v", err)
 	}
 }

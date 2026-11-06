@@ -1,0 +1,121 @@
+{
+  "readerPackage": "@stake-dao/reader@0.5.52",
+  "sourceUrl": "https://unpkg.com/@stake-dao/reader@0.5.52/dist/esm/strategies/curve/fetch/getOnlyboostData.js",
+  "sha256": "1e59f132e04c73fe9660efa3d42b238183da0e064a8b07ab69ba96cc5d9ab4e0",
+  "method": "Executed original public getOnlyboostData in a local JavaScript VM. Only current boost was compared; optional optimal-allocation helpers were stubbed and their outputs were not used.",
+  "publishedSnapshotCommit": "cc776d695be8c2d79e05c340866f6e1d6247c97d",
+  "publishedSnapshotBlock": null,
+  "privateHubImplementationVerified": false,
+  "liveUiSameBlockVerified": false,
+  "publishedSnapshotConsistency": [
+    {
+      "name": "USDC/crvUSD",
+      "gaugeAddress": "0x95f00391cB5EebCd190EB58728B4CE23DbFa6ac1",
+      "publicReaderBoost": 2.059185462565345,
+      "publishedBoost": 2.059185462565345,
+      "publishedMinApr": 2.213804575838085,
+      "publishedMaxApr": 5.534511439595212,
+      "feeFractionObserved": 0.165,
+      "reconstructedCrvApr": 3.806459556604564,
+      "publishedCrvApr": 3.806459556604564,
+      "differencePercentagePoints": 0
+    },
+    {
+      "name": "evaUSDT/evaUSDC",
+      "gaugeAddress": "0xbE6228125448E40F5DCBB2DbdF7fF3F5721000B4",
+      "publicReaderBoost": 1.785663447618325,
+      "publishedBoost": 1.785663447618325,
+      "publishedMinApr": 6.52661355613692,
+      "publishedMaxApr": 16.3165338903423,
+      "feeFractionObserved": 0.165,
+      "reconstructedCrvApr": 9.731369945376498,
+      "publishedCrvApr": 9.731369945376498,
+      "differencePercentagePoints": 0
+    },
+    {
+      "name": "USDT/crvUSD",
+      "gaugeAddress": "0x4e6bB6B7447B7B2Aa268C16AB87F4Bb48BF57939",
+      "publicReaderBoost": 2.0388393146424386,
+      "publishedBoost": 2.0388393146424386,
+      "publishedMinApr": 2.621508458063574,
+      "publishedMaxApr": 6.553771145158935,
+      "feeFractionObserved": 0.165,
+      "reconstructedCrvApr": 4.462936814153024,
+      "publishedCrvApr": 4.462936814153024,
+      "differencePercentagePoints": 0
+    },
+    {
+      "name": "frxUSD/sUSDS",
+      "gaugeAddress": "0x52618C40dDBA3cBbb69F3aAA4CB26Ae649844B17",
+      "publicReaderBoost": 2.307352512956691,
+      "publishedBoost": 2.307352512956691,
+      "publishedMinApr": 0.8371365864789853,
+      "publishedMaxApr": 2.0928414661974633,
+      "feeFractionObserved": 0.165,
+      "reconstructedCrvApr": 1.6128602874277278,
+      "publishedCrvApr": 1.6128602874277278,
+      "differencePercentagePoints": 0
+    },
+    {
+      "name": "WETH/FXS",
+      "gaugeAddress": "0x009aCD89535DAbC270C93F9b39D3232105Fef453",
+      "publicReaderBoost": 2.5,
+      "publishedBoost": 2.5,
+      "publishedMinApr": 0,
+      "publishedMaxApr": 0,
+      "feeFractionObserved": 0.165,
+      "reconstructedCrvApr": 0,
+      "publishedCrvApr": 0,
+      "differencePercentagePoints": 0
+    }
+  ],
+  "sameBlockNumber": 26357109,
+  "sameBlockHash": "0xf78c44fa843de3f97b27e97c509754e3d0584f3751e7bc1c81b8c471c6dd7741",
+  "sameBlockFormulaComparison": [
+    {
+      "name": "Stake DAO Curve.fi Factory Plain Pool: crvUSD/USDC Vault",
+      "publicReaderBoost": 2.0585633528675427,
+      "goReferenceBoost": 2.0585633528675427,
+      "publicReaderReferenceCrvApr": 3.7302249309618483,
+      "goReferenceCrvApr": 3.730224930961849,
+      "ourCrvApr": 3.6693612604111103,
+      "differencePercentagePoints": 0.060863670550737936
+    },
+    {
+      "name": "Stake DAO Curve.fi Factory Crypto Pool: FXS/ETH Vault",
+      "publicReaderBoost": 2.5,
+      "goReferenceBoost": 2.5,
+      "publicReaderReferenceCrvApr": 0,
+      "goReferenceCrvApr": 0,
+      "ourCrvApr": 0,
+      "differencePercentagePoints": 0
+    },
+    {
+      "name": "Stake DAO evaUSDC/evaUSDT Vault",
+      "publicReaderBoost": 1.94921113057433,
+      "goReferenceBoost": 1.9492111305743294,
+      "publicReaderReferenceCrvApr": 8.838116037702154,
+      "goReferenceCrvApr": 8.83811603770215,
+      "ourCrvApr": 9.207868258823366,
+      "differencePercentagePoints": -0.3697522211212121
+    },
+    {
+      "name": "Stake DAO frxUSD/sUSDS Vault",
+      "publicReaderBoost": 2.3071842397017237,
+      "goReferenceBoost": 2.3071842397017233,
+      "publicReaderReferenceCrvApr": 1.5772104294205265,
+      "goReferenceCrvApr": 1.5772104294205262,
+      "ourCrvApr": 1.45741541219447,
+      "differencePercentagePoints": 0.11979501722605645
+    },
+    {
+      "name": "Stake DAO Curve.fi Factory Plain Pool: crvUSD/USDT Vault",
+      "publicReaderBoost": 2.0552480413735155,
+      "goReferenceBoost": 2.0552480413735155,
+      "publicReaderReferenceCrvApr": 4.333587839427648,
+      "goReferenceCrvApr": 4.333587839427648,
+      "ourCrvApr": 4.3052989947479405,
+      "differencePercentagePoints": 0.02828884467970738
+    }
+  ]
+}

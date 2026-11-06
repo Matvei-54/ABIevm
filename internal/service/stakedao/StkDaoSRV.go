@@ -25,8 +25,9 @@ import (
 )
 
 var (
-	ErrUnsupportedNetwork = errors.New("unsupported StakeDAO network")
-	ErrRPCUnavailable     = errors.New("StakeDAO RPC unavailable")
+	ErrUnsupportedNetwork     = errors.New("unsupported StakeDAO network")
+	ErrRPCUnavailable         = errors.New("StakeDAO RPC unavailable")
+	ErrInvalidDiagnosticBlock = errors.New("diagnostic block is beyond the current head")
 )
 
 const vaultRegisteredABI = `[{"anonymous":false,"inputs":[{"indexed":true,"name":"gauge","type":"address"},{"indexed":true,"name":"vault","type":"address"},{"indexed":true,"name":"asset","type":"address"},{"indexed":false,"name":"rewardReceiver","type":"address"},{"indexed":false,"name":"protocolId","type":"bytes4"}],"name":"VaultRegistered","type":"event"}]`
@@ -153,6 +154,12 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	if err != nil {
 		return nil, fmt.Errorf("%w: latest block: %w", ErrRPCUnavailable, err)
 	}
+	if sample != nil && sample.blockNumber != 0 {
+		if sample.blockNumber > toBlock {
+			return nil, ErrInvalidDiagnosticBlock
+		}
+		toBlock = sample.blockNumber
+	}
 	block := new(big.Int).SetUint64(toBlock)
 	header, err := s.client.HeaderByNumber(ctx, block)
 	if err != nil {
@@ -162,6 +169,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		return nil, errors.New("invalid StakeDAO snapshot header")
 	}
 	s.snapshotTime = header.Time
+	if sample != nil && sample.strictPrices {
+		s.prices = prices.NewSnapshotPriceService(header.Time)
+	}
 	var vaults []StakeDAOVaultInfo
 	if sample != nil && len(sample.gauges) > 0 {
 		progress.setStage("gauge_registrations")
@@ -259,6 +269,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		response.Errors = append(response.Errors, s.valueRewards(ctx, &response.Pools[i])...)
 		if s.diagnostics {
 			s.addPoolDiagnostics(ctx, block, &response.Pools[i])
+			if sample != nil && sample.strictPrices {
+				addReaderModel(block.Uint64(), &response.Pools[i])
+			}
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -277,6 +290,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	}
 	if s.diagnostics {
 		response.BlockTimestamp = s.snapshotTime
+		hash := header.Hash()
+		response.BlockHash = &hash
+		response.StrictPrices = sample != nil && sample.strictPrices
 		if client, ok := s.client.(*sampleRPC); ok {
 			response.RPCAttempts = 300 - client.remaining
 		}
