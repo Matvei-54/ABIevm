@@ -1172,3 +1172,31 @@ func TestReaderReferenceSeparatesGlobalRateCapAndFeePolicies(t *testing.T) {
 		}
 	}
 }
+
+func TestAPRReasonsDistinguishEmptyMissingPricesAndUnsupportedModel(t *testing.T) {
+	one, zero := "1", "0"
+	tvl := 2.0
+	gauge := common.HexToAddress("0x11")
+	for _, tc := range []struct {
+		name   string
+		pool   dto.StakeDAOPool
+		issues []dto.StakeDAOPoolError
+		want   []string
+	}{
+		{"empty", dto.StakeDAOPool{AssetAmount: &zero}, nil, []string{"empty_vault"}},
+		{"asset-price", dto.StakeDAOPool{AssetAmount: &one, RewardsComplete: true}, nil, []string{"asset_price_missing"}},
+		{"reward-data", dto.StakeDAOPool{AssetAmount: &one, TVL: &tvl}, nil, []string{"reward_data_missing"}},
+		{"unsupported", dto.StakeDAOPool{AssetAmount: &one, TVL: &tvl, RewardMechanism: "unsupported"}, nil, []string{"unsupported_model"}},
+		{"reward-price", dto.StakeDAOPool{AssetAmount: &one, TVL: &tvl, RewardsComplete: true}, []dto.StakeDAOPoolError{{GaugeAddress: gauge, Code: "reward_price_missing"}}, []string{"reward_price_missing"}},
+		{"other-gauge", dto.StakeDAOPool{AssetAmount: &one, TVL: &tvl}, []dto.StakeDAOPoolError{{GaugeAddress: common.HexToAddress("0x22"), Code: "unsupported_model"}}, []string{"reward_data_missing"}},
+		{"available-zero", dto.StakeDAOPool{AssetAmount: &one, TVL: &tvl, APRStatus: "available"}, nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.pool.GaugeAddress = gauge
+			setAPRReasons(&tc.pool, tc.issues)
+			if !reflect.DeepEqual(tc.pool.APRReasons, tc.want) {
+				t.Fatalf("got %v want %v", tc.pool.APRReasons, tc.want)
+			}
+		})
+	}
+}

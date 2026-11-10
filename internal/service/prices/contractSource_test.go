@@ -27,23 +27,28 @@ type pricePoolFixture struct {
 }
 
 type contractPriceFixture struct {
-	mu          sync.Mutex
-	t           *testing.T
-	methods     abi.ABI
-	timestamp   uint64
-	feeds       map[common.Address]common.Address
-	answers     map[common.Address]*big.Int
-	updated     map[common.Address]uint64
-	precision   map[common.Address]uint8
-	assets      map[common.Address]common.Address
-	conversions map[common.Address]*big.Int
-	pools       map[common.Address]pricePoolFixture
-	metaPools   map[common.Address]common.Address // LP -> pool; addresses may differ.
-	metaLPs     map[common.Address]common.Address // Optional mismatched reverse lookup.
-	metaRevert  bool
-	calls       map[string]int
-	badRound    bool
-	fail        string
+	mu                 sync.Mutex
+	t                  *testing.T
+	methods            abi.ABI
+	timestamp          uint64
+	feeds              map[common.Address]common.Address
+	answers            map[common.Address]*big.Int
+	updated            map[common.Address]uint64
+	precision          map[common.Address]uint8
+	assets             map[common.Address]common.Address
+	conversions        map[common.Address]*big.Int
+	pools              map[common.Address]pricePoolFixture
+	metaPools          map[common.Address]common.Address // LP -> pool; addresses may differ.
+	metaLPs            map[common.Address]common.Address // Optional mismatched reverse lookup.
+	metaRevert         bool
+	calls              map[string]int
+	badRound           bool
+	fail               string
+	descriptions       map[common.Address]string
+	emaPrices          map[common.Address]*big.Int
+	emaTimes           map[common.Address]*big.Int
+	emaWindows         map[common.Address]*big.Int
+	normalizationRates map[common.Address][]*big.Int
 }
 
 func priceAddress(n int64) common.Address { return common.BigToAddress(big.NewInt(n)) }
@@ -85,6 +90,22 @@ func (f *contractPriceFixture) CallContract(_ context.Context, call ethereum.Cal
 		return nil, errors.New("RPC transport failure")
 	}
 	switch m.Name {
+	case "description":
+		return m.Outputs.Pack(f.descriptions[target])
+	case "price_oracle", "price_oracle0":
+		return m.Outputs.Pack(f.emaPrices[target])
+	case "ma_last_time":
+		return m.Outputs.Pack(f.emaTimes[target])
+	case "ma_exp_time":
+		return m.Outputs.Pack(f.emaWindows[target])
+	case "stored_rates":
+		rates := f.normalizationRates[target]
+		if rates == nil {
+			for _, coin := range f.pools[target].coins {
+				rates = append(rates, new(big.Int).Exp(big.NewInt(10), big.NewInt(36-int64(f.precision[coin])), nil))
+			}
+		}
+		return m.Outputs.Pack(rates)
 	case "getFeed":
 		if target != feedRegistry || args[1].(common.Address) != usdDenomination {
 			f.t.Fatal("wrong USD registry lookup")
@@ -815,4 +836,171 @@ func TestIsolatedSnapshotPricesUseHistoricalTimeAndValidateOracles(t *testing.T)
 			t.Fatal("invalid oracle round accepted in strict mode")
 		}
 	}
+}
+
+func pinnedOracleFixture(t *testing.T) (*TokenPriceService, *contractPriceFixture, Snapshot, []common.Address) {
+	t.Helper()
+	s, f, _, snapshot := newContractPriceFixture(t)
+	f.descriptions = map[common.Address]string{}
+	f.emaPrices = map[common.Address]*big.Int{}
+	f.emaTimes = map[common.Address]*big.Int{}
+	f.emaWindows = map[common.Address]*big.Int{}
+	f.normalizationRates = map[common.Address][]*big.Int{}
+	weeth := common.HexToAddress("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee")
+	frxeth := common.HexToAddress("0x5E8422345238F34275888049021821E8E08CAa1f")
+	bold := common.HexToAddress("0x6440f144b7e50D6a8439336510312d2F54beB01D")
+	weth := common.HexToAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+	usdc := common.HexToAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+	cross := ethereumPinnedPriceRoutes[weeth].source
+	f.descriptions[cross] = "weETH / ETH"
+	f.precision[cross], f.answers[cross], f.updated[cross] = 18, decimal.RequireFromString("1100000000000000000").BigInt(), f.timestamp-60
+	ethFeed := ethereumUSDFeeds[weth]
+	f.precision[ethFeed], f.answers[ethFeed], f.updated[ethFeed] = 8, big.NewInt(200000000000), f.timestamp-60
+	f.addFeed(usdc, 100000000, 8)
+	for _, token := range []common.Address{weeth, frxeth, bold, weth} {
+		f.precision[token] = 18
+	}
+	f.precision[usdc] = 6
+	weethLP := common.HexToAddress("0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5")
+	frxLP := ethereumPinnedPriceRoutes[frxeth].source
+	boldLP := ethereumPinnedPriceRoutes[bold].source
+	for _, p := range []common.Address{weethLP, frxLP, boldLP} {
+		f.precision[p] = 18
+	}
+	units := func(n int64) *big.Int { return new(big.Int).Mul(big.NewInt(n), decimal.New(1, 18).BigInt()) }
+	f.pools[weethLP] = pricePoolFixture{coins: []common.Address{weth, weeth}, balances: []*big.Int{units(100), units(100)}, supply: units(200)}
+	f.pools[frxLP] = pricePoolFixture{coins: []common.Address{weth, frxeth}, balances: []*big.Int{units(1000), units(1000)}, supply: units(2000)}
+	f.metaPools[frxLP] = frxLP
+	f.pools[boldLP] = pricePoolFixture{coins: []common.Address{bold, usdc}, balances: []*big.Int{units(600000), big.NewInt(500000000000)}, supply: units(1100000)}
+	for _, p := range []common.Address{frxLP, boldLP} {
+		f.emaTimes[p] = new(big.Int).SetUint64(f.timestamp - 60)
+		f.emaWindows[p] = big.NewInt(866)
+	}
+	f.emaPrices[frxLP] = decimal.RequireFromString("990000000000000000").BigInt()
+	f.emaPrices[boldLP] = decimal.RequireFromString("1250000000000000000").BigInt()
+	return s, f, snapshot, []common.Address{weeth, frxeth, bold, weethLP, frxLP, boldLP}
+}
+
+func TestPinnedOracleRoutesNormalizeCrossRatesAndInvertBold(t *testing.T) {
+	s, f, snapshot, tokens := pinnedOracleFixture(t)
+	if err := s.EnsurePricesAt(context.Background(), 1, tokens, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	for index, want := range map[int]string{0: "2200", 1: "1980", 2: "0.8", 3: "2100", 4: "1990"} {
+		q, err := s.GetTokenQuote(context.Background(), tokens[index], 1)
+		if err != nil || q.USD.String() != want || q.BlockNumber != snapshot.Block {
+			t.Fatalf("route %d wrong units: %+v %v", index, q, err)
+		}
+	}
+	q, _ := s.GetTokenQuote(context.Background(), tokens[2], 1)
+	if q.Source != "curve_ema_usd" || len(q.Components) != 1 {
+		t.Fatal("EMA provenance lost")
+	}
+	// Known LP/token routes bypass failed registry/factory discovery. USDC is
+	// the only uncached USD registry lookup, shared across all token workers.
+	if f.calls[feedRegistry.Hex()+":getFeed"] != 1 || f.calls[curveNGFactory.Hex()+":get_implementation_address"] != 0 || f.calls[curveMetaRegistry.Hex()+":get_pool_from_lp_token"] != 0 {
+		t.Fatal("pinned routes still searched for their discovery path")
+	}
+	before := totalPriceCalls(f)
+	if err := s.EnsurePricesAt(context.Background(), 1, tokens, snapshot); err != nil || totalPriceCalls(f) != before {
+		t.Fatal("warm quotes repeated RPC")
+	}
+}
+
+func TestPinnedOracleFailuresNeverBecomePegOrOtherRoute(t *testing.T) {
+	for _, test := range []string{"cross-stale", "cross-pair", "ema-stale", "ema-future", "ema-zero", "ema-liquidity", "ema-window", "ema-normalization", "ema-coins"} {
+		t.Run(test, func(t *testing.T) {
+			s, f, snapshot, tokens := pinnedOracleFixture(t)
+			token := tokens[2]
+			pool := ethereumPinnedPriceRoutes[token].source
+			switch test {
+			case "cross-stale":
+				token = tokens[0]
+				f.updated[ethereumPinnedPriceRoutes[token].source] = f.timestamp - 25*3600
+			case "cross-pair":
+				token = tokens[0]
+				f.descriptions[ethereumPinnedPriceRoutes[token].source] = "ETH / weETH"
+			case "ema-stale":
+				f.emaTimes[pool] = new(big.Int).SetUint64(f.timestamp - 7200)
+			case "ema-future":
+				f.emaTimes[pool] = new(big.Int).SetUint64(f.timestamp + 1)
+			case "ema-zero":
+				f.emaPrices[pool] = new(big.Int)
+			case "ema-liquidity":
+				p := f.pools[pool]
+				p.balances[1] = big.NewInt(1)
+				f.pools[pool] = p
+			case "ema-window":
+				f.emaWindows[pool] = big.NewInt(1)
+			case "ema-normalization":
+				f.normalizationRates[pool] = []*big.Int{big.NewInt(1), big.NewInt(1)}
+			case "ema-coins":
+				p := f.pools[pool]
+				p.coins[0] = tokens[1]
+				f.pools[pool] = p
+			}
+			if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{token}, snapshot); err == nil {
+				t.Fatal("invalid oracle accepted")
+			}
+			if _, err := s.GetTokenPrice(context.Background(), token, 1); !errors.Is(err, ErrPriceUnavailable) {
+				t.Fatal("invalid source substituted a price")
+			}
+			if f.calls[curveNGFactory.Hex()+":get_implementation_address"] != 0 || f.calls[curveMetaRegistry.Hex()+":get_pool_from_lp_token"] != 0 {
+				t.Fatal("failed pinned oracle fell back to another capability route")
+			}
+		})
+	}
+}
+
+func TestPinnedRouteDeadlinesAndPackedObservationTimestamp(t *testing.T) {
+	s, f, snapshot, tokens := pinnedOracleFixture(t)
+	pool := ethereumPinnedPriceRoutes[tokens[2]].source
+	f.emaTimes[pool] = new(big.Int).Add(new(big.Int).Lsh(big.NewInt(999), 128), new(big.Int).SetUint64(f.timestamp-7100))
+	if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{tokens[2]}, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := s.GetTokenQuote(context.Background(), tokens[2], 1)
+	if q.ValidUntil.Unix() != int64(f.timestamp+100) {
+		t.Fatal("EMA quote extended observation validity")
+	}
+	s, f, snapshot, tokens = pinnedOracleFixture(t)
+	base := ethereumUSDFeeds[ethereumPinnedPriceRoutes[tokens[0]].quoteToken]
+	f.updated[base] = f.timestamp - 25*3600 + 30
+	if err := s.EnsurePricesAt(context.Background(), 1, []common.Address{tokens[0]}, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	q, _ = s.GetTokenQuote(context.Background(), tokens[0], 1)
+	if q.ValidUntil.Unix() != int64(f.timestamp+30) {
+		t.Fatal("cross quote extended USD anchor validity")
+	}
+}
+
+func TestPinnedLPRoutesSaveDiscoveryCallsWithIdenticalPrices(t *testing.T) {
+	with, f, snapshot, tokens := pinnedOracleFixture(t)
+	if err := with.EnsurePricesAt(context.Background(), 1, tokens, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	without, other, second, otherTokens := pinnedOracleFixture(t)
+	routes := map[common.Address]pinnedPriceRoute{}
+	for token, route := range ethereumPinnedPriceRoutes {
+		if route.kind != pinnedCurveNG && route.kind != pinnedCurveMeta {
+			routes[token] = route
+		}
+	}
+	without.source.(*ContractSource).routes = routes
+	if err := without.EnsurePricesAt(context.Background(), 1, otherTokens, second); err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range tokens {
+		a, _ := with.GetTokenPrice(context.Background(), token, 1)
+		b, _ := without.GetTokenPrice(context.Background(), token, 1)
+		if !a.Equal(b) {
+			t.Fatal("pinning discovery changed valuation")
+		}
+	}
+	saved := totalPriceCalls(other) - totalPriceCalls(f)
+	if saved != 7 {
+		t.Fatalf("expected seven LP discovery calls saved, got %d", saved)
+	}
+	t.Logf("same six quotes: %d contract calls with pinned LP routes, %d with generic LP discovery", totalPriceCalls(f), totalPriceCalls(other))
 }

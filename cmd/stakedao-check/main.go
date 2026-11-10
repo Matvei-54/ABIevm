@@ -52,7 +52,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	from := flags.Uint64("from", 0, "optional first registration block; requires -to")
 	to := flags.Uint64("to", 0, "optional last registration block; requires -from; at most 100 blocks")
 	filename := flags.String("output", "", "save JSON to this file only after a successful check")
-	withDiagnostics := flags.Bool("diagnostics", false, "check the fixed 2- or 5-pool set with price provenance and PoolUtilities comparison")
+	withDiagnostics := flags.Bool("diagnostics", false, "check the standard 2/5 pools or explicit -gauges with price provenance and PoolUtilities comparison")
 	blockNumber := flags.Uint64("block", 0, "diagnostics snapshot block; implies strict prices; default latest")
 	strictPrices := flags.Bool("strict-prices", false, "diagnostics only: read all prices at the snapshot block in an isolated cache")
 	if err := flags.Parse(args); err != nil {
@@ -85,14 +85,14 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	if (blockFlag || strictFlag) && !*withDiagnostics || blockFlag && *blockNumber == 0 {
 		return fmt.Errorf("-block must be positive and -block/-strict-prices require -diagnostics")
 	}
-	if *withDiagnostics && (windowFlags != 0 || explicitGauges || (*limit != 2 && *limit != 5)) {
-		return fmt.Errorf("use -diagnostics -limit 2 or 5 without -gauges/-from/-to")
+	if *withDiagnostics && (windowFlags != 0 || (!explicitGauges && *limit != 2 && *limit != 5)) {
+		return fmt.Errorf("use -diagnostics -limit 2 or 5, or explicit -gauges with -limit 1..5; no -from/-to")
 	}
 	if windowFlags > 0 && (windowFlags != 2 || explicitGauges || *from > *to || *to-*from >= 100) {
 		return fmt.Errorf("use both -from and -to for a window of at most 100 blocks, or use -gauges")
 	}
 	var gauges []common.Address
-	if windowFlags == 0 && !*withDiagnostics {
+	if windowFlags == 0 && (!*withDiagnostics || explicitGauges) {
 		seen := make(map[common.Address]bool)
 		for _, text := range strings.Split(*gaugeList, ",") {
 			text = strings.TrimSpace(text)
@@ -120,7 +120,12 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	fmt.Fprintln(diagnostics, "At most 5 RPC requests/sec and 300 attempts; CU cost depends on the provider.")
 	if *withDiagnostics {
 		fmt.Fprintf(diagnostics, "Checking %d reference pools with APR components, cached quote provenance and Convex control rates.\n", *limit)
-		result, err = service.GetPoolDiagnosticsAt(ctx, "ethereum", *limit, stakedao.DiagnosticOptions{BlockNumber: *blockNumber, StrictPrices: *strictPrices})
+		options := stakedao.DiagnosticOptions{BlockNumber: *blockNumber, StrictPrices: *strictPrices}
+		if explicitGauges {
+			result, err = service.GetGaugeDiagnosticsAt(ctx, "ethereum", gauges, options)
+		} else {
+			result, err = service.GetPoolDiagnosticsAt(ctx, "ethereum", *limit, options)
+		}
 	} else if windowFlags == 0 {
 		fmt.Fprintf(diagnostics, "Checking %d explicit gauge(s) using current Controller state; no log scan or historical eth_getCode.\n", len(gauges))
 		result, err = service.GetPoolsForGauges(ctx, "ethereum", gauges, *limit)

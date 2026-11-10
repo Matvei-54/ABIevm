@@ -1,0 +1,148 @@
+{
+  "network": "ethereum",
+  "blockNumber": 26385804,
+  "blockTimestamp": 1794329255,
+  "blockHash": "0xef5b53bbbde932cd7cd9ed54b48961ebabfc47b1a90b0911b532aa1c4ea7b80f",
+  "strictPrices": true,
+  "rpcAttempts": 46,
+  "pools": [
+    {
+      "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
+      "vaultAddress": "0x79b1571ebe88b4519db4fd964b12b922c0a915d6",
+      "assetAddress": "0x6c380152ee65d4f41eaf1a136aa882713f2524fe",
+      "rewardReceiver": "0xc479b94a0267994442b9da406068d562090e4ea0",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO avUSD/evaUSDC Vault",
+      "symbol": "sd-Avant Eva-vault",
+      "assetSymbol": "Avant Eva",
+      "assetAmount": "0.100140583641024587",
+      "assetDecimals": 18,
+      "tvl": null,
+      "apr": null,
+      "aprStatus": "unavailable",
+      "aprReasons": [
+        "asset_price_missing"
+      ],
+      "apy": null,
+      "allocation": {
+        "accountedAssets": "0.100140583641024587",
+        "physicalAssets": "0.100140583641024587",
+        "surplusAssets": "0.000000000000000000",
+        "status": "covered"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "0",
+            "workingBalanceRaw": "54341528877015970",
+            "workingSupplyRaw": "54341528877015970"
+          },
+          "lockerGrossRate": "0",
+          "convexGrossRate": "0",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0",
+          "harvestFeeRate": "0",
+          "netRate": "0",
+          "sidecars": [
+            {
+              "address": "0xd0dd7b58249add0e39ff0b68e9922c6b1e2c7311",
+              "pid": "561",
+              "rewardPool": "0xb97577690335520715f956a9eda7dfe0c255597e"
+            }
+          ]
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "561",
+          "status": "zero_supply",
+          "message": "No per-LP comparison: PoolUtilities skips normalization when staked supply is zero",
+          "rewardPool": "0xb97577690335520715f956a9eda7dfe0c255597e",
+          "rewardRateRaw": "27203246257685",
+          "stakedSupplyRaw": "0",
+          "periodFinish": 1786188155,
+          "expectedCrvRateRaw": null,
+          "helperCrvRateRaw": "0",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "convex_extra:0",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": null,
+          "helperOwnSidecarRate": null,
+          "roundingDifference": null,
+          "sidecarBalanceRaw": null
+        },
+        "readerModel": {
+          "status": "unavailable",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Complete CRV inputs and prices from the selected block are required",
+          "grossMinApr": null,
+          "weightedBoost": null,
+          "actualCrvApr": null,
+          "withoutHarvestFeeApr": null,
+          "globalProtocolFeeApr": null,
+          "referenceApr": null,
+          "differencePercentagePoints": null,
+          "ownSidecarCrvRate": null,
+          "globalPoolCrvRate": null,
+          "cappedReferenceSidecarCrvRate": null
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0",
+          "periodFinish": null,
+          "apr": null
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": null,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain",
+      "updatedAt": "2026-11-10T16:47:45.688328038Z"
+    }
+  ],
+  "errors": [
+    {
+      "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
+      "field": "tvl",
+      "message": "Fresh USD price for the underlying asset/LP token is unavailable",
+      "code": "asset_price_missing"
+    },
+    {
+      "gaugeAddress": "0x3285987bbd0b695ac48dc8571f519065b50aba07",
+      "field": "apr",
+      "message": "Positive USD TVL is required for APR",
+      "code": "apr_requires_tvl"
+    }
+  ]
+}

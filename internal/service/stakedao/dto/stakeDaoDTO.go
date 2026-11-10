@@ -23,6 +23,7 @@ type StakeDAOPool struct {
 	TVL           *float64                 `json:"tvl"`
 	APR           *float64                 `json:"apr"`
 	APRStatus     string                   `json:"aprStatus"`
+	APRReasons    []string                 `json:"aprReasons,omitempty"`
 	APY           *float64                 `json:"apy"`
 	Allocation    *StakeDAOAllocation      `json:"allocation,omitempty"`
 	Diagnostics   *StakeDAOPoolDiagnostics `json:"diagnostics,omitempty"`

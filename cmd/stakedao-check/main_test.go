@@ -19,7 +19,7 @@ func TestInvalidCheckDoesNotMakeRequests(t *testing.T) {
 			t.Fatalf("invalid arguments accepted: %v", args)
 		}
 	}
-	for _, args := range [][]string{{"-diagnostics"}, {"-diagnostics", "-limit", "3"}, {"-diagnostics", "-limit", "5", "-gauges", sampleGauges}, {"-diagnostics", "-limit", "2", "-from", "1", "-to", "2"}} {
+	for _, args := range [][]string{{"-diagnostics"}, {"-diagnostics", "-limit", "3"}, {"-diagnostics", "-limit", "5", "-gauges", "invalid"}, {"-diagnostics", "-limit", "2", "-from", "1", "-to", "2"}} {
 		if err := run(context.Background(), args, io.Discard, io.Discard); err == nil {
 			t.Fatalf("invalid diagnostics selection accepted: %v", args)
 		}

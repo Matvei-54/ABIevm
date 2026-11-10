@@ -1,5 +1,7 @@
 # Цены токенов: кэш и контракты
 
+[Проверенные ручные маршруты weETH/frxETH/BOLD и причины APR](ORACLE_ROUTES_RU.md).
+
 Исследование документации, SDK и адресов StakeDAO:
 [STAKE_DAO_PRICING_RESEARCH_RU.md](STAKE_DAO_PRICING_RESEARCH_RU.md).
 

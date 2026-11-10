@@ -1,5 +1,7 @@
 # StakeDAO: текущее состояние интеграции
 
+[Оракулы weETH/frxETH/BOLD, поле aprReasons и диагностика произвольных gauge](../prices/ORACLE_ROUTES_RU.md).
+
 Дополнительные источники: [обзор Convex, адреса и формулы](CONVEX_REFERENCE_REVIEW_RU.md)
 и [проверка фактических потоков CVX](CVX_REWARD_AUDIT_RU.md).
 

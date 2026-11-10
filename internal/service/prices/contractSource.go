@@ -67,6 +67,12 @@ var ethereumUSDFeeds = map[common.Address]common.Address{
 const contractPriceABI = `[
 {"type":"function","name":"getFeed","inputs":[{"type":"address"},{"type":"address"}],"outputs":[{"type":"address"}]},
 {"type":"function","name":"latestRoundData","inputs":[],"outputs":[{"type":"uint80"},{"type":"int256"},{"type":"uint256"},{"type":"uint256"},{"type":"uint80"}]},
+{"type":"function","name":"description","inputs":[],"outputs":[{"type":"string"}]},
+{"type":"function","name":"price_oracle","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"price_oracle","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"ma_last_time","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"ma_exp_time","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"stored_rates","inputs":[],"outputs":[{"type":"uint256[]"}]},
 {"type":"function","name":"decimals","inputs":[],"outputs":[{"type":"uint8"}]},
 {"type":"function","name":"asset","inputs":[],"outputs":[{"type":"address"}]},
 {"type":"function","name":"convertToAssets","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
@@ -92,6 +98,7 @@ const contractPriceABI = `[
 type ContractSource struct {
 	store   Store
 	methods abi.ABI
+	routes  map[common.Address]pinnedPriceRoute
 }
 
 func NewContractSource(store Store) *ContractSource {
@@ -99,7 +106,7 @@ func NewContractSource(store Store) *ContractSource {
 	if err != nil {
 		panic(err)
 	} // Compile-time ABI constant, never provider input.
-	return &ContractSource{store: store, methods: methods}
+	return &ContractSource{store: store, methods: methods, routes: ethereumPinnedPriceRoutes}
 }
 
 func (s *ContractSource) Fetch(context.Context, int64, []common.Address) (map[common.Address]Quote, error) {
@@ -328,9 +335,15 @@ func (r *contractResolver) price(token common.Address, depth int) (Quote, error)
 	}
 	r.visiting[token] = true
 	defer delete(r.visiting, token)
-	q, err := r.directUSD(token)
-	if errors.Is(err, errNoUSDFeed) {
-		q, err = r.derivedPrice(token, depth)
+	var q Quote
+	var err error
+	if route, known := r.source.routes[token]; known {
+		q, err = r.pinnedPrice(token, depth, route)
+	} else {
+		q, err = r.directUSD(token)
+		if errors.Is(err, errNoUSDFeed) {
+			q, err = r.derivedPrice(token, depth)
+		}
 	}
 	if err != nil {
 		return Quote{}, err
@@ -367,6 +380,12 @@ func (r *contractResolver) directUSD(token common.Address) (Quote, error) {
 	if feed == (common.Address{}) {
 		return Quote{}, errNoUSDFeed
 	}
+	return r.chainlinkQuote(feed)
+}
+
+// Values retain their feed's quote currency; cross-currency routes explicitly
+// compose this answer with their separately verified USD anchor.
+func (r *contractResolver) chainlinkQuote(feed common.Address) (Quote, error) {
 	d, err := r.tokenDecimals(feed)
 	if err != nil {
 		return Quote{}, err
@@ -380,7 +399,7 @@ func (r *contractResolver) directUSD(token common.Address) (Quote, error) {
 	// policy for the feeds used here. Cache lifetime never extends this deadline.
 	const maxAge = uint64((25 * time.Hour) / time.Second)
 	if round.Sign() <= 0 || answer.Sign() <= 0 || answered.Cmp(round) < 0 || !updated.IsUint64() || updated.Sign() <= 0 || started.Sign() <= 0 || started.Cmp(updated) > 0 || updated.Uint64() > r.snapshot.Timestamp || r.snapshot.Timestamp-updated.Uint64() >= maxAge {
-		return Quote{}, errors.New("invalid or stale Chainlink USD round")
+		return Quote{}, errors.New("invalid or stale Chainlink round")
 	}
 	return Quote{USD: decimal.NewFromBigInt(answer, -int32(d)), UpdatedAt: time.Unix(int64(r.snapshot.Timestamp), 0), ValidUntil: time.Unix(int64(updated.Uint64()+maxAge), 0), Source: "chainlink_usd", SourceContract: feed, BlockNumber: r.snapshot.Block}, nil
 }

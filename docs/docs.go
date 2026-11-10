@@ -188,14 +188,14 @@ const docTemplate = `{
         },
         "/reservesStakedao/{network}/diagnostics": {
             "get": {
-                "description": "Два или пять выбранных gauge через текущий Controller, без истории и Postgres. Состав APR, происхождение цен и контроль Convex PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.",
+                "description": "Стандартные 2/5 пулов или произвольные 1–5 gauge через параметр gauges, без истории и Postgres. Состав APR, причины aprReasons, источники цен и контроль PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "StakeDao"
                 ],
-                "summary": "Проверить награды crvUSD/USDC и FXS/ETH",
+                "summary": "Диагностика выбранных пулов StakeDAO",
                 "parameters": [
                     {
                         "type": "string",
@@ -213,6 +213,12 @@ const docTemplate = `{
                         "default": 2,
                         "description": "Количество контрольных пулов",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "1–5 gauge через запятую; при указании limit не используется",
+                        "name": "gauges",
                         "in": "query"
                     },
                     {
@@ -528,6 +534,12 @@ const docTemplate = `{
                 },
                 "apr": {
                     "type": "number"
+                },
+                "aprReasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "aprScope": {
                     "type": "string"

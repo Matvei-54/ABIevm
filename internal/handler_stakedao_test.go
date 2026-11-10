@@ -251,7 +251,8 @@ func TestStakeDAORoute(t *testing.T) {
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics", nil))
 	var diagnostic struct {
 		Pools []struct {
-			Gauge common.Address `json:"gaugeAddress"`
+			Gauge      common.Address `json:"gaugeAddress"`
+			APRReasons []string       `json:"aprReasons"`
 		} `json:"pools"`
 		Errors []struct {
 			Code     string         `json:"code"`
@@ -269,6 +270,15 @@ func TestStakeDAORoute(t *testing.T) {
 	if len(diagnostic.Errors) != 2 || diagnostic.Errors[0].Code != "primary_reward_strategy" || diagnostic.Errors[0].Stage != "strategy" || diagnostic.Errors[0].Contract != vault || diagnostic.Errors[0].Method != "strategy" {
 		t.Fatalf("missing structured primary diagnostics: %s", response.Body.String())
 	}
+	if len(diagnostic.Pools[0].APRReasons) != 1 || diagnostic.Pools[0].APRReasons[0] != "reward_data_missing" {
+		t.Fatalf("missing APR reason: %s", response.Body.String())
+	}
+	before = historyReads.Load()
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?limit=3&gauges=0x0000000000000000000000000000000000000011,0x0000000000000000000000000000000000000012,0x0000000000000000000000000000000000000013", nil))
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &diagnostic) != nil || len(diagnostic.Pools) != 3 || diagnostic.Pools[0].Gauge != common.HexToAddress("0x11") || historyReads.Load() != before {
+		t.Fatalf("custom diagnostics used history or wrong gauges: %s", response.Body.String())
+	}
 	before = historyReads.Load()
 	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?limit=5", nil))
@@ -282,7 +292,7 @@ func TestStakeDAORoute(t *testing.T) {
 			t.Fatalf("invalid diagnostics limit accepted: %s", limit)
 		}
 	}
-	for _, query := range []string{"block=0", "block=-1", "block=", "block=latest", "block=0xff", "block=18446744073709551616", "strictPrices=bad", "strictPrices="} {
+	for _, query := range []string{"block=0", "block=-1", "block=", "block=latest", "block=0xff", "block=18446744073709551616", "strictPrices=bad", "strictPrices=", "gauges=", "gauges=0x11", "gauges=0x0000000000000000000000000000000000000000", "gauges=0x0000000000000000000000000000000000000011,0x0000000000000000000000000000000000000011", "gauges=a,b,c,d,e,f"} {
 		response = httptest.NewRecorder()
 		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?"+query, nil))
 		if response.Code != http.StatusBadRequest {

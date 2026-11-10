@@ -1,0 +1,77 @@
+{
+  "network": "ethereum",
+  "blockNumber": 26385849,
+  "blockTimestamp": 1794329795,
+  "blockHash": "0x443d8f71a937d18ab588898c07cff1390d98351025fa49da5a3c8e64eeb17476",
+  "strictPrices": true,
+  "rpcAttempts": 14,
+  "pools": [
+    {
+      "gaugeAddress": "0xdc2df969ee5e66236b950f5c4c5f8abe62035df2",
+      "vaultAddress": "0xa7d21f6e72449c8a97d0ac321fa01bec65b48fac",
+      "assetAddress": "0x2d011adf89f0576c9b722c28269fcb5d50c2d179",
+      "rewardReceiver": "0x4f6344dee88403dcd7bbe3452e136c2df906c561",
+      "protocolId": "0xb774acb8",
+      "name": "Stake DAO Balancer sdBAL Stable Pool Vault",
+      "symbol": "sd-B-sdBAL-STABLE-vault",
+      "assetSymbol": "B-sdBAL-STABLE",
+      "assetAmount": "1079.492635613359131043",
+      "assetDecimals": 18,
+      "tvl": null,
+      "apr": null,
+      "aprStatus": "unavailable",
+      "aprReasons": [
+        "asset_price_missing",
+        "unsupported_model"
+      ],
+      "apy": null,
+      "diagnostics": {
+        "readerModel": {
+          "status": "unavailable",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Complete CRV inputs and prices from the selected block are required",
+          "grossMinApr": null,
+          "weightedBoost": null,
+          "actualCrvApr": null,
+          "withoutHarvestFeeApr": null,
+          "globalProtocolFeeApr": null,
+          "referenceApr": null,
+          "differencePercentagePoints": null,
+          "ownSidecarCrvRate": null,
+          "globalPoolCrvRate": null,
+          "cappedReferenceSidecarCrvRate": null
+        }
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0xc64ddf4bab7fdeca7086ec22d785472abc29364a",
+      "rewardToken": "0xba100000625a3754423978a60c9317c58a424e3d",
+      "aprScope": "rewards",
+      "rewards": [],
+      "source": "onchain",
+      "updatedAt": "2026-11-10T16:56:47.553436276Z"
+    }
+  ],
+  "errors": [
+    {
+      "gaugeAddress": "0xdc2df969ee5e66236b950f5c4c5f8abe62035df2",
+      "field": "apr",
+      "message": "Primary reward model is unsupported for this chain or protocol",
+      "code": "primary_reward_model",
+      "stage": "model",
+      "contract": "0xa7d21f6e72449c8a97d0ac321fa01bec65b48fac"
+    },
+    {
+      "gaugeAddress": "0xdc2df969ee5e66236b950f5c4c5f8abe62035df2",
+      "field": "tvl",
+      "message": "Fresh USD price for the underlying asset/LP token is unavailable",
+      "code": "asset_price_missing"
+    },
+    {
+      "gaugeAddress": "0xdc2df969ee5e66236b950f5c4c5f8abe62035df2",
+      "field": "apr",
+      "message": "Positive USD TVL is required for APR",
+      "code": "apr_requires_tvl"
+    }
+  ]
+}

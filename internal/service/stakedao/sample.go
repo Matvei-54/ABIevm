@@ -76,6 +76,22 @@ func (s *StakeDAOService) GetPoolsForGauges(ctx context.Context, network string,
 	return s.getPoolsWithSelection(ctx, network, &poolSample{limit: limit, gauges: append([]common.Address(nil), gauges...)})
 }
 
+// GetGaugeDiagnosticsAt extends the same bounded diagnostic path to any 1–5
+// explicit gauges, without history/DB and without changing production discovery.
+func (s *StakeDAOService) GetGaugeDiagnosticsAt(ctx context.Context, network string, gauges []common.Address, options DiagnosticOptions) (*dto.StakeDAOPoolsResponse, error) {
+	if len(gauges) < 1 || len(gauges) > MaxSamplePools {
+		return nil, errors.New("select 1–5 gauge addresses")
+	}
+	seen := map[common.Address]bool{}
+	for _, gauge := range gauges {
+		if gauge == (common.Address{}) || seen[gauge] {
+			return nil, errors.New("sample gauges must be nonzero and unique")
+		}
+		seen[gauge] = true
+	}
+	return s.getPoolsWithSelection(ctx, network, &poolSample{gauges: append([]common.Address(nil), gauges...), limit: len(gauges), diagnostics: true, blockNumber: options.BlockNumber, strictPrices: options.StrictPrices || options.BlockNumber != 0})
+}
+
 func (s *StakeDAOService) currentGaugeRegistrations(ctx context.Context, block *big.Int, gauges []common.Address) ([]StakeDAOVaultInfo, error) {
 	registrations := make([]StakeDAOVaultInfo, 0, len(gauges))
 	reads := make([]snapshotRead, 0, len(gauges))

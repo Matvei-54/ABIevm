@@ -4,6 +4,7 @@ import (
 	_ "ABIevm/docs"
 	"ABIevm/internal/service/prices"
 	"ABIevm/internal/service/stakedao"
+	dto "ABIevm/internal/service/stakedao/dto"
 
 	//"ABIevm/internal/dto"
 	"ABIevm/internal/service"
@@ -15,7 +16,7 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
-	//"strings"
+	"strings"
 
 	//decoder "ABIevm/internal/util"
 
@@ -216,12 +217,13 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 	return c.JSON(http.StatusOK, result.Summary())
 }
 
-// @Summary      Проверить награды crvUSD/USDC и FXS/ETH
-// @Description  Два или пять выбранных gauge через текущий Controller, без истории и Postgres. Состав APR, происхождение цен и контроль Convex PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.
+// @Summary      Диагностика выбранных пулов StakeDAO
+// @Description  Стандартные 2/5 пулов или произвольные 1–5 gauge через параметр gauges, без истории и Postgres. Состав APR, причины aprReasons, источники цен и контроль PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.
 // @Tags         StakeDao
 // @Produce      json
 // @Param        network  path      string true "Поддерживаемая сеть: ethereum"
 // @Param        limit    query     int false "Количество контрольных пулов" Enums(2,5) default(2)
+// @Param        gauges   query     string false "1–5 gauge через запятую; при указании limit не используется"
 // @Param        block    query     string false "Десятичный номер блока; включает строгие цены этого блока"
 // @Param        strictPrices query bool false "Изолированные цены выбранного блока без общего кэша" default(false)
 // @Success      200      {object}  dto.StakeDAOPoolsResponse
@@ -232,7 +234,7 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 // @Router       /reservesStakedao/{network}/diagnostics [get]
 func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 	limit := 2
-	if text := c.QueryParam("limit"); text != "" {
+	if text := c.QueryParam("limit"); text != "" && !c.QueryParams().Has("gauges") {
 		var err error
 		limit, err = strconv.Atoi(text)
 		if err != nil || (limit != 2 && limit != 5) {
@@ -254,7 +256,31 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 		}
 		options.StrictPrices = value
 	}
-	result, err := h.stakeDao.GetPoolDiagnosticsAt(c.Request().Context(), c.Param("network"), limit, options)
+	var result *dto.StakeDAOPoolsResponse
+	var err error
+	if c.QueryParams().Has("gauges") {
+		var gauges []common.Address
+		seen := map[common.Address]bool{}
+		parts := strings.Split(c.QueryParam("gauges"), ",")
+		if len(parts) > stakedao.MaxSamplePools {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "select at most five gauges"})
+		}
+		for _, text := range parts {
+			text = strings.TrimSpace(text)
+			if !common.IsHexAddress(text) {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "gauges must be 1–5 nonzero unique Ethereum addresses"})
+			}
+			gauge := common.HexToAddress(text)
+			if gauge == (common.Address{}) || seen[gauge] {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "gauges must be 1–5 nonzero unique Ethereum addresses"})
+			}
+			seen[gauge] = true
+			gauges = append(gauges, gauge)
+		}
+		result, err = h.stakeDao.GetGaugeDiagnosticsAt(c.Request().Context(), c.Param("network"), gauges, options)
+	} else {
+		result, err = h.stakeDao.GetPoolDiagnosticsAt(c.Request().Context(), c.Param("network"), limit, options)
+	}
 	if err != nil {
 		return stakeDAOHTTPError(c, err)
 	}

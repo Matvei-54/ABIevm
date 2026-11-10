@@ -1,0 +1,551 @@
+{
+  "blockNumber": 26385766,
+  "blockTimestamp": 1794328799,
+  "blockHash": "0x6bfc6ca9ee1800df4512dd8dc274d19ea974afa9bbe722617f7f28fff5f38380",
+  "queries": [
+    {
+      "target": "0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22",
+      "method": "description",
+      "success": true,
+      "values": [
+        "weETH / ETH"
+      ]
+    },
+    {
+      "target": "0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22",
+      "method": "decimals",
+      "success": true,
+      "values": [
+        "18"
+      ]
+    },
+    {
+      "target": "0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22",
+      "method": "latestRoundData",
+      "success": true,
+      "values": [
+        "36893488147419104121",
+        "1107677454955433600",
+        "1794285839",
+        "1794285851",
+        "36893488147419104121"
+      ]
+    },
+    {
+      "target": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+      "method": "description",
+      "success": true,
+      "values": [
+        "ETH / USD"
+      ]
+    },
+    {
+      "target": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+      "method": "decimals",
+      "success": true,
+      "values": [
+        "8"
+      ]
+    },
+    {
+      "target": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+      "method": "latestRoundData",
+      "success": true,
+      "values": [
+        "129127208515966896879",
+        "201467000000",
+        "1794328508",
+        "1794328523",
+        "129127208515966896879"
+      ]
+    },
+    {
+      "target": "0x54bCC589D9743e521c64233706Fc8cB36D275b07",
+      "method": "description",
+      "success": true,
+      "callMode": "direct",
+      "values": [
+        "USDC / USD"
+      ]
+    },
+    {
+      "target": "0x54bCC589D9743e521c64233706Fc8cB36D275b07",
+      "method": "decimals",
+      "success": true,
+      "callMode": "direct",
+      "values": [
+        "8"
+      ]
+    },
+    {
+      "target": "0x54bCC589D9743e521c64233706Fc8cB36D275b07",
+      "method": "latestRoundData",
+      "success": true,
+      "callMode": "direct",
+      "values": [
+        "60",
+        "99977704",
+        "1794289968",
+        "1794290003",
+        "60"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "last_prices_timestamp",
+      "success": false
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "ma_last_time",
+      "success": true,
+      "values": [
+        "1794328427"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "ma_exp_time",
+      "success": true,
+      "values": [
+        "10387"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "N_COINS",
+      "success": false
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "price_oracle",
+      "success": true,
+      "values": [
+        "998107440256668673"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "price_oracle",
+      "args": [
+        "0"
+      ],
+      "success": false
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "stored_rates",
+      "success": false
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "coins",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "balances",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "60759736991372896388"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "asset_types",
+      "args": [
+        "0"
+      ],
+      "success": false
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "coins",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "0x5e8422345238f34275888049021821e8e08caa1f"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "balances",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "208660304153374696263"
+      ]
+    },
+    {
+      "target": "0xa1F8A6807c402E4A15ef4EBa36528A3FED24E577",
+      "method": "asset_types",
+      "args": [
+        "1"
+      ],
+      "success": false
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "last_prices_timestamp",
+      "success": false
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "ma_last_time",
+      "success": true,
+      "values": [
+        "610578324173084346510033931464787164692242188139"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "ma_exp_time",
+      "success": true,
+      "values": [
+        "866"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "N_COINS",
+      "success": true,
+      "values": [
+        "2"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "price_oracle",
+      "success": false
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "price_oracle",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "1003344245212777339"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "stored_rates",
+      "success": true,
+      "values": [
+        [
+          "1000000000000000000",
+          "1000000000000000000000000000000"
+        ]
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "coins",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "0x6440f144b7e50d6a8439336510312d2f54beb01d"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "balances",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "6011278077332057778764005"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "asset_types",
+      "args": [
+        "0"
+      ],
+      "success": false
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "coins",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "balances",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "2741286214696"
+      ]
+    },
+    {
+      "target": "0xefc6516323fbd28e80b85a497b65a86243a54b3e",
+      "method": "asset_types",
+      "args": [
+        "1"
+      ],
+      "success": false
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "last_prices_timestamp",
+      "success": false
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "ma_last_time",
+      "success": true,
+      "values": [
+        "610577756582096322384676874555941968502865477863"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "ma_exp_time",
+      "success": true,
+      "values": [
+        "866"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "N_COINS",
+      "success": true,
+      "values": [
+        "2"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "price_oracle",
+      "success": false
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "price_oracle",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "999878624406700688"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "stored_rates",
+      "success": true,
+      "values": [
+        [
+          "1000000000000000000",
+          "1107850536204724212"
+        ]
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "coins",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "balances",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "1581327914846358330428"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "asset_types",
+      "args": [
+        "0"
+      ],
+      "success": false
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "coins",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "balances",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "2462307922370191828714"
+      ]
+    },
+    {
+      "target": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "method": "asset_types",
+      "args": [
+        "1"
+      ],
+      "success": false
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "last_prices_timestamp",
+      "success": false
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "ma_last_time",
+      "success": true,
+      "values": [
+        "1794327455"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "ma_exp_time",
+      "success": true,
+      "values": [
+        "2597"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "N_COINS",
+      "success": false
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "price_oracle",
+      "success": true,
+      "values": [
+        "998087624645325928"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "price_oracle",
+      "args": [
+        "0"
+      ],
+      "success": false
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "stored_rates",
+      "success": false
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "coins",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "balances",
+      "args": [
+        "0"
+      ],
+      "success": true,
+      "values": [
+        "987757687389061770289"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "asset_types",
+      "args": [
+        "0"
+      ],
+      "success": false
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "coins",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "0x5e8422345238f34275888049021821e8e08caa1f"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "balances",
+      "args": [
+        "1"
+      ],
+      "success": true,
+      "values": [
+        "3081313389883648305962"
+      ]
+    },
+    {
+      "target": "0x9c3b46c0ceb5b9e304fcd6d88fc50f7dd24b31bc",
+      "method": "asset_types",
+      "args": [
+        "1"
+      ],
+      "success": false
+    }
+  ],
+  "verification": {
+    "sameBlockAsThreePoolResult": true,
+    "allThreeUsdPricesRecalculated": true,
+    "publicRpcRequests": 8,
+    "ethUsd": "2014.67",
+    "usdcUsd": "0.99977704",
+    "weEthEth": "1.1076774549554336",
+    "frxEthWeth": "0.998087624645325928",
+    "boldPerUsdc": "1.003344245212777339",
+    "note": "USDC FeedRegistry aggregator responses were checked with direct eth_call; access-controlled Chainlink sources must not be moved through Multicall."
+  }
+}

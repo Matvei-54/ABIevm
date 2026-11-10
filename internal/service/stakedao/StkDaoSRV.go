@@ -267,6 +267,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	for i := range response.Pools {
 		response.Errors = append(response.Errors, s.valuePool(ctx, &response.Pools[i])...)
 		response.Errors = append(response.Errors, s.valueRewards(ctx, &response.Pools[i])...)
+		setAPRReasons(&response.Pools[i], response.Errors)
 		if s.diagnostics {
 			s.addPoolDiagnostics(ctx, block, &response.Pools[i])
 			if sample != nil && sample.strictPrices {
@@ -624,11 +625,15 @@ func (s *StakeDAOService) valuePool(ctx context.Context, pool *dto.StakeDAOPool)
 		return nil
 	}
 	if s.prices == nil {
-		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Token price service is unavailable")}
+		issue := poolIssue(pool.GaugeAddress, "tvl", "Token price service is unavailable")
+		issue.Code = "asset_price_missing"
+		return []dto.StakeDAOPoolError{issue}
 	}
 	price, err := s.valuationPrice(ctx, pool, pool.AssetAddress)
 	if err != nil {
-		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Fresh USD price for the underlying asset/LP token is unavailable")}
+		issue := poolIssue(pool.GaugeAddress, "tvl", "Fresh USD price for the underlying asset/LP token is unavailable")
+		issue.Code = "asset_price_missing"
+		return []dto.StakeDAOPoolError{issue}
 	}
 	if !price.IsPositive() {
 		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "tvl", "Invalid asset amount or USD price")}
@@ -648,7 +653,9 @@ func (s *StakeDAOService) loadPoolRewardMechanism(ctx context.Context, info Stak
 	protocol := fmt.Sprintf("0x%x", info.ProtocolID)
 	if protocol != "0xc715e373" && protocol != "0xb774acb8" {
 		pool.RewardMechanism = "unsupported"
-		return []dto.StakeDAOPoolError{poolIssue(info.Gauge, "apr", "Unverified reward mechanism for this protocol ID")}
+		issue := poolIssue(info.Gauge, "apr", "Unverified reward mechanism for this protocol ID")
+		issue.Code = "unsupported_model"
+		return []dto.StakeDAOPoolError{issue}
 	}
 	pool.RewardMechanism = "accountant"
 	data := s.snapshotCalls(ctx, block,
@@ -1110,7 +1117,12 @@ func netPrimaryRate(locker, sidecar, protocolFee, harvestFee decimal.Decimal) de
 
 func (s *StakeDAOService) valueRewards(ctx context.Context, pool *dto.StakeDAOPool) []dto.StakeDAOPoolError {
 	if pool.TVL == nil || *pool.TVL <= 0 {
-		return []dto.StakeDAOPoolError{poolIssue(pool.GaugeAddress, "apr", "Positive USD TVL is required for APR")}
+		issue := poolIssue(pool.GaugeAddress, "apr", "Positive USD TVL is required for APR")
+		issue.Code = "apr_requires_tvl"
+		if pool.TVL != nil && *pool.TVL == 0 {
+			issue.Code = "empty_vault"
+		}
+		return []dto.StakeDAOPoolError{issue}
 	}
 	complete := pool.RewardsComplete
 	primaryFound := false
@@ -1135,12 +1147,17 @@ func (s *StakeDAOService) valueRewards(ctx context.Context, pool *dto.StakeDAOPo
 		if rate.IsPositive() {
 			if s.prices == nil {
 				complete = false
+				issue := poolIssue(pool.GaugeAddress, "apr", "Active reward token USD price is unavailable")
+				issue.Code = "reward_price_missing"
+				issues = append(issues, issue)
 				continue
 			}
 			price, err := s.valuationPrice(ctx, pool, reward.Token)
 			if err != nil || !price.IsPositive() {
 				complete = false
-				issues = append(issues, poolIssue(pool.GaugeAddress, "apr", "Active reward token USD price is unavailable"))
+				issue := poolIssue(pool.GaugeAddress, "apr", "Active reward token USD price is unavailable")
+				issue.Code = "reward_price_missing"
+				issues = append(issues, issue)
 				continue
 			}
 			apr = rate.Mul(price).Mul(decimal.NewFromInt(31536000)).DivRound(decimal.NewFromFloat(*pool.TVL), 128).Mul(decimal.NewFromInt(100))

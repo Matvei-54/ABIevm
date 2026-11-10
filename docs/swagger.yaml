@@ -166,6 +166,10 @@ definitions:
         $ref: '#/definitions/dto.StakeDAOAllocation'
       apr:
         type: number
+      aprReasons:
+        items:
+          type: string
+        type: array
       aprScope:
         type: string
       aprStatus:
@@ -431,9 +435,9 @@ paths:
       - StakeDao
   /reservesStakedao/{network}/diagnostics:
     get:
-      description: Два или пять выбранных gauge через текущий Controller, без истории
-        и Postgres. Состав APR, происхождение цен и контроль Convex PoolUtilities.
-        Не более 5 RPC/с и 300 попыток на запрос.
+      description: Стандартные 2/5 пулов или произвольные 1–5 gauge через параметр
+        gauges, без истории и Postgres. Состав APR, причины aprReasons, источники
+        цен и контроль PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.
       parameters:
       - description: 'Поддерживаемая сеть: ethereum'
         in: path
@@ -448,6 +452,10 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: 1–5 gauge через запятую; при указании limit не используется
+        in: query
+        name: gauges
+        type: string
       - description: Десятичный номер блока; включает строгие цены этого блока
         in: query
         name: block
@@ -488,7 +496,7 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Проверить награды crvUSD/USDC и FXS/ETH
+      summary: Диагностика выбранных пулов StakeDAO
       tags:
       - StakeDao
 swagger: "2.0"
