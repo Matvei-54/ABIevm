@@ -113,7 +113,7 @@ const docTemplate = `{
         },
         "/reservesStakedao/{network}": {
             "get": {
-                "description": "По умолчанию: name, apr, symbol, address (vault), apy, status (полнота APR). details=true возвращает TVL, адреса контрактов, награды и диагностику. APR в процентах; APY пока недоступен.",
+                "description": "По умолчанию: name, apr, symbol, address (vault), apy, status. APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault. details=true добавляет yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY пока недоступны.",
                 "consumes": [
                     "application/json"
                 ],
@@ -505,6 +505,29 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.StakeDAOAPRComponent": {
+            "type": "object",
+            "properties": {
+                "apr": {
+                    "type": "number"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.StakeDAOAllocation": {
             "type": "object",
             "properties": {
@@ -519,6 +542,64 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "surplusAssets": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOGaugeReward": {
+            "type": "object",
+            "properties": {
+                "apr": {
+                    "type": "number"
+                },
+                "distributionStatus": {
+                    "type": "string"
+                },
+                "globalRatePerSecond": {
+                    "type": "string"
+                },
+                "periodFinish": {
+                    "type": "integer"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOGaugeYield": {
+            "type": "object",
+            "properties": {
+                "apr": {
+                    "type": "number"
+                },
+                "contract": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "rewards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOGaugeReward"
+                    }
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "totalSupply": {
                     "type": "string"
                 }
             }
@@ -605,6 +686,9 @@ const docTemplate = `{
                 },
                 "vaultAddress": {
                     "type": "string"
+                },
+                "yieldBreakdown": {
+                    "$ref": "#/definitions/dto.StakeDAOYieldBreakdown"
                 }
             }
         },
@@ -750,6 +834,58 @@ const docTemplate = `{
                 },
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOTradingYield": {
+            "type": "object",
+            "properties": {
+                "apy": {
+                    "type": "number"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "windowDays": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.StakeDAOYieldBreakdown": {
+            "type": "object",
+            "properties": {
+                "crv": {
+                    "$ref": "#/definitions/dto.StakeDAOAPRComponent"
+                },
+                "gaugeExtra": {
+                    "$ref": "#/definitions/dto.StakeDAOGaugeYield"
+                },
+                "includedInApr": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "merkl": {
+                    "$ref": "#/definitions/dto.StakeDAOAPRComponent"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "trading": {
+                    "$ref": "#/definitions/dto.StakeDAOTradingYield"
+                },
+                "vaultExtra": {
+                    "$ref": "#/definitions/dto.StakeDAOAPRComponent"
                 }
             }
         }

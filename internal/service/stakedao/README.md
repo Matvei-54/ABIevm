@@ -1,5 +1,7 @@
 # StakeDAO: текущее состояние интеграции
 
+[Разделение CRV, vault/gauge extras, Merkl и торговой APY](YIELD_COMPONENTS_RU.md).
+
 [Оракулы weETH/frxETH/BOLD, поле aprReasons и диагностика произвольных gauge](../prices/ORACLE_ROUTES_RU.md).
 
 Дополнительные источники: [обзор Convex, адреса и формулы](CONVEX_REFERENCE_REVIEW_RU.md)

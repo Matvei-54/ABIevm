@@ -226,6 +226,18 @@ func TestStakeDAORoute(t *testing.T) {
 			TVL         *float64       `json:"tvl"`
 			APY         *float64       `json:"apy"`
 			RewardToken common.Address `json:"rewardToken"`
+			APRScope    string         `json:"aprScope"`
+			Yield       struct {
+				Status string `json:"status"`
+				Merkl  struct {
+					APR    *float64 `json:"apr"`
+					Status string   `json:"status"`
+				} `json:"merkl"`
+				Trading struct {
+					APY     *float64 `json:"apy"`
+					Reasons []string `json:"reasons"`
+				} `json:"trading"`
+			} `json:"yieldBreakdown"`
 		} `json:"pools"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -233,6 +245,9 @@ func TestStakeDAORoute(t *testing.T) {
 	}
 	if body.BlockNumber != 10 || len(body.Pools) != 1 || body.Pools[0].Name != "Stake DAO HTTP fixture Vault" || body.Pools[0].AssetAmount != "2.500000" || body.Pools[0].TVL == nil || *body.Pools[0].TVL != 5 || body.Pools[0].APY != nil || body.Pools[0].RewardToken != common.HexToAddress("0x66") {
 		t.Fatalf("unexpected body: %s", response.Body.String())
+	}
+	if body.Pools[0].APRScope != "vault_rewards" || body.Pools[0].Yield.Status != "partial" || body.Pools[0].Yield.Merkl.APR != nil || body.Pools[0].Yield.Merkl.Status != "unavailable" || body.Pools[0].Yield.Trading.APY != nil || len(body.Pools[0].Yield.Trading.Reasons) != 1 {
+		t.Fatalf("missing yield scopes or fabricated unknowns: %s", response.Body.String())
 	}
 	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum", nil))

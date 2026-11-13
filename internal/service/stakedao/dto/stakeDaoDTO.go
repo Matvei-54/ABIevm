@@ -27,16 +27,63 @@ type StakeDAOPool struct {
 	APY           *float64                 `json:"apy"`
 	Allocation    *StakeDAOAllocation      `json:"allocation,omitempty"`
 	Diagnostics   *StakeDAOPoolDiagnostics `json:"diagnostics,omitempty"`
+	Yield         *StakeDAOYieldBreakdown  `json:"yieldBreakdown,omitempty"`
 
-	RewardMechanism   string           `json:"rewardMechanism"`
-	AccountantAddress *common.Address  `json:"accountantAddress" swaggertype:"string"`
-	RewardToken       *common.Address  `json:"rewardToken" swaggertype:"string"`
-	APRScope          string           `json:"aprScope"`
-	Rewards           []StakeDAOReward `json:"rewards"`
-	RewardsComplete   bool             `json:"-"`
+	RewardMechanism     string           `json:"rewardMechanism"`
+	AccountantAddress   *common.Address  `json:"accountantAddress" swaggertype:"string"`
+	RewardToken         *common.Address  `json:"rewardToken" swaggertype:"string"`
+	APRScope            string           `json:"aprScope"`
+	Rewards             []StakeDAOReward `json:"rewards"`
+	RewardsComplete     bool             `json:"-"`
+	VaultExtrasComplete bool             `json:"-"`
 	//	ChainID     int64          `json:"chainId"`
 	Source    string    `json:"source"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Components have different scopes. Gauge projection is upstream of possible
+// vault distributions and must never be summed with vault-extra automatically.
+type StakeDAOYieldBreakdown struct {
+	Status        string               `json:"status"`
+	IncludedInAPR []string             `json:"includedInApr"`
+	CRV           StakeDAOAPRComponent `json:"crv"`
+	VaultExtra    StakeDAOAPRComponent `json:"vaultExtra"`
+	GaugeExtra    StakeDAOGaugeYield   `json:"gaugeExtra"`
+	Merkl         StakeDAOAPRComponent `json:"merkl"`
+	Trading       StakeDAOTradingYield `json:"trading"`
+}
+
+type StakeDAOAPRComponent struct {
+	APR     *float64 `json:"apr"`
+	Status  string   `json:"status"`
+	Source  string   `json:"source"`
+	Scope   string   `json:"scope"`
+	Reasons []string `json:"reasons,omitempty"`
+}
+
+type StakeDAOTradingYield struct {
+	APY        *float64 `json:"apy"`
+	Status     string   `json:"status"`
+	Source     string   `json:"source"`
+	WindowDays *int     `json:"windowDays"`
+	Reasons    []string `json:"reasons,omitempty"`
+}
+
+type StakeDAOGaugeYield struct {
+	StakeDAOAPRComponent
+	Contract    common.Address        `json:"contract" swaggertype:"string"`
+	TotalSupply *string               `json:"totalSupply"`
+	Rewards     []StakeDAOGaugeReward `json:"rewards"`
+}
+
+// RatePerSecond is the global gauge emission, not the vault's payout rate.
+type StakeDAOGaugeReward struct {
+	Token              common.Address `json:"token" swaggertype:"string"`
+	RatePerSecond      *string        `json:"globalRatePerSecond"`
+	PeriodFinish       *uint64        `json:"periodFinish"`
+	APR                *float64       `json:"apr"`
+	DistributionStatus string         `json:"distributionStatus"`
+	Reason             string         `json:"reason,omitempty"`
 }
 
 // Quantities are exact LP amounts, not USD. Surplus does not increase vault TVL.

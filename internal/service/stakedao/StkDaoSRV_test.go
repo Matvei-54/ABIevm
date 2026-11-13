@@ -63,6 +63,13 @@ type fixtureRPC struct {
 	utilityCalls         int
 	convexSupply         *big.Int
 	headerTime           uint64
+	gaugeTokens          []common.Address
+	gaugeRate            *big.Int
+	gaugeFinish          uint64
+	gaugeUpdated         uint64
+	gaugeSupply          *big.Int
+	gaugeCount           *big.Int
+	gaugeLP              *common.Address
 }
 
 func (f *fixtureRPC) ChainID(context.Context) (*big.Int, error)   { return big.NewInt(1), nil }
@@ -120,7 +127,7 @@ func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, bloc
 }
 
 func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
-	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI} {
+	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveGaugeExtrasABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI} {
 		parsed, _ := abi.JSON(strings.NewReader(abiJSON))
 		method, err := parsed.MethodById(call.Data[:4])
 		if err != nil {
@@ -133,6 +140,28 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			return nil, errors.New("fixture call failed")
 		}
 		switch method.Name {
+		case "lp_token":
+			if f.gaugeLP != nil {
+				return method.Outputs.Pack(*f.gaugeLP)
+			}
+			return method.Outputs.Pack(f.assets[*call.To])
+		case "reward_count":
+			if f.gaugeCount != nil {
+				return method.Outputs.Pack(f.gaugeCount)
+			}
+			return method.Outputs.Pack(big.NewInt(int64(len(f.gaugeTokens))))
+		case "reward_tokens":
+			args, err := method.Inputs.Unpack(call.Data[4:])
+			if err != nil {
+				return nil, err
+			}
+			return method.Outputs.Pack(f.gaugeTokens[args[0].(*big.Int).Int64()])
+		case "reward_data":
+			rate := f.gaugeRate
+			if rate == nil {
+				rate = new(big.Int)
+			}
+			return method.Outputs.Pack(common.Address{}, common.HexToAddress("0x44"), new(big.Int).SetUint64(f.gaugeFinish), rate, new(big.Int).SetUint64(f.gaugeUpdated), new(big.Int))
 		case "rewardRates":
 			f.utilityCalls++
 			rate := f.utilityRate
@@ -219,6 +248,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			}
 			return method.Outputs.Pack(big.NewInt(500000))
 		case "totalSupply":
+			if len(method.Inputs) == 0 && f.vaults[*call.To] != (common.Address{}) && f.gaugeSupply != nil {
+				return method.Outputs.Pack(f.gaugeSupply)
+			}
 			if *call.To == common.HexToAddress("0x1237") && f.convexSupply != nil {
 				return method.Outputs.Pack(f.convexSupply)
 			}
@@ -1198,5 +1230,117 @@ func TestAPRReasonsDistinguishEmptyMissingPricesAndUnsupportedModel(t *testing.T
 				t.Fatalf("got %v want %v", tc.pool.APRReasons, tc.want)
 			}
 		})
+	}
+}
+
+func TestYieldBreakdownSeparatesGaugeProjectionFromVaultPayout(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.headerTime = true, 1000
+	token := common.HexToAddress("0x66")
+	f.gaugeTokens, f.extraTokens = []common.Address{token}, []common.Address{token}
+	f.gaugeRate, f.gaugeFinish = big.NewInt(1), 2000 // one raw 6-decimal token/sec
+	f.gaugeSupply = big.NewInt(1000000000)           // 1000 six-decimal LP
+	f.extraRate, f.extraFinish = big.NewInt(1000000000000000000), 2000
+	f.tokenDecimals = map[common.Address]uint8{token: 6}
+	store := prices.NewMemoryStore()
+	for address, price := range map[common.Address]int64{common.HexToAddress("0xcc"): 2, f.rewardToken: 3, token: 3} {
+		if err := store.Set(context.Background(), prices.TokenKey{ChainID: 1, Address: address}, prices.Quote{USD: decimal.NewFromInt(price), UpdatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.prices = prices.NewTokenPriceService(store, nil)
+	r, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := r.Pools[0]
+	y := p.Yield
+	if y == nil || y.GaugeExtra.APR == nil || math.Abs(*y.GaugeExtra.APR-4.7304) > 1e-10 || *y.GaugeExtra.Rewards[0].RatePerSecond != "0.000001" {
+		t.Fatalf("incorrect gauge units: %+v", y)
+	}
+	if p.APR == nil || y.CRV.APR == nil || y.VaultExtra.APR == nil || math.Abs(*p.APR-*y.CRV.APR-*y.VaultExtra.APR) > 1e-6 {
+		t.Fatalf("gauge projection was double counted: %+v", p)
+	}
+	if p.APRScope != "vault_rewards" || y.Status != "partial" || y.Merkl.APR != nil || y.Trading.APY != nil || y.Trading.WindowDays != nil || y.Merkl.Status != "unavailable" {
+		t.Fatalf("unknown components fabricated: %+v", y)
+	}
+	if !reflect.DeepEqual(y.IncludedInAPR, []string{"crv", "vaultExtra"}) {
+		t.Fatalf("ambiguous aggregation: %+v", y)
+	}
+}
+
+func TestGaugeYieldMissingDataNeverTurnsIntoZero(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*fixtureRPC)
+		status string
+		zero   bool
+	}{
+		{"no-rewards", func(f *fixtureRPC) { f.gaugeTokens = nil }, "available", true},
+		{"expired", func(f *fixtureRPC) { f.gaugeFinish = 900 }, "available", true},
+		{"not-started", func(f *fixtureRPC) { f.gaugeRate = new(big.Int); f.gaugeFinish = 0 }, "available", true},
+		{"future-update", func(f *fixtureRPC) { f.gaugeUpdated = 1001 }, "unavailable", false},
+		{"missing-price", func(f *fixtureRPC) {}, "unavailable", false},
+		{"missing-count", func(f *fixtureRPC) { f.callFailure = "reward_count" }, "unavailable", false},
+		{"missing-data", func(f *fixtureRPC) { f.callFailure = "reward_data" }, "unavailable", false},
+		{"duplicate-token", func(f *fixtureRPC) { f.gaugeTokens = append(f.gaugeTokens, f.gaugeTokens[0]) }, "unavailable", false},
+		{"too-many-tokens", func(f *fixtureRPC) { f.gaugeCount = big.NewInt(9) }, "unavailable", false},
+		{"wrong-lp", func(f *fixtureRPC) { wrong := common.HexToAddress("0xff"); f.gaugeLP = &wrong }, "unavailable", false},
+		{"zero-supply", func(f *fixtureRPC) { f.gaugeSupply = new(big.Int) }, "unavailable", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.fullPrimary, f.headerTime = true, 1000
+			f.gaugeTokens = []common.Address{common.HexToAddress("0x66")}
+			f.gaugeRate, f.gaugeFinish = big.NewInt(1), 2000
+			tc.change(f)
+			r, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := r.Pools[0]
+			g := p.Yield.GaugeExtra
+			if g.Status != tc.status || tc.zero && (g.APR == nil || *g.APR != 0) || !tc.zero && g.APR != nil {
+				t.Fatalf("unknown became zero or status is wrong: %+v", g)
+			}
+			if p.APR == nil || p.APRStatus != "available" || p.Yield.CRV.Status != "available" {
+				t.Fatalf("optional gauge data corrupted vault income: %+v", p)
+			}
+		})
+	}
+}
+
+func TestYieldComponentsAreIndependentOfPrimaryAndExtraFailures(t *testing.T) {
+	zero, one := float64(0), float64(1)
+	p := dto.StakeDAOPool{TVL: &one, VaultExtrasComplete: true}
+	if c := streamComponent(&p, "vault-extra", "active_vault_distribution", false); c.APR == nil || *c.APR != 0 || c.Status != "available" {
+		t.Fatalf("verified empty extra list depends on CRV: %+v", c)
+	}
+	p.VaultExtrasComplete = false
+	p.Rewards = []dto.StakeDAOReward{{Source: "curve-primary-net", APR: &zero}, {Source: "vault-extra"}}
+	if c := streamComponent(&p, "curve-primary-net", "net_vault_stream", true); c.APR == nil || *c.APR != 0 || c.Status != "available" {
+		t.Fatalf("known zero CRV depends on missing extra price: %+v", c)
+	}
+	if c := streamComponent(&p, "vault-extra", "active_vault_distribution", false); c.APR != nil || c.Status != "unavailable" {
+		t.Fatalf("unknown extras became zero: %+v", c)
+	}
+}
+
+func TestGaugeYieldPartialPriceCoverage(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.headerTime = true, 1000
+	f.gaugeTokens = []common.Address{common.HexToAddress("0x66"), f.rewardToken}
+	f.gaugeRate, f.gaugeFinish = big.NewInt(1), 2000
+	r, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := r.Pools[0]
+	g := p.Yield.GaugeExtra
+	if g.Status != "partial" || g.APR == nil || *g.APR <= 0 || len(g.Rewards) != 2 || g.Rewards[0].APR != nil || g.Rewards[0].Reason != "price_missing" || g.Rewards[1].APR == nil {
+		t.Fatalf("missing price discarded known rewards or became zero: %+v", g)
+	}
+	if p.APRStatus != "available" || p.APR == nil || p.Yield.CRV.APR == nil || *p.APR != *p.Yield.CRV.APR {
+		t.Fatalf("gauge projection changed vault APR: %+v", p)
 	}
 }

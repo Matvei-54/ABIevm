@@ -146,6 +146,21 @@ definitions:
       withoutHarvestFeeApr:
         type: number
     type: object
+  dto.StakeDAOAPRComponent:
+    properties:
+      apr:
+        type: number
+      reasons:
+        items:
+          type: string
+        type: array
+      scope:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+    type: object
   dto.StakeDAOAllocation:
     properties:
       accountedAssets:
@@ -156,6 +171,44 @@ definitions:
         description: covered, surplus, deficit, unverified
         type: string
       surplusAssets:
+        type: string
+    type: object
+  dto.StakeDAOGaugeReward:
+    properties:
+      apr:
+        type: number
+      distributionStatus:
+        type: string
+      globalRatePerSecond:
+        type: string
+      periodFinish:
+        type: integer
+      reason:
+        type: string
+      token:
+        type: string
+    type: object
+  dto.StakeDAOGaugeYield:
+    properties:
+      apr:
+        type: number
+      contract:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      rewards:
+        items:
+          $ref: '#/definitions/dto.StakeDAOGaugeReward'
+        type: array
+      scope:
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      totalSupply:
         type: string
     type: object
   dto.StakeDAOPool:
@@ -215,6 +268,8 @@ definitions:
         type: string
       vaultAddress:
         type: string
+      yieldBreakdown:
+        $ref: '#/definitions/dto.StakeDAOYieldBreakdown'
     type: object
   dto.StakeDAOPoolDiagnostics:
     properties:
@@ -312,6 +367,40 @@ definitions:
       token:
         type: string
     type: object
+  dto.StakeDAOTradingYield:
+    properties:
+      apy:
+        type: number
+      reasons:
+        items:
+          type: string
+        type: array
+      source:
+        type: string
+      status:
+        type: string
+      windowDays:
+        type: integer
+    type: object
+  dto.StakeDAOYieldBreakdown:
+    properties:
+      crv:
+        $ref: '#/definitions/dto.StakeDAOAPRComponent'
+      gaugeExtra:
+        $ref: '#/definitions/dto.StakeDAOGaugeYield'
+      includedInApr:
+        items:
+          type: string
+        type: array
+      merkl:
+        $ref: '#/definitions/dto.StakeDAOAPRComponent'
+      status:
+        type: string
+      trading:
+        $ref: '#/definitions/dto.StakeDAOTradingYield'
+      vaultExtra:
+        $ref: '#/definitions/dto.StakeDAOAPRComponent'
+    type: object
 info:
   contact: {}
 paths:
@@ -385,9 +474,11 @@ paths:
     get:
       consumes:
       - application/json
-      description: 'По умолчанию: name, apr, symbol, address (vault), apy, status
-        (полнота APR). details=true возвращает TVL, адреса контрактов, награды и диагностику.
-        APR в процентах; APY пока недоступен.'
+      description: 'По умолчанию: name, apr, symbol, address (vault), apy, status.
+        APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault.
+        details=true добавляет yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку
+        gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется
+        к APR. Merkl и trading APY пока недоступны.'
       parameters:
       - description: 'Поддерживаемая сеть: ethereum'
         in: path

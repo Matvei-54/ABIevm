@@ -238,6 +238,16 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 				}
 			}
 		}
+		if pool.Yield != nil {
+			for _, reward := range pool.Yield.GaugeExtra.Rewards {
+				if reward.RatePerSecond != nil {
+					rate, err := decimal.NewFromString(*reward.RatePerSecond)
+					if err == nil && rate.IsPositive() {
+						tokens = append(tokens, reward.Token)
+					}
+				}
+			}
+		}
 	}
 	priceWorkers := 0
 	if s.prices != nil {
@@ -268,6 +278,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		response.Errors = append(response.Errors, s.valuePool(ctx, &response.Pools[i])...)
 		response.Errors = append(response.Errors, s.valueRewards(ctx, &response.Pools[i])...)
 		setAPRReasons(&response.Pools[i], response.Errors)
+		s.valueYieldBreakdown(ctx, &response.Pools[i])
 		if s.diagnostics {
 			s.addPoolDiagnostics(ctx, block, &response.Pools[i])
 			if sample != nil && sample.strictPrices {
@@ -539,6 +550,7 @@ func (s *StakeDAOService) loadPoolAt(ctx context.Context, info StakeDAOVaultInfo
 	pool, issues := s.loadPool(ctx, info, block)
 	issues = append(issues, s.loadPoolRewardMechanism(ctx, info, block, &pool)...)
 	issues = append(issues, s.loadRewardStreams(ctx, info, block, &pool)...)
+	s.loadYieldBreakdown(ctx, info, block, &pool)
 	if err := s.batches.err(); err != nil {
 		return nil, nil, err
 	}
@@ -556,7 +568,7 @@ func (s *StakeDAOService) loadPool(ctx context.Context, info StakeDAOVaultInfo, 
 		RewardReceiver: info.RewardReceiver, ProtocolID: fmt.Sprintf("0x%x", info.ProtocolID),
 		Source: "onchain", UpdatedAt: time.Now().UTC(),
 		APRStatus: "unavailable",
-		APRScope:  "rewards",
+		APRScope:  "vault_rewards",
 		Rewards:   make([]dto.StakeDAOReward, 0),
 	}
 	var issues []dto.StakeDAOPoolError
@@ -723,6 +735,7 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 	if err != nil {
 		return append(issues, poolIssue(info.Gauge, "apr", "RewardVault extra reward list is unavailable"))
 	}
+	extraIssuesStart := len(issues)
 	seen := map[common.Address]bool{}
 	var reads []snapshotRead
 	for _, token := range tokens {
@@ -775,6 +788,7 @@ func (s *StakeDAOService) loadRewardStreams(ctx context.Context, info StakeDAOVa
 		}
 		pool.Rewards = append(pool.Rewards, reward)
 	}
+	pool.VaultExtrasComplete = len(issues) == extraIssuesStart
 	pool.RewardsComplete = len(issues) == 0 && pool.RewardToken != nil
 	return issues
 }

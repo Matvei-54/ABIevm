@@ -1,5 +1,7 @@
 # Локальный запуск ABIevm и проверка StakeDAO
 
+[Состав доходности и отдельная оценка gauge rewards](internal/service/stakedao/YIELD_COMPONENTS_RU.md).
+
 [Новые оракулы, aprReasons и проверка до пяти выбранных gauge](internal/service/prices/ORACLE_ROUTES_RU.md).
 
 Проверенная версия Go: **1.27.2**. Откройте терминал в корне проекта — папке с `go.mod`.
