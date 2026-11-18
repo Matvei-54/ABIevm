@@ -188,6 +188,17 @@ definitions:
       token:
         type: string
     type: object
+  dto.StakeDAOGaugeState:
+    properties:
+      assetAmount:
+        type: string
+      gaugeAddress:
+        type: string
+      state:
+        $ref: '#/definitions/dto.StakeDAOPoolState'
+      vaultAddress:
+        type: string
+    type: object
   dto.StakeDAOGaugeYield:
     properties:
       apr:
@@ -260,6 +271,8 @@ definitions:
       source:
         description: ChainID     int64          `json:"chainId"`
         type: string
+      state:
+        $ref: '#/definitions/dto.StakeDAOPoolState'
       symbol:
         type: string
       tvl:
@@ -300,6 +313,46 @@ definitions:
         type: string
       stage:
         type: string
+    type: object
+  dto.StakeDAOPoolState:
+    properties:
+      blockNumber:
+        type: integer
+      crvRelativeWeight:
+        type: string
+      gaugeKilled:
+        type: boolean
+      hasAssets:
+        type: boolean
+      hasCrvWeight:
+        type: boolean
+      issues:
+        items:
+          $ref: '#/definitions/dto.StakeDAOStateIssue'
+        type: array
+      protocolPaused:
+        type: boolean
+      registered:
+        type: boolean
+      shutdown:
+        type: boolean
+    type: object
+  dto.StakeDAOPoolStatesResponse:
+    properties:
+      blockHash:
+        type: string
+      blockNumber:
+        type: integer
+      blockTimestamp:
+        type: integer
+      gauges:
+        items:
+          $ref: '#/definitions/dto.StakeDAOGaugeState'
+        type: array
+      network:
+        type: string
+      rpcAttempts:
+        type: integer
     type: object
   dto.StakeDAOPoolSummary:
     properties:
@@ -365,6 +418,17 @@ definitions:
       source:
         type: string
       token:
+        type: string
+    type: object
+  dto.StakeDAOStateIssue:
+    properties:
+      code:
+        type: string
+      contract:
+        type: string
+      field:
+        type: string
+      method:
         type: string
     type: object
   dto.StakeDAOTradingYield:
@@ -476,9 +540,10 @@ paths:
       - application/json
       description: 'По умолчанию: name, apr, symbol, address (vault), apy, status.
         APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault.
-        details=true добавляет yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку
-        gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется
-        к APR. Merkl и trading APY пока недоступны.'
+        details=true добавляет state (признаки состояния отдельно от APR) и yieldBreakdown:
+        CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со
+        статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY
+        пока недоступны.'
       parameters:
       - description: 'Поддерживаемая сеть: ethereum'
         in: path
@@ -588,6 +653,61 @@ paths:
               type: string
             type: object
       summary: Диагностика выбранных пулов StakeDAO
+      tags:
+      - StakeDao
+  /reservesStakedao/{network}/state:
+    get:
+      description: '1–5 gauge: регистрация, shutdown, pause, is_killed, активы и вес
+        CRV на одном блоке. Возвращает также shutdown и незарегистрированные gauge.
+        Без цен, APR, истории и Postgres. Не более 5 RPC/с и 300 попыток. Null означает
+        неизвестное или неприменимое значение; ошибки полей — в state.issues.'
+      parameters:
+      - description: 'Поддерживаемая сеть: ethereum'
+        in: path
+        name: network
+        required: true
+        type: string
+      - description: 1–5 gauge через запятую
+        in: query
+        name: gauges
+        required: true
+        type: string
+      - description: Положительный десятичный номер блока; по умолчанию latest
+        in: query
+        name: block
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.StakeDAOPoolStatesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "504":
+          description: Gateway Timeout
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Проверить состояние gauge StakeDAO отдельно от доходности
       tags:
       - StakeDao
 swagger: "2.0"

@@ -337,6 +337,7 @@ func TestCrossPoolMulticallPreservesValuesAndReducesRPCRequests(t *testing.T) {
 			t.Fatal(err)
 		}
 		pool, issues := baseline.loadPool(context.Background(), info, big.NewInt(4500))
+		baseline.loadPoolState(context.Background(), info, big.NewInt(4500), &pool)
 		issues = append(issues, baseline.loadPoolRewardMechanism(context.Background(), info, big.NewInt(4500), &pool)...)
 		issues = append(issues, baseline.loadRewardStreams(context.Background(), info, big.NewInt(4500), &pool)...)
 		baseline.loadYieldBreakdown(context.Background(), info, big.NewInt(4500), &pool)

@@ -46,6 +46,8 @@ func TestStakeDAORoute(t *testing.T) {
 		Topics: []common.Hash{event.ID, common.BytesToHash(gauge.Bytes()), common.BytesToHash(vault.Bytes()), common.BytesToHash(asset.Bytes())},
 	}
 	tokenABI, err := abi.JSON(strings.NewReader(`[
+		{"type":"function","name":"is_killed","inputs":[],"outputs":[{"type":"bool"}]},
+		{"type":"function","name":"gauge_relative_weight","inputs":[{"type":"address"},{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
 		{"type":"function","name":"poolInfo","inputs":[{"type":"uint256"}],"outputs":[{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"address"},{"type":"bool"}]},
 		{"type":"function","name":"strategy","inputs":[],"outputs":[{"type":"address"}]},
 		{"type":"function","name":"getRewardTokens","inputs":[],"outputs":[{"type":"address[]"}]},
@@ -105,6 +107,10 @@ func TestStakeDAORoute(t *testing.T) {
 		}
 		var value interface{}
 		switch method.Name {
+		case "isPaused", "is_killed":
+			value = false
+		case "gauge_relative_weight":
+			value = new(big.Int)
 		case "poolInfo":
 			return method.Outputs.Pack(common.Address{}, common.Address{}, common.Address{}, common.Address{}, common.Address{}, false)
 		case "gauge":
@@ -227,7 +233,11 @@ func TestStakeDAORoute(t *testing.T) {
 			APY         *float64       `json:"apy"`
 			RewardToken common.Address `json:"rewardToken"`
 			APRScope    string         `json:"aprScope"`
-			Yield       struct {
+			State       struct {
+				Registered *bool `json:"registered"`
+				HasAssets  *bool `json:"hasAssets"`
+			} `json:"state"`
+			Yield struct {
 				Status string `json:"status"`
 				Merkl  struct {
 					APR    *float64 `json:"apr"`
@@ -248,6 +258,9 @@ func TestStakeDAORoute(t *testing.T) {
 	}
 	if body.Pools[0].APRScope != "vault_rewards" || body.Pools[0].Yield.Status != "partial" || body.Pools[0].Yield.Merkl.APR != nil || body.Pools[0].Yield.Merkl.Status != "unavailable" || body.Pools[0].Yield.Trading.APY != nil || len(body.Pools[0].Yield.Trading.Reasons) != 1 {
 		t.Fatalf("missing yield scopes or fabricated unknowns: %s", response.Body.String())
+	}
+	if body.Pools[0].State.Registered == nil || !*body.Pools[0].State.Registered || body.Pools[0].State.HasAssets == nil || !*body.Pools[0].State.HasAssets {
+		t.Fatalf("state depends on unavailable primary APR: %s", response.Body.String())
 	}
 	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum", nil))
@@ -296,6 +309,28 @@ func TestStakeDAORoute(t *testing.T) {
 	}
 	before = historyReads.Load()
 	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/state?gauges=0x0000000000000000000000000000000000000011&block=10", nil))
+	var states struct {
+		Gauges []struct {
+			State struct {
+				Registered  *bool `json:"registered"`
+				Shutdown    *bool `json:"shutdown"`
+				GaugeKilled *bool `json:"gaugeKilled"`
+			} `json:"state"`
+		} `json:"gauges"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &states) != nil || len(states.Gauges) != 1 || states.Gauges[0].State.Registered == nil || !*states.Gauges[0].State.Registered || states.Gauges[0].State.Shutdown == nil || *states.Gauges[0].State.Shutdown || historyReads.Load() != before || strings.Contains(response.Body.String(), "\"apr\"") {
+		t.Fatalf("state route used history/APR or lost registration: %s", response.Body.String())
+	}
+	for _, query := range []string{"", "gauges=0x11", "gauges=a,b,c,d,e,f", "gauges=0x0000000000000000000000000000000000000011&block=0", "gauges=0x0000000000000000000000000000000000000011&block=latest"} {
+		response = httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/state?"+query, nil))
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid state query accepted: %s", query)
+		}
+	}
+	before = historyReads.Load()
+	response = httptest.NewRecorder()
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?limit=5", nil))
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &diagnostic) != nil || len(diagnostic.Pools) != 5 || historyReads.Load() != before {
 		t.Fatalf("five-pool diagnostics used history or returned wrong selection: %s", response.Body.String())
@@ -333,7 +368,7 @@ func TestStakeDAORouteDoesNotExposeRPCSecrets(t *testing.T) {
 	defer rpcServer.Close()
 	t.Setenv("STAKEDAO_ETHEREUM_RPC_URL", rpcServer.URL+"/private-api-key")
 	server := newStakeDAOTestServer(prices.NewTokenPriceService(prices.NewMemoryStore(), nil))
-	for _, path := range []string{"/reservesStakedao/ethereum", "/reservesStakedao/ethereum/diagnostics"} {
+	for _, path := range []string{"/reservesStakedao/ethereum", "/reservesStakedao/ethereum/diagnostics", "/reservesStakedao/ethereum/state?gauges=0x0000000000000000000000000000000000000011"} {
 		response := httptest.NewRecorder()
 		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		if response.Code != http.StatusBadGateway || strings.Contains(response.Body.String(), "private-api-key") {

@@ -169,6 +169,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		return nil, errors.New("invalid StakeDAO snapshot header")
 	}
 	s.snapshotTime = header.Time
+	if sample != nil && sample.stateOnly {
+		return s.stateSnapshot(ctx, network, block, header, sample.gauges)
+	}
 	if sample != nil && sample.strictPrices {
 		s.prices = prices.NewSnapshotPriceService(header.Time)
 	}
@@ -548,6 +551,7 @@ func (s *StakeDAOService) loadPoolAt(ctx context.Context, info StakeDAOVaultInfo
 		return nil, []dto.StakeDAOPoolError{poolIssue(info.Gauge, "registration", "Registration differs from Controller state at the snapshot block")}, nil
 	}
 	pool, issues := s.loadPool(ctx, info, block)
+	s.loadPoolState(ctx, info, block, &pool)
 	issues = append(issues, s.loadPoolRewardMechanism(ctx, info, block, &pool)...)
 	issues = append(issues, s.loadRewardStreams(ctx, info, block, &pool)...)
 	s.loadYieldBreakdown(ctx, info, block, &pool)
@@ -964,7 +968,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			}
 			gaugeData := s.snapshotCalls(ctx, block,
 				readContract(info.Gauge, curveGaugeABI, "inflation_rate"),
-				readContract(common.HexToAddress("0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB"), curveControllerABI, "gauge_relative_weight", info.Gauge, new(big.Int).SetUint64(s.snapshotTime)),
+				readContract(common.HexToAddress(curveGaugeControllerEthereum), curveControllerABI, "gauge_relative_weight", info.Gauge, new(big.Int).SetUint64(s.snapshotTime)),
 				readContract(info.Gauge, curveGaugeABI, "working_balances", locker),
 				readContract(info.Gauge, curveGaugeABI, "working_supply"),
 			)
@@ -973,7 +977,7 @@ func (s *StakeDAOService) curvePrimaryRate(ctx context.Context, info StakeDAOVau
 			if err != nil {
 				return decimal.Zero, err
 			}
-			step("gauge_weight", common.HexToAddress("0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB"), "gauge_relative_weight", "Curve gauge relative weight could not be read")
+			step("gauge_weight", common.HexToAddress(curveGaugeControllerEthereum), "gauge_relative_weight", "Curve gauge relative weight could not be read")
 			weight, err := gaugeData[1].unsigned()
 			if err != nil {
 				return decimal.Zero, err

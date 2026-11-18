@@ -1,5 +1,7 @@
 # Локальный запуск ABIevm и проверка StakeDAO
 
+[Проверка состояния 1–5 gauge без цен, APR и истории](internal/service/stakedao/POOL_STATE_RU.md).
+
 [Состав доходности и отдельная оценка gauge rewards](internal/service/stakedao/YIELD_COMPONENTS_RU.md).
 
 [Новые оракулы, aprReasons и проверка до пяти выбранных gauge](internal/service/prices/ORACLE_ROUTES_RU.md).

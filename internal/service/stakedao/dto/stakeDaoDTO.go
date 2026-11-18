@@ -28,6 +28,7 @@ type StakeDAOPool struct {
 	Allocation    *StakeDAOAllocation      `json:"allocation,omitempty"`
 	Diagnostics   *StakeDAOPoolDiagnostics `json:"diagnostics,omitempty"`
 	Yield         *StakeDAOYieldBreakdown  `json:"yieldBreakdown,omitempty"`
+	State         *StakeDAOPoolState       `json:"state,omitempty"`
 
 	RewardMechanism     string           `json:"rewardMechanism"`
 	AccountantAddress   *common.Address  `json:"accountantAddress" swaggertype:"string"`
@@ -113,6 +114,45 @@ type StakeDAOPoolsResponse struct {
 	RPCAttempts    int                 `json:"rpcAttempts,omitempty"`
 	Pools          []StakeDAOPool      `json:"pools"`
 	Errors         []StakeDAOPoolError `json:"errors,omitempty"`
+	// Internal carrier for the bounded state-only path; never a second public schema.
+	StateRecords []StakeDAOGaugeState `json:"-"`
+}
+
+// Factual snapshot flags, independent of APR completeness. Null means unknown
+// or not applicable; there is deliberately no aggregate "active" boolean.
+type StakeDAOPoolState struct {
+	BlockNumber       uint64               `json:"blockNumber"`
+	Registered        *bool                `json:"registered"`
+	Shutdown          *bool                `json:"shutdown"`
+	ProtocolPaused    *bool                `json:"protocolPaused"`
+	GaugeKilled       *bool                `json:"gaugeKilled"`
+	HasAssets         *bool                `json:"hasAssets"`
+	CRVRelativeWeight *string              `json:"crvRelativeWeight"`
+	HasCRVWeight      *bool                `json:"hasCrvWeight"`
+	Issues            []StakeDAOStateIssue `json:"issues,omitempty"`
+}
+
+type StakeDAOStateIssue struct {
+	Field    string         `json:"field"`
+	Code     string         `json:"code"`
+	Contract common.Address `json:"contract" swaggertype:"string"`
+	Method   string         `json:"method"`
+}
+
+type StakeDAOGaugeState struct {
+	GaugeAddress common.Address    `json:"gaugeAddress" swaggertype:"string"`
+	VaultAddress *common.Address   `json:"vaultAddress" swaggertype:"string"`
+	AssetAmount  *string           `json:"assetAmount"`
+	State        StakeDAOPoolState `json:"state"`
+}
+
+type StakeDAOPoolStatesResponse struct {
+	Network        string               `json:"network"`
+	BlockNumber    uint64               `json:"blockNumber"`
+	BlockTimestamp uint64               `json:"blockTimestamp"`
+	BlockHash      *common.Hash         `json:"blockHash" swaggertype:"string"`
+	RPCAttempts    int                  `json:"rpcAttempts"`
+	Gauges         []StakeDAOGaugeState `json:"gauges"`
 }
 
 type StakeDAOPoolError struct {

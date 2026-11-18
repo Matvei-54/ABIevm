@@ -1,5 +1,10 @@
 # Происхождение ABI
 
+`controllerStateABI.isPaused(bytes4)` подтверждён существующим
+`contracts/stakedao/CreateVault.json` и верифицированным IProtocolController
+из исходников RewardVault. Поля состояния читаются отдельно от APR:
+[POOL_STATE_RU.md](../POOL_STATE_RU.md).
+
 Дополнительные gauge getters и шестипольный `reward_data` описаны в
 [YIELD_COMPONENTS_RU.md](../YIELD_COMPONENTS_RU.md). Они используются отдельно
 от основного потока CRV и не меняют формулу верхнего APR.

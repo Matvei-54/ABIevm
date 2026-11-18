@@ -57,6 +57,7 @@ type poolSample struct {
 	diagnostics        bool
 	blockNumber        uint64
 	strictPrices       bool
+	stateOnly          bool
 }
 
 // GetPoolsForGauges checks explicitly selected gauges against current Controller

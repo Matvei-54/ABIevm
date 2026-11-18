@@ -1,5 +1,7 @@
 # StakeDAO: текущее состояние интеграции
 
+[Отдельные признаки state и лёгкий endpoint состояния без расчёта APR](POOL_STATE_RU.md).
+
 [Карта контрактов и функций, признаки активности и проверка двух null-APR vault](YIELD_SOURCE_MAP_RU.md).
 
 [Разделение CRV, vault/gauge extras, Merkl и торговой APY](YIELD_COMPONENTS_RU.md).

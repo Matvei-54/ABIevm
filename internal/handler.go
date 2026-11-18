@@ -186,7 +186,7 @@ func (h *Handler) HandleGetCurveReserves(c echo.Context) error {
 }
 
 // @Summary      Получить пулы StakeDAO из блокчейна
-// @Description  По умолчанию: name, apr, symbol, address (vault), apy, status. APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault. details=true добавляет yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY пока недоступны.
+// @Description  По умолчанию: name, apr, symbol, address (vault), apy, status. APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault. details=true добавляет state (признаки состояния отдельно от APR) и yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY пока недоступны.
 // @Tags         StakeDao
 // @Accept       json
 // @Produce      json
@@ -259,23 +259,9 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 	var result *dto.StakeDAOPoolsResponse
 	var err error
 	if c.QueryParams().Has("gauges") {
-		var gauges []common.Address
-		seen := map[common.Address]bool{}
-		parts := strings.Split(c.QueryParam("gauges"), ",")
-		if len(parts) > stakedao.MaxSamplePools {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "select at most five gauges"})
-		}
-		for _, text := range parts {
-			text = strings.TrimSpace(text)
-			if !common.IsHexAddress(text) {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "gauges must be 1–5 nonzero unique Ethereum addresses"})
-			}
-			gauge := common.HexToAddress(text)
-			if gauge == (common.Address{}) || seen[gauge] {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": "gauges must be 1–5 nonzero unique Ethereum addresses"})
-			}
-			seen[gauge] = true
-			gauges = append(gauges, gauge)
+		gauges, parseErr := parseStakeDAOGauges(c.QueryParam("gauges"))
+		if parseErr != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": parseErr.Error()})
 		}
 		result, err = h.stakeDao.GetGaugeDiagnosticsAt(c.Request().Context(), c.Param("network"), gauges, options)
 	} else {
@@ -285,6 +271,60 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 		return stakeDAOHTTPError(c, err)
 	}
 	return c.JSON(http.StatusOK, result)
+}
+
+func parseStakeDAOGauges(text string) ([]common.Address, error) {
+	parts := strings.Split(text, ",")
+	if len(parts) > stakedao.MaxSamplePools {
+		return nil, fmt.Errorf("select at most five gauges")
+	}
+	seen := map[common.Address]bool{}
+	var gauges []common.Address
+	for _, text := range parts {
+		text = strings.TrimSpace(text)
+		if !common.IsHexAddress(text) {
+			return nil, fmt.Errorf("gauges must be 1–5 nonzero unique Ethereum addresses")
+		}
+		gauge := common.HexToAddress(text)
+		if gauge == (common.Address{}) || seen[gauge] {
+			return nil, fmt.Errorf("gauges must be 1–5 nonzero unique Ethereum addresses")
+		}
+		seen[gauge] = true
+		gauges = append(gauges, gauge)
+	}
+	return gauges, nil
+}
+
+// @Summary      Проверить состояние gauge StakeDAO отдельно от доходности
+// @Description  1–5 gauge: регистрация, shutdown, pause, is_killed, активы и вес CRV на одном блоке. Возвращает также shutdown и незарегистрированные gauge. Без цен, APR, истории и Postgres. Не более 5 RPC/с и 300 попыток. Null означает неизвестное или неприменимое значение; ошибки полей — в state.issues.
+// @Tags         StakeDao
+// @Produce      json
+// @Param        network path string true "Поддерживаемая сеть: ethereum"
+// @Param        gauges query string true "1–5 gauge через запятую"
+// @Param        block query string false "Положительный десятичный номер блока; по умолчанию latest"
+// @Success      200 {object} dto.StakeDAOPoolStatesResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Failure      503 {object} map[string]string
+// @Failure      504 {object} map[string]string
+// @Router       /reservesStakedao/{network}/state [get]
+func (h *Handler) HandleGetStakeDaoState(c echo.Context) error {
+	gauges, err := parseStakeDAOGauges(c.QueryParam("gauges"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	var block uint64
+	if c.QueryParams().Has("block") {
+		block, err = strconv.ParseUint(c.QueryParam("block"), 10, 64)
+		if err != nil || block == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "block must be a positive decimal block number"})
+		}
+	}
+	r, err := h.stakeDao.GetGaugeStatesAt(c.Request().Context(), c.Param("network"), gauges, block)
+	if err != nil {
+		return stakeDAOHTTPError(c, err)
+	}
+	return c.JSON(http.StatusOK, r)
 }
 
 func stakeDAOHTTPError(c echo.Context, err error) error {

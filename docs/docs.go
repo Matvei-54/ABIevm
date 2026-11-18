@@ -113,7 +113,7 @@ const docTemplate = `{
         },
         "/reservesStakedao/{network}": {
             "get": {
-                "description": "По умолчанию: name, apr, symbol, address (vault), apy, status. APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault. details=true добавляет yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY пока недоступны.",
+                "description": "По умолчанию: name, apr, symbol, address (vault), apy, status. APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault. details=true добавляет state (признаки состояния отдельно от APR) и yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY пока недоступны.",
                 "consumes": [
                     "application/json"
                 ],
@@ -240,6 +240,84 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/dto.StakeDAOPoolsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/reservesStakedao/{network}/state": {
+            "get": {
+                "description": "1–5 gauge: регистрация, shutdown, pause, is_killed, активы и вес CRV на одном блоке. Возвращает также shutdown и незарегистрированные gauge. Без цен, APR, истории и Postgres. Не более 5 RPC/с и 300 попыток. Null означает неизвестное или неприменимое значение; ошибки полей — в state.issues.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "StakeDao"
+                ],
+                "summary": "Проверить состояние gauge StakeDAO отдельно от доходности",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Поддерживаемая сеть: ethereum",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "1–5 gauge через запятую",
+                        "name": "gauges",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Положительный десятичный номер блока; по умолчанию latest",
+                        "name": "block",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.StakeDAOPoolStatesResponse"
                         }
                     },
                     "400": {
@@ -569,6 +647,23 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.StakeDAOGaugeState": {
+            "type": "object",
+            "properties": {
+                "assetAmount": {
+                    "type": "string"
+                },
+                "gaugeAddress": {
+                    "type": "string"
+                },
+                "state": {
+                    "$ref": "#/definitions/dto.StakeDAOPoolState"
+                },
+                "vaultAddress": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.StakeDAOGaugeYield": {
             "type": "object",
             "properties": {
@@ -675,6 +770,9 @@ const docTemplate = `{
                     "description": "ChainID     int64          ` + "`" + `json:\"chainId\"` + "`" + `",
                     "type": "string"
                 },
+                "state": {
+                    "$ref": "#/definitions/dto.StakeDAOPoolState"
+                },
                 "symbol": {
                     "type": "string"
                 },
@@ -735,6 +833,67 @@ const docTemplate = `{
                 },
                 "stage": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOPoolState": {
+            "type": "object",
+            "properties": {
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "crvRelativeWeight": {
+                    "type": "string"
+                },
+                "gaugeKilled": {
+                    "type": "boolean"
+                },
+                "hasAssets": {
+                    "type": "boolean"
+                },
+                "hasCrvWeight": {
+                    "type": "boolean"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOStateIssue"
+                    }
+                },
+                "protocolPaused": {
+                    "type": "boolean"
+                },
+                "registered": {
+                    "type": "boolean"
+                },
+                "shutdown": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.StakeDAOPoolStatesResponse": {
+            "type": "object",
+            "properties": {
+                "blockHash": {
+                    "type": "string"
+                },
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "blockTimestamp": {
+                    "type": "integer"
+                },
+                "gauges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.StakeDAOGaugeState"
+                    }
+                },
+                "network": {
+                    "type": "string"
+                },
+                "rpcAttempts": {
+                    "type": "integer"
                 }
             }
         },
@@ -833,6 +992,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StakeDAOStateIssue": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "contract": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "method": {
                     "type": "string"
                 }
             }

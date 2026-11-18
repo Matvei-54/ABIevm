@@ -70,6 +70,9 @@ type fixtureRPC struct {
 	gaugeSupply          *big.Int
 	gaugeCount           *big.Int
 	gaugeLP              *common.Address
+	paused               bool
+	weight               *big.Int
+	malformedPause       bool
 }
 
 func (f *fixtureRPC) ChainID(context.Context) (*big.Int, error)   { return big.NewInt(1), nil }
@@ -127,7 +130,7 @@ func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, bloc
 }
 
 func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
-	for _, abiJSON := range []string{protocolControllerABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveGaugeExtrasABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI} {
+	for _, abiJSON := range []string{protocolControllerABI, controllerStateABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveGaugeExtrasABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI} {
 		parsed, _ := abi.JSON(strings.NewReader(abiJSON))
 		method, err := parsed.MethodById(call.Data[:4])
 		if err != nil {
@@ -140,6 +143,11 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			return nil, errors.New("fixture call failed")
 		}
 		switch method.Name {
+		case "isPaused":
+			if f.malformedPause {
+				return []byte{1}, nil
+			}
+			return method.Outputs.Pack(f.paused)
 		case "lp_token":
 			if f.gaugeLP != nil {
 				return method.Outputs.Pack(*f.gaugeLP)
@@ -216,6 +224,9 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 		case "inflation_rate":
 			return method.Outputs.Pack(big.NewInt(4000000000000000000))
 		case "gauge_relative_weight":
+			if f.weight != nil {
+				return method.Outputs.Pack(f.weight)
+			}
 			return method.Outputs.Pack(big.NewInt(500000000000000000))
 		case "working_balances":
 			return method.Outputs.Pack(big.NewInt(400000))
@@ -1342,5 +1353,156 @@ func TestGaugeYieldPartialPriceCoverage(t *testing.T) {
 	}
 	if p.APRStatus != "available" || p.APR == nil || p.Yield.CRV.APR == nil || *p.APR != *p.Yield.CRV.APR {
 		t.Fatalf("gauge projection changed vault APR: %+v", p)
+	}
+}
+
+func TestPoolStateDoesNotDependOnUSDPriceOrAPR(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.weight = true, new(big.Int)
+	s.prices = prices.NewTokenPriceService(prices.NewMemoryStore(), nil)
+	r, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := r.Pools[0]
+	state := p.State
+	if p.APR != nil || p.APRStatus != "unavailable" || state == nil || state.Registered == nil || !*state.Registered || state.Shutdown == nil || *state.Shutdown || state.HasAssets == nil || !*state.HasAssets || state.GaugeKilled == nil || *state.GaugeKilled || state.ProtocolPaused == nil || *state.ProtocolPaused || state.HasCRVWeight == nil || *state.HasCRVWeight || state.CRVRelativeWeight == nil || *state.CRVRelativeWeight != "0" || len(state.Issues) != 0 {
+		t.Fatalf("price or APR availability leaked into state: %+v", p)
+	}
+}
+
+func TestPoolStateUnknownGettersAreNotFalse(t *testing.T) {
+	for _, malformed := range []bool{false, true} {
+		s, f := newPoolFixture(t)
+		f.fullPrimary = true
+		f.malformedPause = malformed
+		if !malformed {
+			f.callFailure = "isPaused"
+		}
+		r, err := s.GetPools(context.Background(), "ethereum")
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := r.Pools[0]
+		if p.State.ProtocolPaused != nil || len(p.State.Issues) != 1 || p.State.Issues[0].Field != "protocolPaused" || p.State.GaugeKilled == nil || *p.State.GaugeKilled || p.APRStatus != "available" {
+			t.Fatalf("unknown pause became false or changed APR: %+v", p)
+		}
+	}
+}
+
+func TestHasAssetsDoesNotRequireTokenDecimals(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.callFailure = "decimals"
+	r, err := s.GetGaugeStatesAt(context.Background(), "ethereum", []common.Address{common.HexToAddress("0xaa")}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := r.Gauges[0]
+	if row.AssetAmount != nil || row.State.HasAssets == nil || !*row.State.HasAssets {
+		t.Fatalf("raw asset presence depends on decimals: %+v", row)
+	}
+}
+
+func TestPauseAndKilledFlagsDoNotMeanEmptyOrUnavailable(t *testing.T) {
+	for _, killed := range []bool{false, true} {
+		s, f := newPoolFixture(t)
+		f.fullPrimary, f.paused, f.killed = true, true, killed
+		r, err := s.GetPools(context.Background(), "ethereum")
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := r.Pools[0]
+		if p.State.ProtocolPaused == nil || !*p.State.ProtocolPaused || p.State.GaugeKilled == nil || *p.State.GaugeKilled != killed || p.State.HasCRVWeight == nil || !*p.State.HasCRVWeight || p.State.HasAssets == nil || !*p.State.HasAssets || p.APRStatus != "available" || p.APR == nil {
+			t.Fatalf("independent state flags conflated: %+v", p)
+		}
+		if killed && *p.APR != 0 || !killed && *p.APR <= 0 {
+			t.Fatalf("existing killed handling changed: %+v", p)
+		}
+	}
+}
+
+func TestStateOnlyIncludesShutdownAndUnregisteredWithoutPrices(t *testing.T) {
+	s, f := newPoolFixture(t)
+	f.paused, f.killed = true, true
+	f.shutdown = map[common.Address]bool{common.HexToAddress("0xaa"): true}
+	f.totalAssets, f.weight = new(big.Int), new(big.Int)
+	provider := &recordingPriceProvider{}
+	s.prices = provider
+	gauges := []common.Address{common.HexToAddress("0xaa"), common.HexToAddress("0xff")}
+	r, err := s.GetGaugeStatesAt(context.Background(), "ethereum", gauges, 4500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Gauges) != 2 || r.BlockNumber != 4500 || r.BlockHash == nil || r.RPCAttempts == 0 || len(f.queries) != 0 || f.codeReads != 0 || len(provider.tokens) != 0 || len(provider.reads) != 0 || f.headerReads != 2 {
+		t.Fatalf("state-only used history/prices or failed snapshot checks: %+v", r)
+	}
+	registered, absent := r.Gauges[0], r.Gauges[1]
+	if registered.State.Registered == nil || !*registered.State.Registered || registered.State.Shutdown == nil || !*registered.State.Shutdown || registered.State.ProtocolPaused == nil || !*registered.State.ProtocolPaused || registered.State.GaugeKilled == nil || !*registered.State.GaugeKilled || registered.State.HasAssets == nil || *registered.State.HasAssets || registered.State.HasCRVWeight == nil || *registered.State.HasCRVWeight || registered.AssetAmount == nil || *registered.AssetAmount != "0" {
+		t.Fatalf("shutdown/capped/killed/empty conflated: %+v", registered)
+	}
+	if absent.State.Registered == nil || *absent.State.Registered || absent.VaultAddress != nil || absent.AssetAmount != nil || absent.State.Shutdown != nil || absent.State.ProtocolPaused != nil || absent.State.HasAssets != nil || absent.State.GaugeKilled != nil || absent.State.CRVRelativeWeight != nil {
+		t.Fatalf("absent registration became a closed/empty pool: %+v", absent)
+	}
+	for _, b := range f.callBlocks {
+		if b != 4500 {
+			t.Fatalf("different snapshot used: %d", b)
+		}
+	}
+}
+
+func TestStateOnlyFailureValidationAndIndependentFlags(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		fail          string
+		invalidWeight bool
+	}{
+		{"registration", "gauge", false}, {"killed", "is_killed", false},
+		{"weight", "gauge_relative_weight", false}, {"assets", "totalAssets", false},
+		{"weight-bounds", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, f := newPoolFixture(t)
+			f.callFailure = tc.fail
+			if tc.invalidWeight {
+				f.weight = new(big.Int).Exp(big.NewInt(10), big.NewInt(19), nil)
+			}
+			r, err := s.GetGaugeStatesAt(context.Background(), "ethereum", []common.Address{common.HexToAddress("0xaa")}, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := r.Gauges[0].State
+			if len(state.Issues) == 0 {
+				t.Fatalf("missing failure: %+v", state)
+			}
+			switch tc.name {
+			case "registration":
+				if state.Registered != nil || state.Shutdown != nil {
+					t.Fatalf("failed registration became false: %+v", state)
+				}
+			case "killed":
+				if state.GaugeKilled != nil || state.HasCRVWeight == nil || state.HasAssets == nil {
+					t.Fatalf("flags not independent: %+v", state)
+				}
+			case "weight", "weight-bounds":
+				if state.HasCRVWeight != nil || state.CRVRelativeWeight != nil || state.GaugeKilled == nil {
+					t.Fatalf("invalid weight became zero: %+v", state)
+				}
+			case "assets":
+				if state.HasAssets != nil || state.Registered == nil || state.ProtocolPaused == nil {
+					t.Fatalf("failed assets became empty: %+v", state)
+				}
+			}
+		})
+	}
+	s, _ := newPoolFixture(t)
+	for _, gauges := range [][]common.Address{nil, {{}}, {common.HexToAddress("0xaa"), common.HexToAddress("0xaa")}, {common.HexToAddress("0x1"), common.HexToAddress("0x2"), common.HexToAddress("0x3"), common.HexToAddress("0x4"), common.HexToAddress("0x5"), common.HexToAddress("0x6")}} {
+		if _, err := s.GetGaugeStatesAt(context.Background(), "ethereum", gauges, 0); err == nil {
+			t.Fatal("invalid gauge selection accepted")
+		}
+	}
+	s, f := newPoolFixture(t)
+	f.reorg = true
+	if _, err := s.GetGaugeStatesAt(context.Background(), "ethereum", []common.Address{common.HexToAddress("0xaa")}, 0); err == nil || !strings.Contains(err.Error(), "reorganized") {
+		t.Fatalf("state reorg accepted: %v", err)
 	}
 }
