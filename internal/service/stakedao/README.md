@@ -1,5 +1,7 @@
 # StakeDAO: текущее состояние интеграции
 
+[Карта контрактов и функций, признаки активности и проверка двух null-APR vault](YIELD_SOURCE_MAP_RU.md).
+
 [Разделение CRV, vault/gauge extras, Merkl и торговой APY](YIELD_COMPONENTS_RU.md).
 
 [Оракулы weETH/frxETH/BOLD, поле aprReasons и диагностика произвольных gauge](../prices/ORACLE_ROUTES_RU.md).
