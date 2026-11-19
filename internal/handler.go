@@ -186,7 +186,7 @@ func (h *Handler) HandleGetCurveReserves(c echo.Context) error {
 }
 
 // @Summary      Получить пулы StakeDAO из блокчейна
-// @Description  По умолчанию: name, apr, symbol, address (vault), apy, status. APR относится к учтённым потокам vault_rewards: CRV и активным наградам RewardVault. details=true добавляет state (признаки состояния отдельно от APR) и yieldBreakdown: CRV, vaultExtra, отдельную gross-оценку gaugeExtra, Merkl и trading APY со статусами полноты. Gauge-проекция не прибавляется к APR. Merkl и trading APY пока недоступны.
+// @Description  По умолчанию: name, apr, symbol, address (vault), apy, status (полнота APR). APR относится к vault_rewards: CRV и активным выплатам RewardVault. APY — торговая доходность за 30 дней для проверенных fixed-rate Curve-пулов, требуется историческое состояние RPC. details=true добавляет state и yieldBreakdown с окнами 7/30 дней, источниками, блоками и причинами недоступности. Gauge-проекция не прибавляется к APR. Merkl пока недоступен.
 // @Tags         StakeDao
 // @Accept       json
 // @Produce      json

@@ -61,6 +61,7 @@ type StakeDAOService struct {
 	configErr       error
 	diagnostics     bool
 	batches         *snapshotBatcher
+	trading         *TradingHistoryService
 	networks        map[string]stakeDAONetwork
 	dial            func(context.Context, string) (stakeDAORPC, error)
 }
@@ -81,6 +82,7 @@ func NewStakeDAOService(priceService prices.Provider) *StakeDAOService {
 	}
 	return &StakeDAOService{
 		prices:    priceService,
+		trading:   newTradingHistoryService(),
 		configErr: configErr,
 		networks: map[string]stakeDAONetwork{
 			"ethereum": {rpcURL: rpcURL, chainID: 1, controller: common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB), deploymentBlock: deploymentBlock},
@@ -138,7 +140,7 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 	if chainID == nil || chainID.Cmp(big.NewInt(config.chainID)) != 0 {
 		return nil, fmt.Errorf("%w: expected chain ID %d", ErrRPCUnavailable, config.chainID)
 	}
-	worker := &StakeDAOService{registry: s.registry, client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock}
+	worker := &StakeDAOService{registry: s.registry, client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock, trading: s.trading}
 	worker.diagnostics = sample != nil && sample.diagnostics
 	return worker.getPoolsSelected(ctx, network, sample)
 }
@@ -289,6 +291,8 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 			}
 		}
 	}
+	progress.setStage("trading_history")
+	s.addTradingHistory(ctx, header, response.Pools)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -573,6 +577,7 @@ func (s *StakeDAOService) loadPool(ctx context.Context, info StakeDAOVaultInfo, 
 		Source: "onchain", UpdatedAt: time.Now().UTC(),
 		APRStatus: "unavailable",
 		APRScope:  "vault_rewards",
+		APYScope:  "trading_fees",
 		Rewards:   make([]dto.StakeDAOReward, 0),
 	}
 	var issues []dto.StakeDAOPoolError

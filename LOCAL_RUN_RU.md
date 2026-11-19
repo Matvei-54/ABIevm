@@ -1,5 +1,7 @@
 # Локальный запуск ABIevm и проверка StakeDAO
 
+[Торговая APY: окна 7/30 дней и архивные eth_call](internal/service/stakedao/TRADING_HISTORY_RU.md).
+
 [Проверка состояния 1–5 gauge без цен, APR и истории](internal/service/stakedao/POOL_STATE_RU.md).
 
 [Состав доходности и отдельная оценка gauge rewards](internal/service/stakedao/YIELD_COMPONENTS_RU.md).

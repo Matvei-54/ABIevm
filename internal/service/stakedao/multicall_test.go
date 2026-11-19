@@ -350,6 +350,7 @@ func TestCrossPoolMulticallPreservesValuesAndReducesRPCRequests(t *testing.T) {
 		pool.UpdatedAt = time.Time{}
 		expected = append(expected, pool)
 	}
+	baseline.addTradingHistory(context.Background(), &types.Header{Number: big.NewInt(4500), Time: oldRPC.headerTime}, expected)
 	optimized, newRPC, _ := multiPoolFixture(t, 5)
 	result, err := optimized.GetPools(context.Background(), "ethereum")
 	if err != nil || result == nil || len(result.Errors) != 0 || len(result.Pools) != len(expected) {

@@ -25,6 +25,7 @@ type StakeDAOPool struct {
 	APRStatus     string                   `json:"aprStatus"`
 	APRReasons    []string                 `json:"aprReasons,omitempty"`
 	APY           *float64                 `json:"apy"`
+	APYScope      string                   `json:"apyScope"`
 	Allocation    *StakeDAOAllocation      `json:"allocation,omitempty"`
 	Diagnostics   *StakeDAOPoolDiagnostics `json:"diagnostics,omitempty"`
 	Yield         *StakeDAOYieldBreakdown  `json:"yieldBreakdown,omitempty"`
@@ -63,11 +64,31 @@ type StakeDAOAPRComponent struct {
 }
 
 type StakeDAOTradingYield struct {
-	APY        *float64 `json:"apy"`
-	Status     string   `json:"status"`
-	Source     string   `json:"source"`
-	WindowDays *int     `json:"windowDays"`
-	Reasons    []string `json:"reasons,omitempty"`
+	APY        *float64                `json:"apy"`
+	Status     string                  `json:"status"`
+	Source     string                  `json:"source"`
+	WindowDays *int                    `json:"windowDays"`
+	Reasons    []string                `json:"reasons,omitempty"`
+	Scope      string                  `json:"scope"`
+	Pool       *common.Address         `json:"pool" swaggertype:"string"`
+	Windows    []StakeDAOTradingWindow `json:"windows,omitempty"`
+}
+
+type StakeDAOTradingWindow struct {
+	WindowDays            int          `json:"windowDays"`
+	APY                   *float64     `json:"apy"`
+	ObservedReturnPercent *float64     `json:"observedReturnPercent"`
+	Status                string       `json:"status"`
+	StartBlock            *uint64      `json:"startBlock"`
+	EndBlock              uint64       `json:"endBlock"`
+	StartTimestamp        *uint64      `json:"startTimestamp"`
+	EndTimestamp          uint64       `json:"endTimestamp"`
+	StartBlockHash        *common.Hash `json:"startBlockHash" swaggertype:"string"`
+	EndBlockHash          common.Hash  `json:"endBlockHash" swaggertype:"string"`
+	CoveredSeconds        *uint64      `json:"coveredSeconds"`
+	StartVirtualPrice     *string      `json:"startVirtualPrice"`
+	EndVirtualPrice       *string      `json:"endVirtualPrice"`
+	Reasons               []string     `json:"reasons,omitempty"`
 }
 
 type StakeDAOGaugeYield struct {

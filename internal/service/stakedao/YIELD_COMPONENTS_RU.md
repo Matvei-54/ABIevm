@@ -12,7 +12,7 @@ RewardVault; область явно названа `aprScope: "vault_rewards"`.
 | `vaultExtra` | Сумма текущих распределений RewardVault по rate/periodFinish | Да |
 | `gaugeExtra` | Текущая gross-оценка дополнительных наград Curve на один staked LP | Нет |
 | `merkl` | Отдельная оценка активных кампаний Merkl | Пока недоступна |
-| `trading` | Историческая торговая APY пула | Пока недоступна |
+| `trading` | Историческая fee APY проверенных fixed-rate пулов, окна 7/30 дней | Не входит в APR; основной APY берётся за 30 дней |
 
 `includedInApr: ["crv", "vaultExtra"]` фиксирует правила агрегации.
 `yieldBreakdown.status: "partial"` означает, что общий состав доходности не полон.
@@ -60,10 +60,11 @@ Merkl возвращает `apr: null`, `status: unavailable`,
 пригодности и исключения дубликатов. Чтение только RewardVault не устанавливает
 наличие или отсутствие Merkl. Полное сканирование incentives не добавлено.
 
-Trading возвращает `apy: null`, `windowDays: null`, `status: unavailable`,
-`reasons: ["historical_window_required"]`. По одному snapshot балансов нельзя
-вычислить доходность комиссий за неделю. Нужна отдельная модель истории комиссий
-с выбранным окном и отделением доходности underlying и депозитов/выводов.
+Trading теперь вычисляется для проверенных fixed-rate пулов по двум историческим
+состояниям. Основной период — 30 дней, дополнительно возвращаются 7 дней.
+Требуется доступ к старому состоянию RPC. Неподдержанная модель или недоступная
+история оставляют APY=null с причиной; недельное окно не заменяет месячное.
+Подробности: [TRADING_HISTORY_RU.md](TRADING_HISTORY_RU.md).
 
 Ни один из этих null не означает 0%. Общий итог, смешивающий APR и APY, пока
 не вычисляется. Источники StakeDAO API/Hub/публикуемых JSON и автоматический
@@ -71,7 +72,8 @@ API→RPC fallback в runtime не добавлены.
 
 ## Проверка через Swagger
 
-Ограниченный запрос для BOLD/USDC без загрузки истории и Postgres:
+Ограниченный запрос для BOLD/USDC без загрузки истории регистраций и Postgres
+(исторические состояния для fee APY читаются через RPC):
 
 ```text
 GET /reservesStakedao/ethereum/diagnostics?gauges=0x07a01471fA544D9C6531B631E6A96A79a9AD05E9&strictPrices=true

@@ -73,6 +73,12 @@ type fixtureRPC struct {
 	paused               bool
 	weight               *big.Int
 	malformedPause       bool
+	feeHistory           bool
+	feeBlock             uint64
+	feeScenario          string
+	feeCalls             int
+	feeRampTime          uint64
+	feeHeaderReads       map[uint64]int
 }
 
 func (f *fixtureRPC) ChainID(context.Context) (*big.Int, error)   { return big.NewInt(1), nil }
@@ -80,6 +86,18 @@ func (f *fixtureRPC) BlockNumber(context.Context) (uint64, error) { return f.lat
 func (f *fixtureRPC) HeaderByNumber(_ context.Context, number *big.Int) (*types.Header, error) {
 	f.headerReads++
 	h := &types.Header{Number: new(big.Int).Set(number), Time: f.headerTime}
+	if f.feeHistory {
+		h.Time = 1700000000 + number.Uint64()*12
+		if f.feeScenario == "historical-reorg" && number.Uint64() != f.latest {
+			if f.feeHeaderReads == nil {
+				f.feeHeaderReads = map[uint64]int{}
+			}
+			f.feeHeaderReads[number.Uint64()]++
+			if f.feeHeaderReads[number.Uint64()] > 1 {
+				h.Extra = []byte("changed")
+			}
+		}
+	}
 	if f.reorg && f.headerReads > 1 {
 		h.Extra = []byte("reorg")
 	}
@@ -109,6 +127,12 @@ func (f *fixtureRPC) FilterLogs(_ context.Context, query ethereum.FilterQuery) (
 }
 func (f *fixtureRPC) Close() { f.closed = true }
 func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	if f.feeHistory {
+		f.feeBlock = block.Uint64()
+		if f.feeScenario == "archive" && f.feeBlock < f.latest {
+			return nil, errors.New("Archive requests require a personal token: https://rpc.invalid/private-key")
+		}
+	}
 	f.callBlocks = append(f.callBlocks, block.Uint64())
 	if call.To != nil && *call.To == stakeDAOMulticallAddress {
 		parsed, _ := abi.JSON(strings.NewReader(stakeDAOMulticallABI))
@@ -130,7 +154,7 @@ func (f *fixtureRPC) CallContract(_ context.Context, call ethereum.CallMsg, bloc
 }
 
 func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
-	for _, abiJSON := range []string{protocolControllerABI, controllerStateABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveGaugeExtrasABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI} {
+	for _, abiJSON := range []string{protocolControllerABI, controllerStateABI, erc20NameABI, erc20SymbolABI, erc20DecimalsABI, rewardVaultERC4626ABI, rewardVaultAccountantABI, accountantRewardTokenABI, vaultV2ABI, accountantV2ABI, strategyV2ABI, sidecarV2ABI, allocatorV2ABI, curveGaugeABI, curveGaugeExtrasABI, curveControllerABI, convexPoolABI, convexBoosterABI, convexPoolUtilitiesABI, feePoolABI} {
 		parsed, _ := abi.JSON(strings.NewReader(abiJSON))
 		method, err := parsed.MethodById(call.Data[:4])
 		if err != nil {
@@ -143,6 +167,48 @@ func (f *fixtureRPC) contractResult(call ethereum.CallMsg) ([]byte, error) {
 			return nil, errors.New("fixture call failed")
 		}
 		switch method.Name {
+		case "get_virtual_price", "initial_A", "future_A", "initial_A_time", "future_A_time":
+			f.feeCalls++
+			value := big.NewInt(10000)
+			if method.Name == "get_virtual_price" {
+				value = new(big.Int).Add(big.NewInt(1000000000000000000), new(big.Int).Mul(new(big.Int).SetUint64(f.feeBlock), big.NewInt(1000000000)))
+				if f.feeScenario == "decrease" {
+					value = new(big.Int).Sub(big.NewInt(2000000000000000000), value)
+				}
+			}
+			if method.Name == "initial_A_time" || method.Name == "future_A_time" {
+				value = new(big.Int)
+			}
+			if f.feeRampTime > 0 && 1700000000+f.feeBlock*12 >= f.feeRampTime {
+				if method.Name == "future_A" {
+					value = big.NewInt(20000)
+				}
+				if method.Name == "initial_A_time" {
+					value = new(big.Int).SetUint64(f.feeRampTime)
+				}
+				if method.Name == "future_A_time" {
+					value = new(big.Int).SetUint64(f.feeRampTime + 86400)
+				}
+			}
+			return method.Outputs.Pack(value)
+		case "coins":
+			args, _ := method.Inputs.Unpack(call.Data[4:])
+			coin := common.HexToAddress("0x11")
+			if args[0].(*big.Int).Int64() == 1 {
+				coin = common.HexToAddress("0x22")
+			}
+			if f.feeScenario == "wrong-coins" {
+				coin = common.HexToAddress("0xff")
+			}
+			return method.Outputs.Pack(coin)
+		case "get_pool_asset_types":
+			kinds := []uint8{0, 0}
+			if f.feeScenario == "dynamic-rates" {
+				kinds[0] = 3
+			}
+			return method.Outputs.Pack(kinds)
+		case "stored_rates":
+			return method.Outputs.Pack([]*big.Int{big.NewInt(1000000000000000000), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)})
 		case "isPaused":
 			if f.malformedPause {
 				return []byte{1}, nil
@@ -1272,7 +1338,7 @@ func TestYieldBreakdownSeparatesGaugeProjectionFromVaultPayout(t *testing.T) {
 	if p.APR == nil || y.CRV.APR == nil || y.VaultExtra.APR == nil || math.Abs(*p.APR-*y.CRV.APR-*y.VaultExtra.APR) > 1e-6 {
 		t.Fatalf("gauge projection was double counted: %+v", p)
 	}
-	if p.APRScope != "vault_rewards" || y.Status != "partial" || y.Merkl.APR != nil || y.Trading.APY != nil || y.Trading.WindowDays != nil || y.Merkl.Status != "unavailable" {
+	if p.APRScope != "vault_rewards" || y.Status != "partial" || y.Merkl.APR != nil || y.Trading.APY != nil || y.Trading.WindowDays == nil || *y.Trading.WindowDays != 30 || y.Merkl.Status != "unavailable" {
 		t.Fatalf("unknown components fabricated: %+v", y)
 	}
 	if !reflect.DeepEqual(y.IncludedInAPR, []string{"crv", "vaultExtra"}) {
@@ -1504,5 +1570,113 @@ func TestStateOnlyFailureValidationAndIndependentFlags(t *testing.T) {
 	f.reorg = true
 	if _, err := s.GetGaugeStatesAt(context.Background(), "ethereum", []common.Address{common.HexToAddress("0xaa")}, 0); err == nil || !strings.Contains(err.Error(), "reorganized") {
 		t.Fatalf("state reorg accepted: %v", err)
+	}
+}
+
+func newFeeFixture(t *testing.T, ng bool) (*StakeDAOService, *fixtureRPC) {
+	s, f := newPoolFixture(t)
+	f.fullPrimary, f.feeHistory, f.latest = true, true, 300000
+	pool := common.HexToAddress("0xcc")
+	s.trading.routes = map[common.Address]feePoolRoute{pool: {pool: pool, coins: [2]common.Address{common.HexToAddress("0x11"), common.HexToAddress("0x22")}, ng: ng}}
+	return s, f
+}
+
+func TestTradingHistoryComputesSevenAndThirtyDaysWithoutMixingAPR(t *testing.T) {
+	s, f := newFeeFixture(t, true)
+	r, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := r.Pools[0]
+	tr := p.Yield.Trading
+	if tr.Status != "available" || p.APY == nil || tr.APY == nil || p.APYScope != "trading_fees" || len(tr.Windows) != 2 || *tr.WindowDays != 30 || p.APRStatus != "available" || *p.APR != *p.Yield.CRV.APR {
+		t.Fatalf("wrong yield scopes or windows: %+v", p)
+	}
+	for i, days := range []int{7, 30} {
+		w := tr.Windows[i]
+		if w.Status != "available" || w.APY == nil || w.CoveredSeconds == nil || *w.CoveredSeconds != uint64(days)*86400 || w.StartBlockHash == nil || w.EndBlock != f.latest {
+			t.Fatalf("incomplete window: %+v", w)
+		}
+		start := f.latest - uint64(days)*7200
+		ratio := float64(1000000000000000000+f.latest*1000000000) / float64(1000000000000000000+start*1000000000)
+		want := math.Expm1(math.Log(ratio)*365/float64(days)) * 100
+		if math.Abs(*w.APY-want) > 1e-10 {
+			t.Fatalf("bad annualization: got %v want %v", *w.APY, want)
+		}
+		if days == 30 && *p.APY != *w.APY {
+			t.Fatal("main APY is not the monthly value")
+		}
+	}
+	before := f.feeCalls
+	s.client, s.chainID, s.snapshotTime = f, 1, r.BlockTimestamp
+	head, err := f.HeaderByNumber(context.Background(), new(big.Int).SetUint64(f.latest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.addTradingHistory(context.Background(), head, r.Pools)
+	if f.feeCalls != before {
+		t.Fatal("hash-keyed fee snapshots were fetched twice")
+	}
+}
+
+func TestTradingHistoryDoesNotSubstituteWeekForMonth(t *testing.T) {
+	s, f := newFeeFixture(t, false)
+	f.feeRampTime = 1700000000 + f.latest*12 - 14*86400
+	r, err := s.GetPools(context.Background(), "ethereum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := r.Pools[0]
+	tr := p.Yield.Trading
+	if tr.Status != "partial" || tr.Windows[0].APY == nil || tr.Windows[1].APY != nil || tr.APY != nil || p.APY != nil || tr.Windows[1].Reasons[0] != "amplification_changed_in_window" {
+		t.Fatalf("week substituted for month or ramp ignored: %+v", tr)
+	}
+}
+
+func TestTradingHistoryRejectsUnverifiedGrowthAndPreservesCRV(t *testing.T) {
+	for _, scenario := range []string{"archive", "wrong-coins", "dynamic-rates", "decrease", "historical-reorg"} {
+		t.Run(scenario, func(t *testing.T) {
+			s, f := newFeeFixture(t, true)
+			f.feeScenario = scenario
+			r, err := s.GetPools(context.Background(), "ethereum")
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := r.Pools[0]
+			if p.APY != nil || p.Yield.Trading.Status != "unavailable" || len(p.Yield.Trading.Reasons) == 0 || p.APR == nil || p.APRStatus != "available" {
+				t.Fatalf("invalid history became APY or invalidated CRV: %+v", p)
+			}
+			if scenario == "archive" && p.Yield.Trading.Reasons[0] != "archive_rpc_required" {
+				t.Fatalf("archive access requirement lost: %+v", p.Yield.Trading)
+			}
+			raw, _ := json.Marshal(r)
+			if strings.Contains(string(raw), "private-key") {
+				t.Fatal("history leaked RPC credentials")
+			}
+		})
+	}
+}
+
+func TestFeeGrowthZeroAndWindowGuards(t *testing.T) {
+	point := feeSnapshot{virtualPrice: big.NewInt(1000000000000000000), initialA: big.NewInt(10000), futureA: big.NewInt(10000)}
+	apy, observed, err := feeGrowth(point, point, 1000000, 1000000+7*86400)
+	if err != nil || apy == nil || *apy != 0 || observed == nil || *observed != 0 {
+		t.Fatalf("confirmed zero growth unavailable: %v", err)
+	}
+	_, _, err = feeGrowth(point, point, 1000000, 1000000)
+	if err == nil {
+		t.Fatal("zero duration accepted")
+	}
+	s, f := newFeeFixture(t, false)
+	head, _ := f.HeaderByNumber(context.Background(), new(big.Int).SetUint64(f.latest))
+	cache := map[uint64]*types.Header{f.latest: head}
+	start, err := findFeeBoundary(context.Background(), f, head, 30, cache)
+	if err != nil || start.Time > head.Time-30*86400 || head.Time-30*86400-start.Time > 12 {
+		t.Fatalf("wrong timestamp boundary: %+v %v", start, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := findFeeBoundary(ctx, s.client, head, 30, map[uint64]*types.Header{}); err == nil {
+		t.Fatal("canceled lookup accepted")
 	}
 }
