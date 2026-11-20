@@ -7,6 +7,8 @@
 Цифра gauge-extra не прибавлялась к APR vault; weETH APY не заполнялась
 непроверенной оценкой. Curve/AAVE не менялись.
 
+Последующая реализация: [отдельная оценочная модель weETH и BOLD route diagnostics](WEETH_FEE_MODEL_RU.md).
+
 Все чтения текущего состояния выполнены на Ethereum block **26456929**,
 timestamp **1795185215**, hash
 `0xd2da74c4e0a32e8f7cb17f967333aa00c77abfa3827e3e59ef7b0fe3e643c892`.

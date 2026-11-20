@@ -218,7 +218,7 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 }
 
 // @Summary      Диагностика выбранных пулов StakeDAO
-// @Description  Стандартные 2/5 пулов или произвольные 1–5 gauge через параметр gauges, без истории и Postgres. Состав APR, причины aprReasons, источники цен и контроль PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.
+// @Description  Стандартные 2/5 пулов или произвольные 1–5 gauge, без истории регистраций и Postgres. Состав APR, цены, торговая APY поддержанных моделей, маршрут наград BOLD. weethFeeDays отдельно включает скан swaps и оценку fee APR только для weETH/WETH. Не более 5 RPC/с и 300 попыток.
 // @Tags         StakeDao
 // @Produce      json
 // @Param        network  path      string true "Поддерживаемая сеть: ethereum"
@@ -226,6 +226,7 @@ func (h *Handler) HandleGetStakeDaoReserves(c echo.Context) error {
 // @Param        gauges   query     string false "1–5 gauge через запятую; при указании limit не используется"
 // @Param        block    query     string false "Десятичный номер блока; включает строгие цены этого блока"
 // @Param        strictPrices query bool false "Изолированные цены выбранного блока без общего кэша" default(false)
+// @Param        weethFeeDays query int false "Оценка fee APR по swaps за 1/7/30 дней; только один weETH/WETH gauge. Не APY; использует параметры конечного блока" Enums(1,7,30)
 // @Success      200      {object}  dto.StakeDAOPoolsResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      502      {object}  map[string]string
@@ -242,6 +243,13 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 		}
 	}
 	options := stakedao.DiagnosticOptions{}
+	if c.QueryParams().Has("weethFeeDays") {
+		value, err := strconv.Atoi(c.QueryParam("weethFeeDays"))
+		if err != nil || (value != 1 && value != 7 && value != 30) || !c.QueryParams().Has("gauges") {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "weethFeeDays requires 1, 7 or 30 and the explicit weETH gauge only"})
+		}
+		options.WeETHFeeDays = value
+	}
 	if c.QueryParams().Has("block") {
 		value, err := strconv.ParseUint(c.QueryParam("block"), 10, 64)
 		if err != nil || value == 0 {
@@ -262,6 +270,9 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 		gauges, parseErr := parseStakeDAOGauges(c.QueryParam("gauges"))
 		if parseErr != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": parseErr.Error()})
+		}
+		if err := stakedao.ValidateWeETHFeeSelection(gauges, options.WeETHFeeDays); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 		result, err = h.stakeDao.GetGaugeDiagnosticsAt(c.Request().Context(), c.Param("network"), gauges, options)
 	} else {

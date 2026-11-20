@@ -1680,3 +1680,214 @@ func TestFeeGrowthZeroAndWindowGuards(t *testing.T) {
 		t.Fatal("canceled lookup accepted")
 	}
 }
+
+// Tests live with the existing fixtures to avoid scattering new test files.
+type feeModelRPC struct {
+	*fixtureRPC
+	scanFailure     bool
+	identityFailure bool
+	scans           []ethereum.FilterQuery
+}
+
+func (f *feeModelRPC) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.scans = append(f.scans, q)
+	if f.scanFailure {
+		return nil, errors.New("https://rpc.invalid/private-key archive unavailable")
+	}
+	return []types.Log{}, nil
+}
+func (f *feeModelRPC) CallContract(ctx context.Context, c ethereum.CallMsg, b *big.Int) ([]byte, error) {
+	aggregate, _ := abi.JSON(strings.NewReader(stakeDAOMulticallABI))
+	v, err := aggregate.Methods["aggregate3"].Inputs.Unpack(c.Data[4:])
+	if err != nil {
+		return nil, err
+	}
+	calls := *abi.ConvertType(v[0], new([]multicallInput)).(*[]multicallInput)
+	out := []multicallOutput{}
+	for _, c := range calls {
+		var result []byte
+		var last error
+		for _, raw := range []string{weETHFeeABI, rewardRouteABI, feePoolABI, erc20DecimalsABI} {
+			a, _ := abi.JSON(strings.NewReader(raw))
+			m, e := a.MethodById(c.CallData[:4])
+			if e != nil {
+				continue
+			}
+			args, _ := m.Inputs.Unpack(c.CallData[4:])
+			var values []interface{}
+			switch m.Name {
+			case "coins":
+				i := int(args[0].(*big.Int).Int64())
+				values = []interface{}{weETHFeeCoins[i]}
+			case "balances":
+				values = []interface{}{new(big.Int).Mul(big.NewInt(100), big.NewInt(1000000000000000000))}
+			case "decimals":
+				values = []interface{}{uint8(18)}
+			case "stored_rates":
+				values = []interface{}{[]*big.Int{big.NewInt(1000000000000000000), big.NewInt(2000000000000000000)}}
+			case "dynamic_fee":
+				values = []interface{}{big.NewInt(10000000)}
+			case "admin_fee":
+				values = []interface{}{big.NewInt(5000000000)}
+			case "get_pool_asset_types":
+				values = []interface{}{[]uint8{0, 1}}
+			case "rewardVault":
+				values = []interface{}{common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad")}
+			case "legacyRewardReceiver", "getRewardsDistributor":
+				values = []interface{}{boldRouteLegacy}
+			case "isRewardToken":
+				values = []interface{}{true}
+			case "rewardRouter":
+				values = []interface{}{boldRouteRouter}
+			case "rewards_receiver":
+				values = []interface{}{boldRouteReceiver}
+			case "PROTOCOL_CONTROLLER":
+				values = []interface{}{common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB)}
+			case "merkleDistributor":
+				target := boldRouteExecutor
+				if f.identityFailure {
+					target = common.HexToAddress("0xdead")
+				}
+				values = []interface{}{target}
+			case "balanceOf", "claimable_reward":
+				values = []interface{}{big.NewInt(1000000000000000000)}
+			case "nbIncentives":
+				values = []interface{}{big.NewInt(2)}
+			case "incentives":
+				values = []interface{}{boldRouteGauge, boldRouteToken, big.NewInt(100), big.NewInt(1), big.NewInt(101), big.NewInt(1), boldRouteExecutor, big.NewInt(1000000000000000000), boldRouteExecutor}
+			default:
+				last = errors.New("unknown fixture method")
+			}
+			if values != nil {
+				result, last = m.Outputs.Pack(values...)
+			}
+			break
+		}
+		out = append(out, multicallOutput{Success: last == nil && result != nil, ReturnData: result})
+	}
+	return aggregate.Methods["aggregate3"].Outputs.Pack(out)
+}
+func newFeeModelFixture(t *testing.T) (*StakeDAOService, *feeModelRPC, *types.Header) {
+	s, f := newPoolFixture(t)
+	f.feeHistory = true
+	f.latest = 300000
+	rpc := &feeModelRPC{fixtureRPC: f}
+	s.client = rpc
+	s.chainID = 1
+	s.controller = common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB)
+	h, err := rpc.HeaderByNumber(context.Background(), big.NewInt(300000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.snapshotTime = h.Time
+	return s, rpc, h
+}
+func TestWeETHFeeModelUsesNetBoughtAndAdminShare(t *testing.T) {
+	a, _ := abi.JSON(strings.NewReader(weETHFeeABI))
+	event := a.Events["TokenExchange"]
+	payload, _ := event.Inputs.NonIndexed().Pack(big.NewInt(0), big.NewInt(1000000000000000000), big.NewInt(1), big.NewInt(1000000000000000000))
+	l := types.Log{Address: weETHFeePool, BlockNumber: 20, BlockHash: common.HexToHash("0x01"), TxHash: common.HexToHash("0x02"), Topics: []common.Hash{event.ID, common.HexToHash("0x03")}, Data: payload}
+	r := weETHFeeReference{rates: [2]decimal.Decimal{decimal.NewFromInt(1), decimal.NewFromInt(2)}, capital: decimal.NewFromInt(100), fee: decimal.RequireFromString("0.001"), admin: decimal.RequireFromString("0.5")}
+	fees, count, err := estimateWeETHSwaps([]types.Log{l, l}, a, r)
+	// Independent rational calculation: 1 net weETH * 1/999 fee * 1/2 LP share * 2 ETH/weETH.
+	got, _ := fees.Float64()
+	if err != nil || count != 1 || math.Abs(got-1.0/999) > 1e-15 {
+		t.Fatalf("wrong net/gross/admin/rate normalization: %s %d %v", fees, count, err)
+	}
+	variants := []types.Log{l, l, l, l, l}
+	variants[0].Removed = true
+	variants[1].Address = common.HexToAddress("0xdead")
+	variants[2].Data = []byte{1}
+	variants[3].Topics = nil
+	variants[4].TxHash = common.Hash{}
+	for _, bad := range variants {
+		if _, _, e := estimateWeETHSwaps([]types.Log{bad}, a, r); e == nil {
+			t.Fatal("malformed history accepted")
+		}
+	}
+	conflict := l
+	conflict.BlockHash = common.HexToHash("0x99")
+	if _, _, e := estimateWeETHSwaps([]types.Log{l, conflict}, a, r); e == nil {
+		t.Fatal("conflicting duplicate accepted")
+	}
+	if z, n, e := estimateWeETHSwaps(nil, a, r); e != nil || n != 0 || !z.IsZero() {
+		t.Fatal("verified empty swap list not zero")
+	}
+}
+func TestWeETHFeeHistoryIsOptionalCompleteAndSeparateFromAPY(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		s, rpc, h := newFeeModelFixture(t)
+		rpc.scanFailure = fail
+		apr := float64(3)
+		p := dto.StakeDAOPool{GaugeAddress: weETHFeeGauge, AssetAddress: weETHFeePool, ProtocolID: "0xc715e373", APR: &apr, Yield: &dto.StakeDAOYieldBreakdown{Trading: tradingUnavailable("unsupported_pool_model")}}
+		s.addWeETHFeeEstimate(context.Background(), h, 7, &p)
+		d := p.Diagnostics.WeETHFees
+		if p.APY != nil || p.Yield.Trading.APY != nil || p.APR == nil || *p.APR != 3 {
+			t.Fatal("estimate mixed into vault APR/APY")
+		}
+		if fail {
+			if d.EstimatedAPR != nil || d.Status != "unavailable" || d.Reasons[0] != "swap_history_unavailable" {
+				t.Fatalf("partial history became zero: %+v", d)
+			}
+		} else {
+			if d.Status != "estimate_available" || d.EstimatedAPR == nil || *d.EstimatedAPR != 0 || d.RangesDone != d.RangesTotal || d.RangesTotal != 34 || d.CoveredSeconds == nil || *d.CoveredSeconds != 7*86400 {
+				t.Fatalf("wrong verified window: %+v", d)
+			}
+			sort.Slice(rpc.scans, func(i, j int) bool { return rpc.scans[i].FromBlock.Cmp(rpc.scans[j].FromBlock) < 0 })
+			previous := *d.StartBlock
+			for _, q := range rpc.scans {
+				if q.FromBlock.Uint64() != previous+1 || q.ToBlock.Uint64()-q.FromBlock.Uint64() >= 1500 || len(q.Addresses) != 1 || q.Addresses[0] != weETHFeePool {
+					t.Fatal("gap/overlap/unbounded query")
+				}
+				previous = q.ToBlock.Uint64()
+			}
+			if previous != h.Number.Uint64() {
+				t.Fatal("truncated history")
+			}
+		}
+		raw, _ := json.Marshal(p)
+		if strings.Contains(string(raw), "private-key") {
+			t.Fatal("RPC URL leaked")
+		}
+	}
+	for _, days := range []int{-1, 2, 31} {
+		if ValidateWeETHFeeSelection([]common.Address{weETHFeeGauge}, days) == nil {
+			t.Fatal("bad window accepted")
+		}
+	}
+	if ValidateWeETHFeeSelection([]common.Address{weETHFeeGauge, boldRouteGauge}, 7) == nil {
+		t.Fatal("unbounded multi-pool scan accepted")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, rpc, _ := newFeeModelFixture(t)
+	if _, _, e := readWeETHSwaps(ctx, rpc, 1, 3000, common.Hash{}); e == nil {
+		t.Fatal("cancelled scan accepted")
+	}
+}
+func TestBoldRewardRouteExplainsZeroVaultRateWithoutInventingAPR(t *testing.T) {
+	s, rpc, h := newFeeModelFixture(t)
+	p := dto.StakeDAOPool{GaugeAddress: boldRouteGauge, AssetAddress: common.HexToAddress("0xefc6516323fbd28e80b85a497b65a86243a54b3e"), VaultAddress: common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad"), RewardReceiver: boldRouteReceiver, ProtocolID: "0xc715e373", Diagnostics: &dto.StakeDAOPoolDiagnostics{Primary: &dto.PrimaryRateDiagnostic{Locker: common.HexToAddress("0x11")}}, Rewards: []dto.StakeDAOReward{{Token: boldRouteToken, Source: "vault-extra", DistributionStatus: "not_started"}}}
+	s.addBoldRewardRoute(context.Background(), h.Number, &p)
+	d := p.Diagnostics.RewardRoute
+	if d.Status != "configured" || d.VaultDistributionStatus != "not_started" || len(d.Campaigns) != 2 || d.Campaigns[0].Status != "expired_funding_period" || p.APR != nil || p.APY != nil {
+		t.Fatalf("campaign converted to vault yield: %+v", d)
+	}
+	rpc.identityFailure = true
+	s.addBoldRewardRoute(context.Background(), h.Number, &p)
+	if p.Diagnostics.RewardRoute.Status != "unavailable" || p.Diagnostics.RewardRoute.Reasons[0] != "reward_route_identity_mismatch" {
+		t.Fatal("changed router trusted")
+	}
+	v := []interface{}{boldRouteGauge, boldRouteToken, big.NewInt(100), big.NewInt(1), big.NewInt(101), big.NewInt(1), boldRouteExecutor, big.NewInt(1), boldRouteExecutor}
+	v[6] = common.HexToAddress("0xdead")
+	if _, match, valid := decodeBoldCampaign(v, 0, 200); match || !valid {
+		t.Fatal("untrusted campaign counted")
+	}
+	v[6] = boldRouteExecutor
+	v[4] = big.NewInt(102)
+	if _, _, valid := decodeBoldCampaign(v, 0, 200); valid {
+		t.Fatal("invalid campaign duration accepted")
+	}
+}

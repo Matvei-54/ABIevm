@@ -12,6 +12,61 @@ type StakeDAOPoolDiagnostics struct {
 	Convex      *ConvexRateDiagnostic  `json:"convex,omitempty"`
 	Prices      []PriceDiagnostic      `json:"prices,omitempty"`
 	ReaderModel *ReaderModelDiagnostic `json:"readerModel,omitempty"`
+	WeETHFees   *WeETHFeeEstimate      `json:"weethFees,omitempty"`
+	RewardRoute *RewardRouteDiagnostic `json:"rewardRoute,omitempty"`
+}
+
+// Snapshot-parameter estimate, never a reconstructed historical APY.
+type WeETHFeeEstimate struct {
+	Status              string         `json:"status"`
+	Model               string         `json:"model"`
+	Reasons             []string       `json:"reasons,omitempty"`
+	Assumptions         []string       `json:"assumptions"`
+	Pool                common.Address `json:"pool" swaggertype:"string"`
+	WindowDays          int            `json:"windowDays"`
+	StartBlock          *uint64        `json:"startBlock"`
+	EndBlock            uint64         `json:"endBlock"`
+	StartBlockHash      *common.Hash   `json:"startBlockHash" swaggertype:"string"`
+	EndBlockHash        common.Hash    `json:"endBlockHash" swaggertype:"string"`
+	CoveredSeconds      *uint64        `json:"coveredSeconds"`
+	RangesTotal         int            `json:"rangesTotal"`
+	RangesDone          int            `json:"rangesDone"`
+	Swaps               int            `json:"swaps"`
+	ReferenceCapitalETH *string        `json:"referenceCapitalEth"`
+	DynamicFeeFraction  *string        `json:"dynamicFeeFraction"`
+	AdminFeeFraction    *string        `json:"adminFeeFraction"`
+	EstimatedLPFeesETH  *string        `json:"estimatedLpFeesEth"`
+	EstimatedAPR        *float64       `json:"estimatedApr"`
+}
+
+type RewardRouteDiagnostic struct {
+	Status                  string         `json:"status"`
+	Reasons                 []string       `json:"reasons,omitempty"`
+	BlockNumber             uint64         `json:"blockNumber"`
+	Token                   common.Address `json:"token" swaggertype:"string"`
+	GaugeReceiver           common.Address `json:"gaugeReceiver" swaggertype:"string"`
+	Receiver                common.Address `json:"receiver" swaggertype:"string"`
+	LegacyReceiver          common.Address `json:"legacyReceiver" swaggertype:"string"`
+	Router                  common.Address `json:"router" swaggertype:"string"`
+	MerkleTarget            common.Address `json:"merkleTarget" swaggertype:"string"`
+	VaultDistributor        common.Address `json:"vaultDistributor" swaggertype:"string"`
+	VaultDistributionStatus string         `json:"vaultDistributionStatus"`
+	ReceiverBalance         *string        `json:"receiverBalance"`
+	LegacyBalance           *string        `json:"legacyBalance"`
+	ClaimableLocker         *string        `json:"claimableLocker"`
+	// Recent entries are diagnostic only; never a complete campaign registry.
+	Campaigns         []RewardCampaignDiagnostic `json:"campaigns"`
+	CampaignsExamined int                        `json:"campaignsExamined"`
+	CampaignCoverage  string                     `json:"campaignCoverage"`
+}
+
+type RewardCampaignDiagnostic struct {
+	ID          uint64         `json:"id"`
+	Distributor common.Address `json:"distributor" swaggertype:"string"`
+	Amount      string         `json:"amount"`
+	Start       uint64         `json:"start"`
+	End         uint64         `json:"end"`
+	Status      string         `json:"status"`
 }
 
 // A public-reader reference and an observed Hub fee identity, not a claim that

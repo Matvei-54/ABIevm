@@ -4,6 +4,8 @@
 
 [Проверенный маршрут BOLD через Router/AllMight и принцип модели weETH из Curve-сервиса](BOLD_ROUTE_AND_WEETH_MODEL_RU.md).
 
+[Код оценки fee APR weETH/WETH, параметры Swagger и диагностика маршрута BOLD](WEETH_FEE_MODEL_RU.md).
+
 [Отдельные признаки state и лёгкий endpoint состояния без расчёта APR](POOL_STATE_RU.md).
 
 [Карта контрактов и функций, признаки активности и проверка двух null-APR vault](YIELD_SOURCE_MAP_RU.md).

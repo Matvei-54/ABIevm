@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"time"
 
 	dto "ABIevm/internal/service/stakedao/dto"
@@ -33,9 +34,13 @@ func (s *StakeDAOService) GetPoolDiagnostics(ctx context.Context, network string
 type DiagnosticOptions struct {
 	BlockNumber  uint64
 	StrictPrices bool
+	WeETHFeeDays int
 }
 
 func (s *StakeDAOService) GetPoolDiagnosticsAt(ctx context.Context, network string, limit int, options DiagnosticOptions) (*dto.StakeDAOPoolsResponse, error) {
+	if options.WeETHFeeDays != 0 {
+		return nil, errors.New("weethFeeDays requires the explicit weETH gauge only")
+	}
 	if limit != 2 && limit != 5 {
 		return nil, errors.New("diagnostics limit must be 2 or 5")
 	}
@@ -58,6 +63,7 @@ type poolSample struct {
 	blockNumber        uint64
 	strictPrices       bool
 	stateOnly          bool
+	weETHFeeDays       int
 }
 
 // GetPoolsForGauges checks explicitly selected gauges against current Controller
@@ -78,8 +84,12 @@ func (s *StakeDAOService) GetPoolsForGauges(ctx context.Context, network string,
 }
 
 // GetGaugeDiagnosticsAt extends the same bounded diagnostic path to any 1–5
-// explicit gauges, without history/DB and without changing production discovery.
+// explicit gauges, without registry history/DB or changing production discovery.
+// WeETHFeeDays explicitly enables a separate bounded swap-history estimate.
 func (s *StakeDAOService) GetGaugeDiagnosticsAt(ctx context.Context, network string, gauges []common.Address, options DiagnosticOptions) (*dto.StakeDAOPoolsResponse, error) {
+	if err := ValidateWeETHFeeSelection(gauges, options.WeETHFeeDays); err != nil {
+		return nil, err
+	}
 	if len(gauges) < 1 || len(gauges) > MaxSamplePools {
 		return nil, errors.New("select 1–5 gauge addresses")
 	}
@@ -90,7 +100,7 @@ func (s *StakeDAOService) GetGaugeDiagnosticsAt(ctx context.Context, network str
 		}
 		seen[gauge] = true
 	}
-	return s.getPoolsWithSelection(ctx, network, &poolSample{gauges: append([]common.Address(nil), gauges...), limit: len(gauges), diagnostics: true, blockNumber: options.BlockNumber, strictPrices: options.StrictPrices || options.BlockNumber != 0})
+	return s.getPoolsWithSelection(ctx, network, &poolSample{gauges: append([]common.Address(nil), gauges...), limit: len(gauges), diagnostics: true, blockNumber: options.BlockNumber, strictPrices: options.StrictPrices || options.BlockNumber != 0, weETHFeeDays: options.WeETHFeeDays})
 }
 
 func (s *StakeDAOService) currentGaugeRegistrations(ctx context.Context, block *big.Int, gauges []common.Address) ([]StakeDAOVaultInfo, error) {
@@ -144,6 +154,7 @@ func (s *StakeDAOService) GetPoolsSample(ctx context.Context, network string, fr
 // attempts in total. This is a request budget, not a provider CU estimate.
 type sampleRPC struct {
 	stakeDAORPC
+	mu        sync.Mutex
 	remaining int
 	next      time.Time
 	exhausted bool
@@ -154,6 +165,8 @@ func newSampleRPC(client stakeDAORPC) *sampleRPC {
 }
 
 func (c *sampleRPC) before(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}

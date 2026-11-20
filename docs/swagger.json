@@ -177,7 +177,7 @@
         },
         "/reservesStakedao/{network}/diagnostics": {
             "get": {
-                "description": "Стандартные 2/5 пулов или произвольные 1–5 gauge через параметр gauges, без истории и Postgres. Состав APR, причины aprReasons, источники цен и контроль PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.",
+                "description": "Стандартные 2/5 пулов или произвольные 1–5 gauge, без истории регистраций и Postgres. Состав APR, цены, торговая APY поддержанных моделей, маршрут наград BOLD. weethFeeDays отдельно включает скан swaps и оценку fee APR только для weETH/WETH. Не более 5 RPC/с и 300 попыток.",
                 "produces": [
                     "application/json"
                 ],
@@ -221,6 +221,17 @@
                         "default": false,
                         "description": "Изолированные цены выбранного блока без общего кэша",
                         "name": "strictPrices",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            1,
+                            7,
+                            30
+                        ],
+                        "type": "integer",
+                        "description": "Оценка fee APR по swaps за 1/7/30 дней; только один weETH/WETH gauge. Не APY; использует параметры конечного блока",
+                        "name": "weethFeeDays",
                         "in": "query"
                     }
                 ],
@@ -572,6 +583,92 @@
                 }
             }
         },
+        "dto.RewardCampaignDiagnostic": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "distributor": {
+                    "type": "string"
+                },
+                "end": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "start": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RewardRouteDiagnostic": {
+            "type": "object",
+            "properties": {
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "campaignCoverage": {
+                    "type": "string"
+                },
+                "campaigns": {
+                    "description": "Recent entries are diagnostic only; never a complete campaign registry.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RewardCampaignDiagnostic"
+                    }
+                },
+                "campaignsExamined": {
+                    "type": "integer"
+                },
+                "claimableLocker": {
+                    "type": "string"
+                },
+                "gaugeReceiver": {
+                    "type": "string"
+                },
+                "legacyBalance": {
+                    "type": "string"
+                },
+                "legacyReceiver": {
+                    "type": "string"
+                },
+                "merkleTarget": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "receiver": {
+                    "type": "string"
+                },
+                "receiverBalance": {
+                    "type": "string"
+                },
+                "router": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "vaultDistributionStatus": {
+                    "type": "string"
+                },
+                "vaultDistributor": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.StakeDAOAPRComponent": {
             "type": "object",
             "properties": {
@@ -799,6 +896,12 @@
                 },
                 "readerModel": {
                     "$ref": "#/definitions/dto.ReaderModelDiagnostic"
+                },
+                "rewardRoute": {
+                    "$ref": "#/definitions/dto.RewardRouteDiagnostic"
+                },
+                "weethFees": {
+                    "$ref": "#/definitions/dto.WeETHFeeEstimate"
                 }
             }
         },
@@ -1116,6 +1219,74 @@
                 },
                 "vaultExtra": {
                     "$ref": "#/definitions/dto.StakeDAOAPRComponent"
+                }
+            }
+        },
+        "dto.WeETHFeeEstimate": {
+            "type": "object",
+            "properties": {
+                "adminFeeFraction": {
+                    "type": "string"
+                },
+                "assumptions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "coveredSeconds": {
+                    "type": "integer"
+                },
+                "dynamicFeeFraction": {
+                    "type": "string"
+                },
+                "endBlock": {
+                    "type": "integer"
+                },
+                "endBlockHash": {
+                    "type": "string"
+                },
+                "estimatedApr": {
+                    "type": "number"
+                },
+                "estimatedLpFeesEth": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "pool": {
+                    "type": "string"
+                },
+                "rangesDone": {
+                    "type": "integer"
+                },
+                "rangesTotal": {
+                    "type": "integer"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "referenceCapitalEth": {
+                    "type": "string"
+                },
+                "startBlock": {
+                    "type": "integer"
+                },
+                "startBlockHash": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "swaps": {
+                    "type": "integer"
+                },
+                "windowDays": {
+                    "type": "integer"
                 }
             }
         }

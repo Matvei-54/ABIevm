@@ -298,3 +298,27 @@ func TestFutureDiagnosticBlockFailsBeforeRegistrations(t *testing.T) {
 		t.Fatalf("future block was read or error lost: %v", err)
 	}
 }
+
+func TestSampleRPCConcurrentReservationsShareBudget(t *testing.T) {
+	c := newSampleRPC(nil)
+	done := make(chan error, 4)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	start := time.Now()
+	for i := 0; i < 4; i++ {
+		go func() { done <- c.before(ctx) }()
+	}
+	for i := 0; i < 4; i++ {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c.remaining != 296 || time.Since(start) < 550*time.Millisecond {
+		t.Fatalf("concurrent workers bypassed shared limit/budget: %d %s", c.remaining, time.Since(start))
+	}
+	cancelled, stop := context.WithCancel(context.Background())
+	stop()
+	if c.before(cancelled) == nil || c.remaining != 296 {
+		t.Fatal("cancelled reservation consumed budget")
+	}
+}

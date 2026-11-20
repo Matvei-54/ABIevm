@@ -286,6 +286,7 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		s.valueYieldBreakdown(ctx, &response.Pools[i])
 		if s.diagnostics {
 			s.addPoolDiagnostics(ctx, block, &response.Pools[i])
+			s.addBoldRewardRoute(ctx, block, &response.Pools[i])
 			if sample != nil && sample.strictPrices {
 				addReaderModel(block.Uint64(), &response.Pools[i])
 			}
@@ -293,6 +294,12 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	}
 	progress.setStage("trading_history")
 	s.addTradingHistory(ctx, header, response.Pools)
+	if sample != nil && sample.weETHFeeDays != 0 {
+		progress.setStage("weeth_fee_estimate")
+		for i := range response.Pools {
+			s.addWeETHFeeEstimate(ctx, header, sample.weETHFeeDays, &response.Pools[i])
+		}
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

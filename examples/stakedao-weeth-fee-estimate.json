@@ -1,0 +1,260 @@
+{
+  "network": "ethereum",
+  "blockNumber": 26457038,
+  "blockTimestamp": 1795186547,
+  "blockHash": "0x47d0c090f9a6c393228bfbfb4119a59159fb1ac7728899b58403862f79ae1a5a",
+  "strictPrices": true,
+  "rpcAttempts": 63,
+  "pools": [
+    {
+      "gaugeAddress": "0x053df3e4d0ced9a3bf0494f97e83ce1f13bdc0e2",
+      "vaultAddress": "0xe3205af238bb967efb76fc8173bbb1fdc9557516",
+      "assetAddress": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "rewardReceiver": "0x235d06b1f7f780ddc77afdedbdffc6eda522ebe6",
+      "protocolId": "0xc715e373",
+      "name": "Stake DAO weETH/WETH-ng Vault",
+      "symbol": "sd-weeth-ng-vault",
+      "assetSymbol": "weeth-ng",
+      "assetAmount": "189.682069653662922269",
+      "assetDecimals": 18,
+      "tvl": 356719.5428312952,
+      "apr": 1.1609619173776948,
+      "aprStatus": "available",
+      "apy": null,
+      "apyScope": "trading_fees",
+      "allocation": {
+        "accountedAssets": "189.682069653662922269",
+        "physicalAssets": "189.682069653662922269",
+        "surplusAssets": "0.000000000000000000",
+        "status": "covered"
+      },
+      "diagnostics": {
+        "primary": {
+          "unit": "reward tokens/second",
+          "locker": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+          "lockerInputs": {
+            "killed": false,
+            "inflationRaw": "3080982847903985532",
+            "relativeWeightRaw": "4118611600358633",
+            "workingBalanceRaw": "189682069653662922269",
+            "workingSupplyRaw": "2843946830000254908076"
+          },
+          "lockerGrossRate": "0.00084634011468453139078068386222917127926075468518103678693630587889751681621061204754914567346963263260478471452337099405618164747576203149351264",
+          "convexGrossRate": "0",
+          "protocolFeeFraction": "0.165",
+          "harvestFeeFraction": "0.00025",
+          "protocolFeeRate": "0.0001396461189229476794788128372678132610780245230548710698444904700180902746747509878456090361224893843797894778963562140192699718335007351964295856",
+          "harvestFeeRate": "0.00000021158502867113284769517096555729281981518867129525919673407646972437920405265301188728641836740815815119617863084274851404541186894050787337816",
+          "netRate": "0.00070648241073291257845417585399580072536291497345487045789508133240970216233180840669164935092877584006684404044838393728839763023039235578920967624",
+          "sidecars": [
+            {
+              "address": "0xa9c49d6a686056da8aacbb27b4ab5c3a16fc69a1",
+              "pid": "355",
+              "rewardPool": "0x5411cc583f0b51104fa523eef9fc77a29df80f58"
+            }
+          ]
+        },
+        "convex": {
+          "utility": "0x5fba69a794f395184b5760daf1134028608e5cd1",
+          "pid": "355",
+          "status": "matched",
+          "rewardPool": "0x5411cc583f0b51104fa523eef9fc77a29df80f58",
+          "rewardRateRaw": "8625688988310590",
+          "stakedSupplyRaw": "3323792830021129291566",
+          "periodFinish": 1795264367,
+          "expectedCrvRateRaw": "2595134362888",
+          "helperCrvRateRaw": "2595134362888",
+          "slots": [
+            {
+              "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+              "source": "crv_base",
+              "rateRaw": "2595134362888"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "cvx_mint_projection",
+              "rateRaw": "0"
+            },
+            {
+              "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+              "source": "convex_extra:0",
+              "rateRaw": "0"
+            }
+          ],
+          "ownSidecarRate": "0",
+          "helperOwnSidecarRate": "0",
+          "roundingDifference": "0",
+          "sidecarBalanceRaw": "0"
+        },
+        "prices": [
+          {
+            "token": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+            "usd": "1880.618149531070811259191711981875500626",
+            "source": "curve_stableswap_ng_nav",
+            "sourceContract": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+            "blockNumber": 26457038,
+            "updatedAt": "2026-11-20T14:55:47Z",
+            "validUntil": "2026-11-20T15:10:47Z",
+            "components": [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee"
+            ]
+          },
+          {
+            "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+            "usd": "0.18588182",
+            "source": "chainlink_usd",
+            "sourceContract": "0xda0da298550e8e449b935cea865c8100f3ca1b73",
+            "blockNumber": 26457038,
+            "updatedAt": "2026-11-20T14:55:47Z",
+            "validUntil": "2026-11-21T15:40:47Z"
+          },
+          {
+            "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "usd": "1735.14132654",
+            "source": "chainlink_usd",
+            "sourceContract": "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419",
+            "blockNumber": 26457038,
+            "updatedAt": "2026-11-20T14:55:47Z",
+            "validUntil": "2026-11-21T15:54:59Z"
+          },
+          {
+            "token": "0xcd5fe23c85820f7b72d0926fc9b05b43e359b7ee",
+            "usd": "1922.327391877668715851649185",
+            "source": "chainlink_cross_usd",
+            "sourceContract": "0x5c9c449bbc9a6075a2c061df312a35fd1e05ff22",
+            "blockNumber": 26457038,
+            "updatedAt": "2026-11-20T14:55:47Z",
+            "validUntil": "2026-11-20T15:10:47Z",
+            "components": [
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            ]
+          }
+        ],
+        "readerModel": {
+          "status": "available",
+          "source": "@stake-dao/reader@0.5.52 + observed published Hub fee identity",
+          "scope": "CRV only; public-reader reference, not a block-verified live UI value",
+          "message": "Private Hub formula and live UI block are not verified; reference values are not included in pool APR",
+          "grossMinApr": 0.5563159831699046,
+          "weightedBoost": 2.5,
+          "actualCrvApr": 1.1609619173776948,
+          "withoutHarvestFeeApr": 1.161309614867176,
+          "globalProtocolFeeApr": 1.161309614867176,
+          "referenceApr": 1.161309614867176,
+          "differencePercentagePoints": 0.0003476974894811904,
+          "ownSidecarCrvRate": "0",
+          "globalPoolCrvRate": "0.00862568898831059",
+          "cappedReferenceSidecarCrvRate": "0"
+        },
+        "weethFees": {
+          "status": "estimate_available",
+          "model": "snapshot_parameter_swap_fee_estimate",
+          "assumptions": [
+            "snapshot_dynamic_fee_for_all_swaps",
+            "snapshot_rates_and_pool_capital_in_eth",
+            "historical_parameters_not_replayed",
+            "liquidity_operation_fees_excluded",
+            "not_trading_apy_not_included_in_vault_apr"
+          ],
+          "pool": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+          "windowDays": 1,
+          "startBlock": 26449861,
+          "endBlock": 26457038,
+          "startBlockHash": "0x903ad3a2cdca43595a58b8aa8204f93e221095780c9ed6dc23746a5178997050",
+          "endBlockHash": "0x47d0c090f9a6c393228bfbfb4119a59159fb1ac7728899b58403862f79ae1a5a",
+          "coveredSeconds": 86400,
+          "rangesTotal": 5,
+          "rangesDone": 5,
+          "swaps": 63,
+          "referenceCapitalEth": "3874.844968252376143781959406351744723447",
+          "dynamicFeeFraction": "0.0000675861",
+          "adminFeeFraction": "0.5",
+          "estimatedLpFeesEth": "0.0203490743714064079728945267148452648257884810591175855",
+          "estimatedApr": 0.19168282102685605
+        }
+      },
+      "yieldBreakdown": {
+        "status": "partial",
+        "includedInApr": [
+          "crv",
+          "vaultExtra"
+        ],
+        "crv": {
+          "apr": 1.1609619173776948,
+          "status": "available",
+          "source": "curve-primary-net",
+          "scope": "net_vault_stream"
+        },
+        "vaultExtra": {
+          "apr": 0,
+          "status": "available",
+          "source": "vault-extra",
+          "scope": "active_vault_distribution"
+        },
+        "gaugeExtra": {
+          "apr": 0,
+          "status": "available",
+          "source": "curve_gauge",
+          "scope": "gross_per_staked_lp_projection",
+          "contract": "0x053df3e4d0ced9a3bf0494f97e83ce1f13bdc0e2",
+          "totalSupply": "3568.488596179878031504",
+          "rewards": []
+        },
+        "merkl": {
+          "apr": null,
+          "status": "unavailable",
+          "source": "merkl_incentives",
+          "scope": "campaign_projection",
+          "reasons": [
+            "incentive_registry_required"
+          ]
+        },
+        "trading": {
+          "apy": null,
+          "status": "unavailable",
+          "source": "curve_onchain_fee_growth",
+          "windowDays": 30,
+          "reasons": [
+            "unsupported_pool_model"
+          ],
+          "scope": "fixed_rate_lp_fee_growth",
+          "pool": null
+        }
+      },
+      "state": {
+        "blockNumber": 26457038,
+        "registered": true,
+        "shutdown": false,
+        "protocolPaused": false,
+        "gaugeKilled": false,
+        "hasAssets": true,
+        "crvRelativeWeight": "0.004118611600358633",
+        "hasCrvWeight": true
+      },
+      "rewardMechanism": "accountant",
+      "accountantAddress": "0x93b4b9bd266ffa8af68e39edfa8cfe2a62011ce0",
+      "rewardToken": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+      "aprScope": "vault_rewards",
+      "rewards": [
+        {
+          "token": "0xd533a949740bb3306d119cc777fa900ba034cd52",
+          "source": "curve-primary-net",
+          "ratePerSecond": "0.00070648241073291257845417585399580072536291497345487045789508133240970216233180840669164935092877584006684404044838393728839763023039235578920967624",
+          "periodFinish": null,
+          "apr": 1.1609619173776948
+        },
+        {
+          "token": "0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b",
+          "source": "vault-extra",
+          "ratePerSecond": "0",
+          "periodFinish": 0,
+          "apr": 0,
+          "distributionStatus": "not_started"
+        }
+      ],
+      "source": "onchain+price-cache",
+      "updatedAt": "2026-11-20T14:55:54.634904993Z"
+    }
+  ]
+}

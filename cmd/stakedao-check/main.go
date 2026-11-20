@@ -55,8 +55,12 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	withDiagnostics := flags.Bool("diagnostics", false, "check the standard 2/5 pools or explicit -gauges with price provenance and PoolUtilities comparison")
 	blockNumber := flags.Uint64("block", 0, "diagnostics snapshot block; implies strict prices; default latest")
 	strictPrices := flags.Bool("strict-prices", false, "diagnostics only: read all prices at the snapshot block in an isolated cache")
+	weethFeeDays := flags.Int("weeth-fee-days", 0, "optional snapshot-parameter fee APR estimate for the explicit weETH gauge only: 1, 7 or 30 days")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *weethFeeDays != 0 && !*withDiagnostics {
+		return fmt.Errorf("-weeth-fee-days requires -diagnostics and the explicit weETH gauge")
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected positional arguments")
@@ -120,7 +124,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	fmt.Fprintln(diagnostics, "At most 5 RPC requests/sec and 300 attempts; CU cost depends on the provider.")
 	if *withDiagnostics {
 		fmt.Fprintf(diagnostics, "Checking %d reference pools with APR components, cached quote provenance and Convex control rates.\n", *limit)
-		options := stakedao.DiagnosticOptions{BlockNumber: *blockNumber, StrictPrices: *strictPrices}
+		options := stakedao.DiagnosticOptions{BlockNumber: *blockNumber, StrictPrices: *strictPrices, WeETHFeeDays: *weethFeeDays}
 		if explicitGauges {
 			result, err = service.GetGaugeDiagnosticsAt(ctx, "ethereum", gauges, options)
 		} else {

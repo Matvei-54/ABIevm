@@ -146,6 +146,64 @@ definitions:
       withoutHarvestFeeApr:
         type: number
     type: object
+  dto.RewardCampaignDiagnostic:
+    properties:
+      amount:
+        type: string
+      distributor:
+        type: string
+      end:
+        type: integer
+      id:
+        type: integer
+      start:
+        type: integer
+      status:
+        type: string
+    type: object
+  dto.RewardRouteDiagnostic:
+    properties:
+      blockNumber:
+        type: integer
+      campaignCoverage:
+        type: string
+      campaigns:
+        description: Recent entries are diagnostic only; never a complete campaign
+          registry.
+        items:
+          $ref: '#/definitions/dto.RewardCampaignDiagnostic'
+        type: array
+      campaignsExamined:
+        type: integer
+      claimableLocker:
+        type: string
+      gaugeReceiver:
+        type: string
+      legacyBalance:
+        type: string
+      legacyReceiver:
+        type: string
+      merkleTarget:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      receiver:
+        type: string
+      receiverBalance:
+        type: string
+      router:
+        type: string
+      status:
+        type: string
+      token:
+        type: string
+      vaultDistributionStatus:
+        type: string
+      vaultDistributor:
+        type: string
+    type: object
   dto.StakeDAOAPRComponent:
     properties:
       apr:
@@ -298,6 +356,10 @@ definitions:
         $ref: '#/definitions/dto.PrimaryRateDiagnostic'
       readerModel:
         $ref: '#/definitions/dto.ReaderModelDiagnostic'
+      rewardRoute:
+        $ref: '#/definitions/dto.RewardRouteDiagnostic'
+      weethFees:
+        $ref: '#/definitions/dto.WeETHFeeEstimate'
     type: object
   dto.StakeDAOPoolError:
     properties:
@@ -508,6 +570,51 @@ definitions:
       vaultExtra:
         $ref: '#/definitions/dto.StakeDAOAPRComponent'
     type: object
+  dto.WeETHFeeEstimate:
+    properties:
+      adminFeeFraction:
+        type: string
+      assumptions:
+        items:
+          type: string
+        type: array
+      coveredSeconds:
+        type: integer
+      dynamicFeeFraction:
+        type: string
+      endBlock:
+        type: integer
+      endBlockHash:
+        type: string
+      estimatedApr:
+        type: number
+      estimatedLpFeesEth:
+        type: string
+      model:
+        type: string
+      pool:
+        type: string
+      rangesDone:
+        type: integer
+      rangesTotal:
+        type: integer
+      reasons:
+        items:
+          type: string
+        type: array
+      referenceCapitalEth:
+        type: string
+      startBlock:
+        type: integer
+      startBlockHash:
+        type: string
+      status:
+        type: string
+      swaps:
+        type: integer
+      windowDays:
+        type: integer
+    type: object
 info:
   contact: {}
 paths:
@@ -634,9 +741,10 @@ paths:
       - StakeDao
   /reservesStakedao/{network}/diagnostics:
     get:
-      description: Стандартные 2/5 пулов или произвольные 1–5 gauge через параметр
-        gauges, без истории и Postgres. Состав APR, причины aprReasons, источники
-        цен и контроль PoolUtilities. Не более 5 RPC/с и 300 попыток на запрос.
+      description: Стандартные 2/5 пулов или произвольные 1–5 gauge, без истории регистраций
+        и Postgres. Состав APR, цены, торговая APY поддержанных моделей, маршрут наград
+        BOLD. weethFeeDays отдельно включает скан swaps и оценку fee APR только для
+        weETH/WETH. Не более 5 RPC/с и 300 попыток.
       parameters:
       - description: 'Поддерживаемая сеть: ethereum'
         in: path
@@ -664,6 +772,15 @@ paths:
         in: query
         name: strictPrices
         type: boolean
+      - description: Оценка fee APR по swaps за 1/7/30 дней; только один weETH/WETH
+          gauge. Не APY; использует параметры конечного блока
+        enum:
+        - 1
+        - 7
+        - 30
+        in: query
+        name: weethFeeDays
+        type: integer
       produces:
       - application/json
       responses:

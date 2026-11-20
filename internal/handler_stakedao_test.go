@@ -342,7 +342,7 @@ func TestStakeDAORoute(t *testing.T) {
 			t.Fatalf("invalid diagnostics limit accepted: %s", limit)
 		}
 	}
-	for _, query := range []string{"block=0", "block=-1", "block=", "block=latest", "block=0xff", "block=18446744073709551616", "strictPrices=bad", "strictPrices=", "gauges=", "gauges=0x11", "gauges=0x0000000000000000000000000000000000000000", "gauges=0x0000000000000000000000000000000000000011,0x0000000000000000000000000000000000000011", "gauges=a,b,c,d,e,f"} {
+	for _, query := range []string{"block=0", "block=-1", "block=", "block=latest", "block=0xff", "block=18446744073709551616", "strictPrices=bad", "strictPrices=", "gauges=", "gauges=0x11", "gauges=0x0000000000000000000000000000000000000000", "gauges=0x0000000000000000000000000000000000000011,0x0000000000000000000000000000000000000011", "gauges=a,b,c,d,e,f", "weethFeeDays=7", "weethFeeDays=0&gauges=0x053df3e4D0CeD9a3Bf0494F97E83CE1f13BdC0E2", "weethFeeDays=2&gauges=0x053df3e4D0CeD9a3Bf0494F97E83CE1f13BdC0E2", "weethFeeDays=7&gauges=0x0000000000000000000000000000000000000011"} {
 		response = httptest.NewRecorder()
 		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?"+query, nil))
 		if response.Code != http.StatusBadRequest {
