@@ -86,6 +86,37 @@ tokens_bought из TokenExchange уже после комиссии: поэто�
 - windowDays, start/end block+hash, coveredSeconds;
 - rangesTotal/rangesDone, swaps, reasons при отказе.
 
+`swaps` теперь nullable: при непрочитанной/непроверенной истории — null,
+при полностью проверенной пустой истории — 0. Это различает отсутствие данных
+и отсутствие обменов. Прочитанные referenceCapitalEth/dynamicFeeFraction/
+adminFeeFraction сохраняются даже при последующем отказе log-истории.
+
+### Диагностика отказа провайдера
+
+В responseWETH_1795189937044.json пользователя, block 26457319, прочитаны
+0/5 диапазонов и возвращено swap_history_unavailable. Это не нулевая fee APR.
+В старом коде ошибка провайдера заменялась общей причиной, поэтому ни точный
+тип отказа, ни тарифное ограничение из того JSON установить нельзя.
+
+Теперь `diagnostics.weethFees.logFailure` сохраняет безопасную классификацию,
+метод eth_getLogs, fromBlock/toBlock и доступные числовые httpStatus/rpcCode.
+Причины различают rpc_log_range_limit, rpc_log_result_limit, rpc_rate_limited,
+rpc_quota_exhausted, rpc_access_denied, archive_rpc_required и timeout/cancel.
+Неизвестный отказ остаётся swap_history_unavailable. Текст провайдера,
+error data, URL и ключи не выводятся.
+
+Если провайдер **явно сообщил числовой** лимит диапазона, дополнительно
+показываются providerMaxBlockRange и requiredRangesForWindow. Лимит не
+угадывается по бренду RPC или одному коду -32600. Например, при лимите 10
+блоков на окно пользователя из 7177 блоков потребовалось бы 718 log-запросов,
+помимо остальных чтений. Это условный пример, а не подтверждённый ответ его
+Alchemy endpoint. Автоматического дробления на сотни запросов нет;
+ограничения 5 RPS/300 RPC сохраняются.
+
+Для уточнения причины после обновления достаточно повторить тот же суточный
+запрос; выбирать 7/30 дней до устранения отказа не нужно. Новый logFailure
+позволяет отличить изменение тарифа/провайдера от повторения временного запроса.
+
 Подтверждённая weETH `yieldBreakdown.trading.apy` остаётся null с причиной
 unsupported_pool_model. Оценка имеет собственное имя и не выдаётся за эту APY.
 

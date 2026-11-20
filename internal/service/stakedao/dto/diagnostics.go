@@ -31,12 +31,26 @@ type WeETHFeeEstimate struct {
 	CoveredSeconds      *uint64        `json:"coveredSeconds"`
 	RangesTotal         int            `json:"rangesTotal"`
 	RangesDone          int            `json:"rangesDone"`
-	Swaps               int            `json:"swaps"`
+	Swaps               *int           `json:"swaps"`
+	LogFailure          *FeeLogFailure `json:"logFailure,omitempty"`
 	ReferenceCapitalETH *string        `json:"referenceCapitalEth"`
 	DynamicFeeFraction  *string        `json:"dynamicFeeFraction"`
 	AdminFeeFraction    *string        `json:"adminFeeFraction"`
 	EstimatedLPFeesETH  *string        `json:"estimatedLpFeesEth"`
 	EstimatedAPR        *float64       `json:"estimatedApr"`
+}
+
+// Controlled classifications and numeric metadata only; never provider text,
+// transport URLs, API keys, suggested upgrade links, or JSON-RPC error data.
+type FeeLogFailure struct {
+	Kind                    string  `json:"kind"`
+	Method                  string  `json:"method"`
+	FromBlock               uint64  `json:"fromBlock"`
+	ToBlock                 uint64  `json:"toBlock"`
+	HTTPStatus              *int    `json:"httpStatus,omitempty"`
+	RPCCode                 *int    `json:"rpcCode,omitempty"`
+	ProviderMaxBlockRange   *uint64 `json:"providerMaxBlockRange,omitempty"`
+	RequiredRangesForWindow *uint64 `json:"requiredRangesForWindow,omitempty"`
 }
 
 type RewardRouteDiagnostic struct {

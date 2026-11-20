@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shopspring/decimal"
 )
 
@@ -45,6 +48,55 @@ func ValidateWeETHFeeSelection(gauges []common.Address, days int) error {
 type weETHFeeReference struct {
 	rates               [2]decimal.Decimal
 	capital, fee, admin decimal.Decimal
+}
+
+type swapHistoryError struct{ details dto.FeeLogFailure }
+
+func (e *swapHistoryError) Error() string { return e.details.Kind }
+
+// Match a provider's explicit numeric block-count limit. Never infer a limit
+// from a provider name or a generic JSON-RPC code alone.
+var feeLogRangeLimit = regexp.MustCompile(`(?i)(?:up to|at most|maximum of|limited to|max(?:imum)?(?: block range)?(?: of| is|:)?)[ ]+(?:a[ ]+)?([0-9][0-9,]*)[ -]+blocks?`)
+
+func classifySwapHistoryFailure(err error, from, to uint64) *swapHistoryError {
+	info := dto.FeeLogFailure{Kind: "swap_history_unavailable", Method: "eth_getLogs", FromBlock: from, ToBlock: to}
+	var he rpc.HTTPError
+	if errors.As(err, &he) {
+		status := he.StatusCode
+		info.HTTPStatus = &status
+	}
+	var re rpc.Error
+	if errors.As(err, &re) {
+		code := re.ErrorCode()
+		info.RPCCode = &code
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		info.Kind = "rpc_timeout"
+	case errors.Is(err, context.Canceled):
+		info.Kind = "rpc_canceled"
+	case info.HTTPStatus != nil && *info.HTTPStatus == 429:
+		info.Kind = "rpc_rate_limited"
+	case info.HTTPStatus != nil && *info.HTTPStatus == 402:
+		info.Kind = "rpc_quota_exhausted"
+	case strings.Contains(message, "archive requests require") || strings.Contains(message, "archive state unavailable"):
+		info.Kind = "archive_rpc_required"
+	case info.HTTPStatus != nil && (*info.HTTPStatus == 401 || *info.HTTPStatus == 403):
+		info.Kind = "rpc_access_denied"
+	case strings.Contains(message, "query returned more than") || strings.Contains(message, "too many results"):
+		info.Kind = "rpc_log_result_limit"
+	case (strings.Contains(message, "block range") || strings.Contains(message, "blocks range") || strings.Contains(message, "blocks per query") || strings.Contains(message, "blocks per request")) && (strings.Contains(message, "limit") || strings.Contains(message, "up to") || strings.Contains(message, "maximum") || strings.Contains(message, "at most") || strings.Contains(message, "too wide") || strings.Contains(message, "exceed") || strings.Contains(message, "large") || strings.Contains(message, "try with this block range")):
+		info.Kind = "rpc_log_range_limit"
+		if m := feeLogRangeLimit.FindStringSubmatch(message); len(m) == 2 {
+			if n, e := strconv.ParseUint(strings.ReplaceAll(m[1], ",", ""), 10, 64); e == nil && n > 0 && n <= 10000000 {
+				info.ProviderMaxBlockRange = &n
+			}
+		}
+	case strings.Contains(message, "too many requests") || strings.Contains(message, "rate limit"):
+		info.Kind = "rpc_rate_limited"
+	}
+	return &swapHistoryError{details: info}
 }
 
 // Uses the observed service client / fixed block; no HTTP prices or global Curve maps.
@@ -133,7 +185,7 @@ func readWeETHSwaps(ctx context.Context, client stakeDAORPC, from, to uint64, ev
 				mu.Lock()
 				if err != nil {
 					if failed == nil {
-						failed = errors.New("swap_history_unavailable")
+						failed = classifySwapHistoryFailure(err, n, min(n+1499, to))
 						cancel()
 					}
 				} else {
@@ -232,6 +284,8 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 		fail(err)
 		return
 	}
+	capital, fraction, admin := reference.capital.String(), reference.fee.String(), reference.admin.String()
+	d.ReferenceCapitalETH, d.DynamicFeeFraction, d.AdminFeeFraction = &capital, &fraction, &admin
 	start, err := findFeeBoundary(ctx, s.client, end, days, map[uint64]*types.Header{end.Number.Uint64(): end})
 	if err != nil {
 		fail(err)
@@ -252,6 +306,15 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 	logs, done, err := readWeETHSwaps(ctx, s.client, n+1, end.Number.Uint64(), parsed.Events["TokenExchange"].ID)
 	d.RangesDone = done
 	if err != nil {
+		var failure *swapHistoryError
+		if errors.As(err, &failure) {
+			copy := failure.details
+			if copy.ProviderMaxBlockRange != nil {
+				needed := (end.Number.Uint64()-n-1)/(*copy.ProviderMaxBlockRange) + 1
+				copy.RequiredRangesForWindow = &needed
+			}
+			d.LogFailure = &copy
+		}
 		fail(err)
 		return
 	}
@@ -270,7 +333,7 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 		fail(errors.New("invalid_fee_estimate"))
 		return
 	}
-	capital, fraction, admin, total := reference.capital.String(), reference.fee.String(), reference.admin.String(), fees.String()
-	d.ReferenceCapitalETH, d.DynamicFeeFraction, d.AdminFeeFraction, d.EstimatedLPFeesETH = &capital, &fraction, &admin, &total
-	d.Swaps, d.EstimatedAPR, d.Status = count, &value, "estimate_available"
+	total := fees.String()
+	d.EstimatedLPFeesETH = &total
+	d.Swaps, d.EstimatedAPR, d.Status = &count, &value, "estimate_available"
 }

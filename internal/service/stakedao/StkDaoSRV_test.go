@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type fixtureRPC struct {
@@ -1685,6 +1686,7 @@ func TestFeeGrowthZeroAndWindowGuards(t *testing.T) {
 type feeModelRPC struct {
 	*fixtureRPC
 	scanFailure     bool
+	scanError       error
 	identityFailure bool
 	scans           []ethereum.FilterQuery
 }
@@ -1693,6 +1695,9 @@ func (f *feeModelRPC) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.scans = append(f.scans, q)
+	if f.scanError != nil {
+		return nil, f.scanError
+	}
 	if f.scanFailure {
 		return nil, errors.New("https://rpc.invalid/private-key archive unavailable")
 	}
@@ -1828,11 +1833,11 @@ func TestWeETHFeeHistoryIsOptionalCompleteAndSeparateFromAPY(t *testing.T) {
 			t.Fatal("estimate mixed into vault APR/APY")
 		}
 		if fail {
-			if d.EstimatedAPR != nil || d.Status != "unavailable" || d.Reasons[0] != "swap_history_unavailable" {
+			if d.EstimatedAPR != nil || d.Swaps != nil || d.LogFailure == nil || d.Status != "unavailable" || d.Reasons[0] != "swap_history_unavailable" {
 				t.Fatalf("partial history became zero: %+v", d)
 			}
 		} else {
-			if d.Status != "estimate_available" || d.EstimatedAPR == nil || *d.EstimatedAPR != 0 || d.RangesDone != d.RangesTotal || d.RangesTotal != 34 || d.CoveredSeconds == nil || *d.CoveredSeconds != 7*86400 {
+			if d.Status != "estimate_available" || d.Swaps == nil || *d.Swaps != 0 || d.EstimatedAPR == nil || *d.EstimatedAPR != 0 || d.RangesDone != d.RangesTotal || d.RangesTotal != 34 || d.CoveredSeconds == nil || *d.CoveredSeconds != 7*86400 {
 				t.Fatalf("wrong verified window: %+v", d)
 			}
 			sort.Slice(rpc.scans, func(i, j int) bool { return rpc.scans[i].FromBlock.Cmp(rpc.scans[j].FromBlock) < 0 })
@@ -1889,5 +1894,72 @@ func TestBoldRewardRouteExplainsZeroVaultRateWithoutInventingAPR(t *testing.T) {
 	v[4] = big.NewInt(102)
 	if _, _, valid := decodeBoldCampaign(v, 0, 200); valid {
 		t.Fatal("invalid campaign duration accepted")
+	}
+}
+
+type feeLogRPCError struct {
+	code    int
+	message string
+}
+
+func (e feeLogRPCError) Error() string  { return e.message }
+func (e feeLogRPCError) ErrorCode() int { return e.code }
+
+func TestFeeLogFailuresPreserveSafeCauseAndDoNotGuessProviderLimits(t *testing.T) {
+	cases := []struct {
+		err   error
+		kind  string
+		limit uint64
+	}{
+		{feeLogRPCError{-32600, "Free tier users can query up to a 10 block range. https://rpc.invalid/private-key"}, "rpc_log_range_limit", 10},
+		{feeLogRPCError{-32602, "eth_getLogs is limited to 10,000 blocks range"}, "rpc_log_range_limit", 10000},
+		{feeLogRPCError{-32600, "invalid request https://rpc.invalid/private-key"}, "swap_history_unavailable", 0},
+		{errors.New("block range not available"), "swap_history_unavailable", 0},
+		{errors.New("block range too large"), "rpc_log_range_limit", 0},
+		{errors.New("query returned more than 10000 results; try with this block range"), "rpc_log_result_limit", 0},
+		{rpc.HTTPError{StatusCode: 429, Body: []byte("https://rpc.invalid/private-key")}, "rpc_rate_limited", 0},
+		{rpc.HTTPError{StatusCode: 402}, "rpc_quota_exhausted", 0},
+		{rpc.HTTPError{StatusCode: 403, Body: []byte("Archive requests require a personal token")}, "archive_rpc_required", 0},
+		{rpc.HTTPError{StatusCode: 403}, "rpc_access_denied", 0},
+		{context.DeadlineExceeded, "rpc_timeout", 0},
+		{context.Canceled, "rpc_canceled", 0},
+	}
+	for _, tc := range cases {
+		wrapped := errors.Join(tc.err, errors.New("transport context"))
+		e := classifySwapHistoryFailure(wrapped, 10, 1509)
+		if e.Error() != tc.kind || e.details.Method != "eth_getLogs" || e.details.FromBlock != 10 || e.details.ToBlock != 1509 {
+			t.Fatalf("wrong classification: %+v", e.details)
+		}
+		if tc.limit == 0 && e.details.ProviderMaxBlockRange != nil || tc.limit != 0 && (e.details.ProviderMaxBlockRange == nil || *e.details.ProviderMaxBlockRange != tc.limit) {
+			t.Fatalf("guessed or lost numeric limit: %+v", e.details)
+		}
+		if original, ok := tc.err.(feeLogRPCError); ok && (e.details.RPCCode == nil || *e.details.RPCCode != original.code) {
+			t.Fatal("JSON-RPC code lost")
+		}
+		raw, _ := json.Marshal(e.details)
+		if strings.Contains(string(raw), "private-key") || strings.Contains(string(raw), "rpc.invalid") {
+			t.Fatal("raw provider message leaked")
+		}
+	}
+}
+
+func TestWeETHRangeFailureIsBoundedAndKeepsReferenceParameters(t *testing.T) {
+	s, client, h := newFeeModelFixture(t)
+	client.scanError = feeLogRPCError{-32600, "Free tier users can query up to a 10 block range https://rpc.invalid/private-key"}
+	p := dto.StakeDAOPool{GaugeAddress: weETHFeeGauge, AssetAddress: weETHFeePool, ProtocolID: "0xc715e373"}
+	s.addWeETHFeeEstimate(context.Background(), h, 1, &p)
+	d := p.Diagnostics.WeETHFees
+	if d.Status != "unavailable" || d.Swaps != nil || d.EstimatedAPR != nil || d.RangesDone != 0 || d.ReferenceCapitalETH == nil || d.DynamicFeeFraction == nil || d.AdminFeeFraction == nil {
+		t.Fatalf("failure erased reference or became zero: %+v", d)
+	}
+	if d.LogFailure == nil || d.Reasons[0] != "rpc_log_range_limit" || d.LogFailure.ProviderMaxBlockRange == nil || *d.LogFailure.ProviderMaxBlockRange != 10 || d.LogFailure.RequiredRangesForWindow == nil || *d.LogFailure.RequiredRangesForWindow != 720 {
+		t.Fatalf("range limit/budget impact lost: %+v", d)
+	}
+	if len(client.scans) > 3 {
+		t.Fatalf("unexpected expensive automatic splitting: %d requests", len(client.scans))
+	}
+	raw, _ := json.Marshal(p)
+	if strings.Contains(string(raw), "private-key") {
+		t.Fatal("upstream URL leaked")
 	}
 }

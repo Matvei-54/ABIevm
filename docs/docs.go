@@ -454,6 +454,35 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.FeeLogFailure": {
+            "type": "object",
+            "properties": {
+                "fromBlock": {
+                    "type": "integer"
+                },
+                "httpStatus": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "providerMaxBlockRange": {
+                    "type": "integer"
+                },
+                "requiredRangesForWindow": {
+                    "type": "integer"
+                },
+                "rpcCode": {
+                    "type": "integer"
+                },
+                "toBlock": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.LockerRateDiagnostic": {
             "type": "object",
             "properties": {
@@ -1262,6 +1291,9 @@ const docTemplate = `{
                 },
                 "estimatedLpFeesEth": {
                     "type": "string"
+                },
+                "logFailure": {
+                    "$ref": "#/definitions/dto.FeeLogFailure"
                 },
                 "model": {
                     "type": "string"

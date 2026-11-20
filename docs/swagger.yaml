@@ -54,6 +54,25 @@ definitions:
       token:
         type: string
     type: object
+  dto.FeeLogFailure:
+    properties:
+      fromBlock:
+        type: integer
+      httpStatus:
+        type: integer
+      kind:
+        type: string
+      method:
+        type: string
+      providerMaxBlockRange:
+        type: integer
+      requiredRangesForWindow:
+        type: integer
+      rpcCode:
+        type: integer
+      toBlock:
+        type: integer
+    type: object
   dto.LockerRateDiagnostic:
     properties:
       inflationRaw:
@@ -590,6 +609,8 @@ definitions:
         type: number
       estimatedLpFeesEth:
         type: string
+      logFailure:
+        $ref: '#/definitions/dto.FeeLogFailure'
       model:
         type: string
       pool:
