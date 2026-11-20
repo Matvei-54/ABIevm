@@ -2,6 +2,8 @@
 
 [Историческая fee APY за 7 и 30 дней, поддержанные модели и требования к архиву RPC](TRADING_HISTORY_RU.md).
 
+[Проверенный маршрут BOLD через Router/AllMight и принцип модели weETH из Curve-сервиса](BOLD_ROUTE_AND_WEETH_MODEL_RU.md).
+
 [Отдельные признаки state и лёгкий endpoint состояния без расчёта APR](POOL_STATE_RU.md).
 
 [Карта контрактов и функций, признаки активности и проверка двух null-APR vault](YIELD_SOURCE_MAP_RU.md).

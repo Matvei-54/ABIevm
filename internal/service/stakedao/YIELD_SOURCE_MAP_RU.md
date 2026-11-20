@@ -105,6 +105,10 @@ gaugeExtra APR = globalRate × tokenUSD × 31536000 × 100
 
 ## Merkl: что необходимо добавить
 
+Для BOLD/USDC теперь проверены конкретные Router/Receiver, реальная транзакция
+финансирования и две ретроспективные кампании StakeDAO. Это ещё не расчёт
+получателей и APR: [BOLD_ROUTE_AND_WEETH_MODEL_RU.md](BOLD_ROUTE_AND_WEETH_MODEL_RU.md).
+
 Сейчас компонент возвращает `incentive_registry_required` и null. Следующие
 интерфейсы — подтверждённые источники для доработки, **не уже включённые чтения**:
 

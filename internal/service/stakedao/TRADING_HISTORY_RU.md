@@ -147,6 +147,11 @@ RPC URL/ключи не включаются в причины.
 **Положительные mainnet APY 7/30 через этот RPC не получены**; нужны разрешённые
 архивные чтения для такой проверки. GetBlock CU не использовались.
 
+Позднее пользователь предоставил успешный ответ Alchemy на блоке 26450201.
+Четыре исторические APY независимо пересчитаны из raw virtual prices; совпадение
+арифметики и данные записаны в
+[BOLD_ROUTE_AND_WEETH_MODEL_RU.md](BOLD_ROUTE_AND_WEETH_MODEL_RU.md).
+
 ## Про shutdown и Merkl
 
 Shutdown читается из смартконтракта ProtocolController StakeDAO. Это отключение
