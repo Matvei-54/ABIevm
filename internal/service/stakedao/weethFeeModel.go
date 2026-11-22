@@ -272,6 +272,7 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 		pool.Diagnostics = &dto.StakeDAOPoolDiagnostics{}
 	}
 	d := &dto.WeETHFeeEstimate{Status: "unavailable", Model: "snapshot_parameter_swap_fee_estimate", Pool: weETHFeePool, WindowDays: days, EndBlock: end.Number.Uint64(), EndBlockHash: end.Hash(),
+		LogSource:   "primary_rpc",
 		Assumptions: []string{"snapshot_dynamic_fee_for_all_swaps", "snapshot_rates_and_pool_capital_in_eth", "historical_parameters_not_replayed", "liquidity_operation_fees_excluded", "not_trading_apy_not_included_in_vault_apr"}}
 	pool.Diagnostics.WeETHFees = d
 	fail := func(e error) { d.Reasons = []string{e.Error()} }
@@ -303,7 +304,17 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 		fail(errors.New("invalid_swap_abi"))
 		return
 	}
-	logs, done, err := readWeETHSwaps(ctx, s.client, n+1, end.Number.Uint64(), parsed.Events["TokenExchange"].ID)
+	if s.feeLogsRPCURL != "" {
+		d.LogSource = "configured_logs_rpc"
+	}
+	logClient, cleanup, err := s.openFeeLogSource(ctx, start, end)
+	if err != nil {
+		fail(err)
+		return
+	}
+	defer cleanup()
+	d.LogSourceVerified = true
+	logs, done, err := readWeETHSwaps(ctx, logClient, n+1, end.Number.Uint64(), parsed.Events["TokenExchange"].ID)
 	d.RangesDone = done
 	if err != nil {
 		var failure *swapHistoryError
@@ -322,6 +333,12 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 	if err != nil {
 		fail(err)
 		return
+	}
+	if s.feeLogsRPCURL != "" {
+		if err := verifyFeeLogHeader(ctx, logClient, end); err != nil {
+			fail(err)
+			return
+		}
 	}
 	verified, err := s.client.HeaderByNumber(ctx, start.Number)
 	if err != nil || verified == nil || verified.Hash() != h {

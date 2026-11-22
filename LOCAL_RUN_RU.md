@@ -429,3 +429,12 @@ go test -mod=readonly -p 3 ./...
 Тесты используют локальные HTTP/RPC-стенды, не бесплатные RPC.
 Бизнес-модель и источники ABI: `internal/service/stakedao/README.md`.
 Изменения публикуются в ветке `feat/stakedao-service`, без изменения `main`.
+
+## Отдельный RPC для логов weETH (необязательно)
+
+Если основной Alchemy endpoint ограничивает eth_getLogs десятью блоками,
+добавьте `STAKEDAO_ETHEREUM_LOGS_RPC_URL=https://ethereum-rpc.publicnode.com`
+в те же переменные среды запуска; основной RPC оставьте прежним.
+Настройка применяется только к явной диагностике `weethFeeDays` и использует
+общий бюджет запроса. Подробнее:
+[настройка и ограничения](internal/service/stakedao/WEETH_FEE_MODEL_RU.md).

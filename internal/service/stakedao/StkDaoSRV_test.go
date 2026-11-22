@@ -1963,3 +1963,104 @@ func TestWeETHRangeFailureIsBoundedAndKeepsReferenceParameters(t *testing.T) {
 		t.Fatal("upstream URL leaked")
 	}
 }
+
+type secondaryFeeLogsFixture struct {
+	*feeModelRPC
+	wrongChain        bool
+	wrongHeader       bool
+	headerReadsHere   int
+	reorgAfterInitial bool
+}
+
+func (c *secondaryFeeLogsFixture) ChainID(context.Context) (*big.Int, error) {
+	if c.wrongChain {
+		return big.NewInt(137), nil
+	}
+	return big.NewInt(1), nil
+}
+func (c *secondaryFeeLogsFixture) HeaderByNumber(ctx context.Context, n *big.Int) (*types.Header, error) {
+	h, e := c.fixtureRPC.HeaderByNumber(ctx, n)
+	c.headerReadsHere++
+	if e == nil && (c.wrongHeader || c.reorgAfterInitial && c.headerReadsHere > 2) {
+		h.Extra = []byte("other-chain-history")
+	}
+	return h, e
+}
+func TestWeETHSeparateLogRPCUsesSharedBudgetAndVerifiesHistory(t *testing.T) {
+	s, primary, h := newFeeModelFixture(t)
+	_, second, _ := newFeeModelFixture(t)
+	source := &secondaryFeeLogsFixture{feeModelRPC: second}
+	budget := newSampleRPC(primary)
+	s.client = budget
+	s.feeLogsRPCURL = "https://rpc.invalid/private-api-key"
+	s.dial = func(_ context.Context, url string) (stakeDAORPC, error) {
+		if url != s.feeLogsRPCURL {
+			t.Fatal("wrong configured source")
+		}
+		return source, nil
+	}
+	primary.scanError = feeLogRPCError{-32600, "up to a 10 block range"}
+	p := dto.StakeDAOPool{GaugeAddress: weETHFeeGauge, AssetAddress: weETHFeePool, ProtocolID: "0xc715e373"}
+	s.addWeETHFeeEstimate(context.Background(), h, 1, &p)
+	d := p.Diagnostics.WeETHFees
+	if d.Status != "estimate_available" || d.LogSource != "configured_logs_rpc" || !d.LogSourceVerified || len(primary.scans) != 0 || len(source.scans) != 5 || !source.closed || primary.closed || p.APY != nil {
+		t.Fatalf("incorrect source routing/lifecycle: %+v", d)
+	}
+	if budget.remaining >= 300-5 {
+		t.Fatal("secondary calls bypassed the primary budget")
+	}
+	raw, _ := json.Marshal(p)
+	if strings.Contains(string(raw), "private-api-key") || strings.Contains(string(raw), "rpc.invalid") {
+		t.Fatal("log-source URL leaked")
+	}
+}
+func TestFeeLogSourceRejectsWrongChainAndSnapshotAndCloses(t *testing.T) {
+	for _, mode := range []string{"chain", "header", "dial", "budget"} {
+		s, primary, h := newFeeModelFixture(t)
+		_, second, _ := newFeeModelFixture(t)
+		source := &secondaryFeeLogsFixture{feeModelRPC: second, wrongChain: mode == "chain", wrongHeader: mode == "header"}
+		budget := newSampleRPC(primary)
+		s.client = budget
+		s.feeLogsRPCURL = "https://rpc.invalid/private-api-key"
+		if mode == "budget" {
+			budget.remaining = 0
+		}
+		s.dial = func(context.Context, string) (stakeDAORPC, error) {
+			if mode == "dial" {
+				return nil, errors.New("https://rpc.invalid/private-api-key")
+			}
+			return source, nil
+		}
+		_, _, e := s.openFeeLogSource(context.Background(), h, h)
+		if e == nil || len(source.scans) != 0 || mode != "dial" && !source.closed || strings.Contains(e.Error(), "private-api-key") {
+			t.Fatalf("unverified source accepted/leaked for %s: %v", mode, e)
+		}
+	}
+	s, primary, h := newFeeModelFixture(t)
+	_, second, _ := newFeeModelFixture(t)
+	source := &secondaryFeeLogsFixture{feeModelRPC: second, reorgAfterInitial: true}
+	s.client = newSampleRPC(primary)
+	s.feeLogsRPCURL = "configured"
+	s.dial = func(context.Context, string) (stakeDAORPC, error) { return source, nil }
+	p := dto.StakeDAOPool{GaugeAddress: weETHFeeGauge, AssetAddress: weETHFeePool, ProtocolID: "0xc715e373"}
+	s.addWeETHFeeEstimate(context.Background(), h, 1, &p)
+	d := p.Diagnostics.WeETHFees
+	if d.EstimatedAPR != nil || d.Swaps != nil || d.Reasons[0] != "logs_rpc_snapshot_mismatch" || !source.closed {
+		t.Fatalf("reorganized source became an estimate: %+v", d)
+	}
+}
+func TestFeeLogSourceWithoutConfigurationReusesPrimaryAndNeverDials(t *testing.T) {
+	s, primary, h := newFeeModelFixture(t)
+	s.dial = func(context.Context, string) (stakeDAORPC, error) {
+		t.Fatal("unused secondary source dialed")
+		return nil, nil
+	}
+	got, cleanup, e := s.openFeeLogSource(context.Background(), h, h)
+	if e != nil || got != primary {
+		t.Fatalf("default source changed: %v", e)
+	}
+	cleanup()
+	if primary.closed {
+		t.Fatal("primary closed by optional log helper")
+	}
+}

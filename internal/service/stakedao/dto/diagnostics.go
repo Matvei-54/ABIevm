@@ -20,6 +20,8 @@ type StakeDAOPoolDiagnostics struct {
 type WeETHFeeEstimate struct {
 	Status              string         `json:"status"`
 	Model               string         `json:"model"`
+	LogSource           string         `json:"logSource"`
+	LogSourceVerified   bool           `json:"logSourceVerified"`
 	Reasons             []string       `json:"reasons,omitempty"`
 	Assumptions         []string       `json:"assumptions"`
 	Pool                common.Address `json:"pool" swaggertype:"string"`

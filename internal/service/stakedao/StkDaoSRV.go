@@ -44,6 +44,7 @@ type stakeDAORPC interface {
 
 type stakeDAONetwork struct {
 	rpcURL          string
+	logsRPCURL      string
 	chainID         int64
 	controller      common.Address
 	deploymentBlock uint64
@@ -62,6 +63,7 @@ type StakeDAOService struct {
 	diagnostics     bool
 	batches         *snapshotBatcher
 	trading         *TradingHistoryService
+	feeLogsRPCURL   string
 	networks        map[string]stakeDAONetwork
 	dial            func(context.Context, string) (stakeDAORPC, error)
 }
@@ -85,7 +87,7 @@ func NewStakeDAOService(priceService prices.Provider) *StakeDAOService {
 		trading:   newTradingHistoryService(),
 		configErr: configErr,
 		networks: map[string]stakeDAONetwork{
-			"ethereum": {rpcURL: rpcURL, chainID: 1, controller: common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB), deploymentBlock: deploymentBlock},
+			"ethereum": {rpcURL: rpcURL, logsRPCURL: strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_LOGS_RPC_URL")), chainID: 1, controller: common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB), deploymentBlock: deploymentBlock},
 		},
 		dial: func(ctx context.Context, endpoint string) (stakeDAORPC, error) {
 			return rpcclient.DialContext(ctx, endpoint)
@@ -140,7 +142,7 @@ func (s *StakeDAOService) getPoolsWithSelection(ctx context.Context, network str
 	if chainID == nil || chainID.Cmp(big.NewInt(config.chainID)) != 0 {
 		return nil, fmt.Errorf("%w: expected chain ID %d", ErrRPCUnavailable, config.chainID)
 	}
-	worker := &StakeDAOService{registry: s.registry, client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock, trading: s.trading}
+	worker := &StakeDAOService{registry: s.registry, client: client, controller: config.controller, chainID: config.chainID, prices: s.prices, deploymentBlock: config.deploymentBlock, trading: s.trading, feeLogsRPCURL: config.logsRPCURL, dial: s.dial}
 	worker.diagnostics = sample != nil && sample.diagnostics
 	return worker.getPoolsSelected(ctx, network, sample)
 }

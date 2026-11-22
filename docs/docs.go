@@ -1295,6 +1295,12 @@ const docTemplate = `{
                 "logFailure": {
                     "$ref": "#/definitions/dto.FeeLogFailure"
                 },
+                "logSource": {
+                    "type": "string"
+                },
+                "logSourceVerified": {
+                    "type": "boolean"
+                },
                 "model": {
                     "type": "string"
                 },
