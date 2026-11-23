@@ -271,7 +271,7 @@ func TestExplicitDiagnosticBlockIsPinnedAndDoesNotUseSharedPrices(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.BlockNumber != 4490 || result.BlockHash == nil || !result.StrictPrices || result.BlockTimestamp != f.headerTime || len(f.queries) != 0 || f.codeReads != 0 {
+	if result.RequestedBlockNumber == nil || *result.RequestedBlockNumber != 4490 || result.BlockNumber != 4490 || result.BlockHash == nil || !result.StrictPrices || result.BlockTimestamp != f.headerTime || len(f.queries) != 0 || f.codeReads != 0 {
 		t.Fatalf("strict snapshot identity lost: %+v", result)
 	}
 	for _, block := range f.callBlocks {

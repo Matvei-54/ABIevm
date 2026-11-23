@@ -335,3 +335,32 @@ func TestRegistryServesOlderRequestSnapshotWithoutRewindingNewerCursor(t *testin
 		t.Fatalf("older snapshot corrupted cursor or reread history: %+v %v", all, err)
 	}
 }
+
+func TestSwapMissingRangesSupportBackfillAndHistoricalSnapshots(t *testing.T) {
+	cases := []struct {
+		from, to uint64
+		covered  []SwapRange
+		want     [][2]uint64
+	}{
+		{1, 30, nil, [][2]uint64{{1, 30}}},
+		{1, 30, []SwapRange{{From: 10, Through: RegistryCheckpoint{Block: 20}}}, [][2]uint64{{1, 9}, {21, 30}}},
+		{12, 18, []SwapRange{{From: 10, Through: RegistryCheckpoint{Block: 20}}}, nil},
+		{1, 30, []SwapRange{{From: 20, Through: RegistryCheckpoint{Block: 25}}, {From: 1, Through: RegistryCheckpoint{Block: 10}}, {From: 8, Through: RegistryCheckpoint{Block: 21}}}, [][2]uint64{{26, 30}}},
+		{30, 20, nil, nil},
+	}
+	for _, c := range cases {
+		got := missingSwapRanges(c.from, c.to, c.covered)
+		pairs := [][2]uint64{}
+		for _, r := range got {
+			pairs = append(pairs, [2]uint64{r.From, r.Through.Block})
+		}
+		if len(pairs) != len(c.want) {
+			t.Fatalf("wrong missing coverage: %+v", pairs)
+		}
+		for i, p := range pairs {
+			if p != c.want[i] {
+				t.Fatalf("wrong gap: %+v", pairs)
+			}
+		}
+	}
+}

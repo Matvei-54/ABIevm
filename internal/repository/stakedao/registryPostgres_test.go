@@ -1,10 +1,12 @@
 package stakedao
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"math/big"
 	"net/url"
 	"os"
 	"strings"
@@ -13,6 +15,8 @@ import (
 
 	service "ABIevm/internal/service/stakedao"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -69,12 +73,14 @@ func postgresFixture(t *testing.T) (*RegistryPostgres, string) {
 			t.Error("test schema cleanup failed")
 		}
 	})
-	migration, err := os.ReadFile("../../../migrations/000001_registry.up.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = pool.Exec(ctx, string(migration)); err != nil {
-		t.Fatalf("up migration failed: %v", err)
+	for _, name := range []string{"000001_registry.up.sql", "000002_swap_history.up.sql"} {
+		migration, e := os.ReadFile("../../../migrations/" + name)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = pool.Exec(ctx, string(migration)); e != nil {
+			t.Fatalf("migration %s failed: %v", name, e)
+		}
 	}
 	return r, schemaURL
 }
@@ -274,4 +280,173 @@ func TestPostgresBoundsCheckpointsWithoutDroppingRegistrationHistory(t *testing.
 	if err != nil || len(all) != 1 || all[0].Vault != common.HexToAddress("0x11") {
 		t.Fatal("checkpoint pruning removed registrations")
 	}
+}
+
+func testSwapKey() service.SwapKey {
+	return service.SwapKey{ChainID: 1, Platform: "stakedao", Pool: common.HexToAddress("0xaa"), Event: crypto.Keccak256Hash([]byte("TokenExchange(address,int128,uint256,int128,uint256)"))}
+}
+func testSwap(block uint64) types.Log {
+	data := make([]byte, 128)
+	data[63] = 10
+	data[95] = 1
+	data[127] = 9
+	return types.Log{Address: testSwapKey().Pool, BlockNumber: block, BlockHash: (&types.Header{Number: new(big.Int).SetUint64(block), Time: block + 1}).Hash(), TxHash: common.BigToHash(new(big.Int).SetUint64(block + 123)), Topics: []common.Hash{testSwapKey().Event, common.HexToHash("0x12")}, Data: data}
+}
+func testSwapPoint(block uint64) service.RegistryCheckpoint {
+	return service.RegistryCheckpoint{Block: block, Hash: (&types.Header{Number: new(big.Int).SetUint64(block), Time: block + 1}).Hash()}
+}
+func TestPostgresSwapHistoryCoverageIdempotencyAndIsolation(t *testing.T) {
+	db, _ := postgresFixture(t)
+	ctx := context.Background()
+	key := testSwapKey()
+	session, e := db.AcquireSwaps(ctx, key)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer session.Close()
+	if e = session.SaveSwapRange(ctx, 100, testSwapPoint(109), []types.Log{testSwap(105)}); e != nil {
+		t.Fatal(e)
+	}
+	if e = session.SaveSwapRange(ctx, 105, testSwapPoint(120), []types.Log{testSwap(105), testSwap(118)}); e != nil {
+		t.Fatal(e)
+	}
+	if e = session.SaveSwapRange(ctx, 90, testSwapPoint(99), nil); e != nil {
+		t.Fatal(e)
+	}
+	coverage, e := session.Coverage(ctx, 1, 200)
+	if e != nil || len(coverage) != 1 || coverage[0].From != 90 || coverage[0].Through.Block != 120 {
+		t.Fatalf("overlap/backfill failed: %+v %v", coverage, e)
+	}
+	logs, e := session.Swaps(ctx, 100, 110)
+	if e != nil || len(logs) != 1 || !bytes.Equal(logs[0].Data, testSwap(105).Data) || len(logs[0].Topics) != 2 || logs[0].Topics[1] != testSwap(105).Topics[1] {
+		t.Fatalf("round-trip or historic slice failed: %+v %v", logs, e)
+	}
+	bad := testSwap(105)
+	bad.Data = append([]byte(nil), bad.Data...)
+	bad.Data[127] = 8
+	if e = session.SaveSwapRange(ctx, 100, testSwapPoint(120), []types.Log{bad}); e == nil {
+		t.Fatal("conflicting cached event accepted")
+	}
+	logs, e = session.Swaps(ctx, 1, 200)
+	if e != nil || len(logs) != 2 || logs[0].Data[127] != 9 {
+		t.Fatal("failed range changed durable data")
+	}
+	if e = session.SaveSwapRange(ctx, 200, testSwapPoint(209), nil); e != nil {
+		t.Fatal(e)
+	}
+	point, e := session.Cursor(ctx)
+	if e != nil || point == nil || point.Block != 209 {
+		t.Fatal("empty-range cursor not saved")
+	}
+	other := key
+	other.ChainID = 137
+	second, e := db.AcquireSwaps(ctx, other)
+	if e != nil {
+		t.Fatal(e)
+	}
+	got, e := second.Swaps(ctx, 1, 300)
+	_ = second.Close()
+	if e != nil || len(got) != 0 {
+		t.Fatal("cross-chain cache collision")
+	}
+	if e = session.DropSwapRange(ctx, coverage[0]); e != nil {
+		t.Fatal(e)
+	}
+	logs, e = session.Swaps(ctx, 1, 300)
+	if e != nil || len(logs) != 0 {
+		t.Fatal("orphaned events retained")
+	}
+	point, e = session.Cursor(ctx)
+	if e != nil || point.Block != 209 {
+		t.Fatal("unrelated coverage lost")
+	}
+	rest, e := session.Coverage(ctx, 1, 300)
+	if e != nil || len(rest) != 1 {
+		t.Fatal(e)
+	}
+	if e = session.DropSwapRange(ctx, rest[0]); e != nil {
+		t.Fatal(e)
+	}
+	point, e = session.Cursor(ctx)
+	if e != nil || point != nil {
+		t.Fatal("invalidated cursor not reset")
+	}
+}
+func TestPostgresSwapLocksAndReopen(t *testing.T) {
+	db, dsn := postgresFixture(t)
+	ctx := context.Background()
+	key := testSwapKey()
+	first, e := db.AcquireSwaps(ctx, key)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = first.SaveSwapRange(ctx, 10, testSwapPoint(20), []types.Log{testSwap(15)}); e != nil {
+		t.Fatal(e)
+	}
+	reopened, e := OpenRegistryPostgres(ctx, dsn)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer reopened.Close()
+	blocked, cancel := context.WithTimeout(ctx, 40*time.Millisecond)
+	defer cancel()
+	if session, e := reopened.AcquireSwaps(blocked, key); e == nil {
+		session.Close()
+		t.Fatal("stream lock not exclusive across pools")
+	}
+	_ = first.Close()
+	second, e := reopened.AcquireSwaps(ctx, key)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer second.Close()
+	point, e := second.Cursor(ctx)
+	if e != nil || point == nil || point.Block != 20 {
+		t.Fatal("new pool lost cursor")
+	}
+	logs, e := second.Swaps(ctx, 10, 20)
+	if e != nil || len(logs) != 1 {
+		t.Fatal("new pool lost logs")
+	}
+}
+
+func TestSwapMigrationRequiredWithoutResettingRegistry(t *testing.T) {
+	db, dsn := postgresFixture(t)
+	ctx := context.Background()
+	session, e := db.Acquire(ctx, testKey(), 1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	_ = session.Close()
+	down, e := os.ReadFile("../../../migrations/000002_swap_history.down.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = db.pool.Exec(ctx, string(down)); e != nil {
+		t.Fatal(e)
+	}
+	if opened, e := OpenRegistryPostgres(ctx, dsn); e == nil {
+		opened.Close()
+		t.Fatal("missing swap schema accepted")
+	} else if !strings.Contains(e.Error(), "000002_swap_history.up.sql") || strings.Contains(e.Error(), "000001") {
+		t.Fatalf("existing DB received ambiguous migration instruction: %v", e)
+	}
+	// Existing Controller history remains available after rolling back only swaps.
+	session, e = db.Acquire(ctx, testKey(), 1)
+	if e != nil {
+		t.Fatal("registry affected by swap migration")
+	}
+	_ = session.Close()
+	up, e := os.ReadFile("../../../migrations/000002_swap_history.up.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = db.pool.Exec(ctx, string(up)); e != nil {
+		t.Fatal(e)
+	}
+	ready, e := OpenRegistryPostgres(ctx, dsn)
+	if e != nil {
+		t.Fatal(e)
+	}
+	ready.Close()
 }

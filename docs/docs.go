@@ -1082,6 +1082,9 @@ const docTemplate = `{
                         "$ref": "#/definitions/dto.StakeDAOPool"
                     }
                 },
+                "requestedBlockNumber": {
+                    "type": "integer"
+                },
                 "rpcAttempts": {
                     "type": "integer"
                 },
@@ -1262,6 +1265,29 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.SwapStorageStats": {
+            "type": "object",
+            "properties": {
+                "backend": {
+                    "type": "string"
+                },
+                "cachedEvents": {
+                    "type": "integer"
+                },
+                "fetchedEvents": {
+                    "type": "integer"
+                },
+                "finalizedThrough": {
+                    "type": "integer"
+                },
+                "lastSavedBlock": {
+                    "type": "integer"
+                },
+                "rpcRangesRead": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.WeETHFeeEstimate": {
             "type": "object",
             "properties": {
@@ -1330,6 +1356,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "swapStorage": {
+                    "$ref": "#/definitions/dto.SwapStorageStats"
                 },
                 "swaps": {
                     "type": "integer"

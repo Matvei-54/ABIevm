@@ -164,6 +164,11 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 		}
 		toBlock = sample.blockNumber
 	}
+	requestedBlock := uint64(0)
+	if sample != nil {
+		requestedBlock = sample.blockNumber
+	}
+	progress.blockSelection(requestedBlock, toBlock)
 	block := new(big.Int).SetUint64(toBlock)
 	header, err := s.client.HeaderByNumber(ctx, block)
 	if err != nil {
@@ -211,6 +216,9 @@ func (s *StakeDAOService) getPoolsSelected(ctx context.Context, network string, 
 	response := &dto.StakeDAOPoolsResponse{
 		Network: network, BlockNumber: toBlock,
 		Pools: make([]dto.StakeDAOPool, 0, len(vaults)),
+	}
+	if requestedBlock != 0 {
+		response.RequestedBlockNumber = &requestedBlock
 	}
 	response.Pools, response.Errors, err = s.loadPoolsAt(ctx, block, vaults, sample)
 	if err != nil {

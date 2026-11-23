@@ -47,6 +47,8 @@ type loadProgress struct {
 	firstErr       *rpcFailure
 	registrySaved  uint64
 	registryTarget uint64
+	requestedBlock uint64
+	snapshotBlock  uint64
 }
 
 type rpcFailure struct {
@@ -75,6 +77,15 @@ func (p *loadProgress) setStage(stage string) {
 	p.stage = stage
 	p.mu.Unlock()
 	p.report("stage", nil)
+}
+
+func (p *loadProgress) blockSelection(requested, actual uint64) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.requestedBlock, p.snapshotBlock = requested, actual
+	p.mu.Unlock()
 }
 
 func (p *loadProgress) discoveryStarted(total uint64, workers int) {
@@ -156,6 +167,9 @@ func (p *loadProgress) report(event string, err error) {
 	}
 	if p.gauge != (common.Address{}) {
 		attrs = append(attrs, "gauge", p.gauge.Hex())
+	}
+	if p.snapshotBlock != 0 {
+		attrs = append(attrs, "requested_block", p.requestedBlock, "snapshot_block", p.snapshotBlock)
 	}
 	if p.registryTarget != 0 {
 		attrs = append(attrs, "registry_saved_block", p.registrySaved, "registry_target_block", p.registryTarget)

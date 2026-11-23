@@ -150,6 +150,10 @@ func (s *StakeDAOService) weETHFeeReference(ctx context.Context, block *big.Int)
 // Ranges are complete or the entire estimate is unavailable. No missing chunks
 // or malformed swaps silently become zero volume. sampleRPC owns the shared RPS.
 func readWeETHSwaps(ctx context.Context, client stakeDAORPC, from, to uint64, event common.Hash) ([]types.Log, int, error) {
+	return readSwapLogs(ctx, client, weETHFeePool, from, to, event)
+}
+
+func readSwapLogs(ctx context.Context, client registryChainReader, pool common.Address, from, to uint64, event common.Hash) ([]types.Log, int, error) {
 	if from > to {
 		return nil, 0, errors.New("invalid_fee_window")
 	}
@@ -181,7 +185,7 @@ func readWeETHSwaps(ctx context.Context, client stakeDAORPC, from, to uint64, ev
 				if workCtx.Err() != nil {
 					return
 				}
-				logs, err := client.FilterLogs(workCtx, ethereum.FilterQuery{FromBlock: new(big.Int).SetUint64(n), ToBlock: new(big.Int).SetUint64(min(n+1499, to)), Addresses: []common.Address{weETHFeePool}, Topics: [][]common.Hash{{event}}})
+				logs, err := client.FilterLogs(workCtx, ethereum.FilterQuery{FromBlock: new(big.Int).SetUint64(n), ToBlock: new(big.Int).SetUint64(min(n+1499, to)), Addresses: []common.Address{pool}, Topics: [][]common.Hash{{event}}})
 				mu.Lock()
 				if err != nil {
 					if failed == nil {
@@ -232,39 +236,54 @@ func readWeETHSwaps(ctx context.Context, client stakeDAORPC, from, to uint64, ev
 
 // Net tokens_bought are converted to gross-fee estimates via f/(1-f). Snapshot
 // f and rates are approximations, NOT the actual historic per-swap parameters.
-func estimateWeETHSwaps(logs []types.Log, parsed abi.ABI, r weETHFeeReference) (decimal.Decimal, int, error) {
-	total := decimal.Zero
-	count := 0
+type decodedCurveSwap struct {
+	Log    types.Log
+	Bought int
+	Net    *big.Int
+}
+
+func decodeCurveSwaps(logs []types.Log, pool common.Address, event abi.Event) ([]decodedCurveSwap, error) {
+	decoded := []decodedCurveSwap{}
 	seen := map[string]types.Log{}
-	event := parsed.Events["TokenExchange"]
 	for _, l := range logs {
-		if l.Address != weETHFeePool || l.Removed || len(l.Topics) != 2 || l.Topics[0] != event.ID || len(l.Data) != 128 || l.BlockHash == (common.Hash{}) || l.TxHash == (common.Hash{}) {
-			return decimal.Zero, 0, errors.New("invalid_swap_log")
+		if l.Address != pool || l.Removed || len(l.Topics) != 2 || l.Topics[0] != event.ID || len(l.Data) != 128 || l.BlockHash == (common.Hash{}) || l.TxHash == (common.Hash{}) {
+			return nil, errors.New("invalid_swap_log")
 		}
 		key := l.TxHash.Hex() + ":" + new(big.Int).SetUint64(uint64(l.Index)).String()
 		if old, ok := seen[key]; ok {
 			if old.BlockNumber != l.BlockNumber || old.BlockHash != l.BlockHash || old.TxIndex != l.TxIndex || old.Topics[1] != l.Topics[1] || !bytes.Equal(old.Data, l.Data) {
-				return decimal.Zero, 0, errors.New("conflicting_swap_log")
+				return nil, errors.New("conflicting_swap_log")
 			}
 			continue
 		}
 		seen[key] = l
 		v, err := event.Inputs.NonIndexed().Unpack(l.Data)
 		if err != nil || len(v) != 4 {
-			return decimal.Zero, 0, errors.New("invalid_swap_log")
+			return nil, errors.New("invalid_swap_log")
 		}
 		sold, sOK := v[0].(*big.Int)
 		amount, aOK := v[1].(*big.Int)
 		bought, bOK := v[2].(*big.Int)
 		net, nOK := v[3].(*big.Int)
 		if !sOK || !aOK || !bOK || !nOK || sold == nil || bought == nil || amount == nil || net == nil || !sold.IsInt64() || !bought.IsInt64() || sold.Sign() < 0 || sold.Int64() > 1 || bought.Sign() < 0 || bought.Int64() > 1 || sold.Cmp(bought) == 0 || amount.Sign() <= 0 || net.Sign() <= 0 {
-			return decimal.Zero, 0, errors.New("invalid_swap_log")
+			return nil, errors.New("invalid_swap_log")
 		}
-		fee := decimal.NewFromBigInt(net, -18).Mul(r.fee).DivRound(decimal.NewFromInt(1).Sub(r.fee), 36).Mul(decimal.NewFromInt(1).Sub(r.admin)).Mul(r.rates[int(bought.Int64())])
-		total = total.Add(fee)
-		count++
+		decoded = append(decoded, decodedCurveSwap{Log: l, Bought: int(bought.Int64()), Net: net})
 	}
-	return total, count, nil
+	return decoded, nil
+}
+
+func estimateWeETHSwaps(logs []types.Log, parsed abi.ABI, r weETHFeeReference) (decimal.Decimal, int, error) {
+	swaps, err := decodeCurveSwaps(logs, weETHFeePool, parsed.Events["TokenExchange"])
+	if err != nil {
+		return decimal.Zero, 0, err
+	}
+	total := decimal.Zero
+	for _, swap := range swaps {
+		fee := decimal.NewFromBigInt(swap.Net, -18).Mul(r.fee).DivRound(decimal.NewFromInt(1).Sub(r.fee), 36).Mul(decimal.NewFromInt(1).Sub(r.admin)).Mul(r.rates[swap.Bought])
+		total = total.Add(fee)
+	}
+	return total, len(swaps), nil
 }
 
 func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.Header, days int, pool *dto.StakeDAOPool) {
@@ -314,7 +333,19 @@ func (s *StakeDAOService) addWeETHFeeEstimate(ctx context.Context, end *types.He
 	}
 	defer cleanup()
 	d.LogSourceVerified = true
-	logs, done, err := readWeETHSwaps(ctx, logClient, n+1, end.Number.Uint64(), parsed.Events["TokenExchange"].ID)
+	var logs []types.Log
+	var done int
+	if s.registry != nil {
+		var stats SwapSyncStats
+		logs, stats, err = s.registry.SyncSwapEvents(ctx, logClient, SwapKey{ChainID: s.chainID, Platform: "stakedao", Pool: weETHFeePool, Event: parsed.Events["TokenExchange"].ID}, n+1, end.Number.Uint64())
+		d.SwapStorage = &stats
+		if err == nil {
+			done = d.RangesTotal
+		}
+	} else {
+		logs, done, err = readWeETHSwaps(ctx, logClient, n+1, end.Number.Uint64(), parsed.Events["TokenExchange"].ID)
+		d.SwapStorage = &SwapSyncStats{Backend: "disabled", FetchedEvents: len(logs), RPCRangesRead: done}
+	}
 	d.RangesDone = done
 	if err != nil {
 		var failure *swapHistoryError

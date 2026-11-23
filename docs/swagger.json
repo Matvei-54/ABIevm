@@ -1071,6 +1071,9 @@
                         "$ref": "#/definitions/dto.StakeDAOPool"
                     }
                 },
+                "requestedBlockNumber": {
+                    "type": "integer"
+                },
                 "rpcAttempts": {
                     "type": "integer"
                 },
@@ -1251,6 +1254,29 @@
                 }
             }
         },
+        "dto.SwapStorageStats": {
+            "type": "object",
+            "properties": {
+                "backend": {
+                    "type": "string"
+                },
+                "cachedEvents": {
+                    "type": "integer"
+                },
+                "fetchedEvents": {
+                    "type": "integer"
+                },
+                "finalizedThrough": {
+                    "type": "integer"
+                },
+                "lastSavedBlock": {
+                    "type": "integer"
+                },
+                "rpcRangesRead": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.WeETHFeeEstimate": {
             "type": "object",
             "properties": {
@@ -1319,6 +1345,9 @@
                 },
                 "status": {
                     "type": "string"
+                },
+                "swapStorage": {
+                    "$ref": "#/definitions/dto.SwapStorageStats"
                 },
                 "swaps": {
                     "type": "integer"

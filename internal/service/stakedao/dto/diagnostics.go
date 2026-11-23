@@ -18,28 +18,38 @@ type StakeDAOPoolDiagnostics struct {
 
 // Snapshot-parameter estimate, never a reconstructed historical APY.
 type WeETHFeeEstimate struct {
-	Status              string         `json:"status"`
-	Model               string         `json:"model"`
-	LogSource           string         `json:"logSource"`
-	LogSourceVerified   bool           `json:"logSourceVerified"`
-	Reasons             []string       `json:"reasons,omitempty"`
-	Assumptions         []string       `json:"assumptions"`
-	Pool                common.Address `json:"pool" swaggertype:"string"`
-	WindowDays          int            `json:"windowDays"`
-	StartBlock          *uint64        `json:"startBlock"`
-	EndBlock            uint64         `json:"endBlock"`
-	StartBlockHash      *common.Hash   `json:"startBlockHash" swaggertype:"string"`
-	EndBlockHash        common.Hash    `json:"endBlockHash" swaggertype:"string"`
-	CoveredSeconds      *uint64        `json:"coveredSeconds"`
-	RangesTotal         int            `json:"rangesTotal"`
-	RangesDone          int            `json:"rangesDone"`
-	Swaps               *int           `json:"swaps"`
-	LogFailure          *FeeLogFailure `json:"logFailure,omitempty"`
-	ReferenceCapitalETH *string        `json:"referenceCapitalEth"`
-	DynamicFeeFraction  *string        `json:"dynamicFeeFraction"`
-	AdminFeeFraction    *string        `json:"adminFeeFraction"`
-	EstimatedLPFeesETH  *string        `json:"estimatedLpFeesEth"`
-	EstimatedAPR        *float64       `json:"estimatedApr"`
+	Status              string            `json:"status"`
+	Model               string            `json:"model"`
+	LogSource           string            `json:"logSource"`
+	LogSourceVerified   bool              `json:"logSourceVerified"`
+	SwapStorage         *SwapStorageStats `json:"swapStorage,omitempty"`
+	Reasons             []string          `json:"reasons,omitempty"`
+	Assumptions         []string          `json:"assumptions"`
+	Pool                common.Address    `json:"pool" swaggertype:"string"`
+	WindowDays          int               `json:"windowDays"`
+	StartBlock          *uint64           `json:"startBlock"`
+	EndBlock            uint64            `json:"endBlock"`
+	StartBlockHash      *common.Hash      `json:"startBlockHash" swaggertype:"string"`
+	EndBlockHash        common.Hash       `json:"endBlockHash" swaggertype:"string"`
+	CoveredSeconds      *uint64           `json:"coveredSeconds"`
+	RangesTotal         int               `json:"rangesTotal"`
+	RangesDone          int               `json:"rangesDone"`
+	Swaps               *int              `json:"swaps"`
+	LogFailure          *FeeLogFailure    `json:"logFailure,omitempty"`
+	ReferenceCapitalETH *string           `json:"referenceCapitalEth"`
+	DynamicFeeFraction  *string           `json:"dynamicFeeFraction"`
+	AdminFeeFraction    *string           `json:"adminFeeFraction"`
+	EstimatedLPFeesETH  *string           `json:"estimatedLpFeesEth"`
+	EstimatedAPR        *float64          `json:"estimatedApr"`
+}
+
+type SwapStorageStats struct {
+	Backend          string  `json:"backend"`
+	CachedEvents     int     `json:"cachedEvents"`
+	FetchedEvents    int     `json:"fetchedEvents"`
+	RPCRangesRead    int     `json:"rpcRangesRead"`
+	LastSavedBlock   *uint64 `json:"lastSavedBlock"`
+	FinalizedThrough *uint64 `json:"finalizedThrough"`
 }
 
 // Controlled classifications and numeric metadata only; never provider text,

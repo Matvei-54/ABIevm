@@ -470,6 +470,8 @@ definitions:
         items:
           $ref: '#/definitions/dto.StakeDAOPool'
         type: array
+      requestedBlockNumber:
+        type: integer
       rpcAttempts:
         type: integer
       strictPrices:
@@ -589,6 +591,21 @@ definitions:
       vaultExtra:
         $ref: '#/definitions/dto.StakeDAOAPRComponent'
     type: object
+  dto.SwapStorageStats:
+    properties:
+      backend:
+        type: string
+      cachedEvents:
+        type: integer
+      fetchedEvents:
+        type: integer
+      finalizedThrough:
+        type: integer
+      lastSavedBlock:
+        type: integer
+      rpcRangesRead:
+        type: integer
+    type: object
   dto.WeETHFeeEstimate:
     properties:
       adminFeeFraction:
@@ -635,6 +652,8 @@ definitions:
         type: string
       status:
         type: string
+      swapStorage:
+        $ref: '#/definitions/dto.SwapStorageStats'
       swaps:
         type: integer
       windowDays:

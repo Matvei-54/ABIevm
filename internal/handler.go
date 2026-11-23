@@ -281,6 +281,9 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 	if err != nil {
 		return stakeDAOHTTPError(c, err)
 	}
+	if options.BlockNumber != 0 && result.BlockNumber != options.BlockNumber {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("requested block %d differs from calculation block %d", options.BlockNumber, result.BlockNumber)})
+	}
 	return c.JSON(http.StatusOK, result)
 }
 

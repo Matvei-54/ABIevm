@@ -127,14 +127,15 @@ type StakeDAOReward struct {
 }
 
 type StakeDAOPoolsResponse struct {
-	Network        string              `json:"network"`
-	BlockNumber    uint64              `json:"blockNumber"`
-	BlockTimestamp uint64              `json:"blockTimestamp,omitempty"`
-	BlockHash      *common.Hash        `json:"blockHash,omitempty" swaggertype:"string"`
-	StrictPrices   bool                `json:"strictPrices,omitempty"`
-	RPCAttempts    int                 `json:"rpcAttempts,omitempty"`
-	Pools          []StakeDAOPool      `json:"pools"`
-	Errors         []StakeDAOPoolError `json:"errors,omitempty"`
+	RequestedBlockNumber *uint64             `json:"requestedBlockNumber,omitempty"`
+	Network              string              `json:"network"`
+	BlockNumber          uint64              `json:"blockNumber"`
+	BlockTimestamp       uint64              `json:"blockTimestamp,omitempty"`
+	BlockHash            *common.Hash        `json:"blockHash,omitempty" swaggertype:"string"`
+	StrictPrices         bool                `json:"strictPrices,omitempty"`
+	RPCAttempts          int                 `json:"rpcAttempts,omitempty"`
+	Pools                []StakeDAOPool      `json:"pools"`
+	Errors               []StakeDAOPoolError `json:"errors,omitempty"`
 	// Internal carrier for the bounded state-only path; never a second public schema.
 	StateRecords []StakeDAOGaugeState `json:"-"`
 }

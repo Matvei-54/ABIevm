@@ -2,6 +2,11 @@
 
 [Торговая APY: окна 7/30 дней и архивные eth_call](internal/service/stakedao/TRADING_HISTORY_RU.md).
 
+Для сохранения обменов в уже подключённую БД перед обновлённым запуском выполните
+SQL из `migrations/000002_swap_history.up.sql`. Строка DATABASE_URL прежняя;
+000001 повторно не запускать. Обновлённые подробности:
+[кэш событий и номер блока](internal/service/stakedao/WEETH_FEE_MODEL_RU.md#сохранение-обменов-в-существующий-postgres).
+
 [Проверка состояния 1–5 gauge без цен, APR и истории](internal/service/stakedao/POOL_STATE_RU.md).
 
 [Состав доходности и отдельная оценка gauge rewards](internal/service/stakedao/YIELD_COMPONENTS_RU.md).

@@ -159,7 +159,19 @@ func TestStakeDAORoute(t *testing.T) {
 		case "eth_blockNumber":
 			result = "0xa"
 		case "eth_getBlockByNumber":
-			result = &types.Header{Number: big.NewInt(10), Difficulty: big.NewInt(0), Extra: []byte{}}
+			var selected string
+			if err := json.Unmarshal(request.Params[0], &selected); err != nil {
+				t.Error(err)
+				w.WriteHeader(400)
+				return
+			}
+			number, err := hexutil.DecodeUint64(selected)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(400)
+				return
+			}
+			result = &types.Header{Number: new(big.Int).SetUint64(number), Difficulty: big.NewInt(0), Extra: []byte{}}
 		case "eth_getCode":
 			historyReads.Add(1)
 			var number string
@@ -306,6 +318,20 @@ func TestStakeDAORoute(t *testing.T) {
 	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?limit=3&gauges=0x0000000000000000000000000000000000000011,0x0000000000000000000000000000000000000012,0x0000000000000000000000000000000000000013", nil))
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &diagnostic) != nil || len(diagnostic.Pools) != 3 || diagnostic.Pools[0].Gauge != common.HexToAddress("0x11") || historyReads.Load() != before {
 		t.Fatalf("custom diagnostics used history or wrong gauges: %s", response.Body.String())
+	}
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/diagnostics?gauges=0x0000000000000000000000000000000000000011&block=9&strictPrices=false", nil))
+	var fixed struct {
+		Requested *uint64 `json:"requestedBlockNumber"`
+		Block     uint64  `json:"blockNumber"`
+		Pools     []struct {
+			State struct {
+				Block uint64 `json:"blockNumber"`
+			} `json:"state"`
+		} `json:"pools"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &fixed) != nil || fixed.Requested == nil || *fixed.Requested != 9 || fixed.Block != 9 || len(fixed.Pools) != 1 || fixed.Pools[0].State.Block != 9 {
+		t.Fatalf("HTTP requested block lost, decremented or replaced by head: %s", response.Body.String())
 	}
 	before = historyReads.Load()
 	response = httptest.NewRecorder()
