@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -2062,5 +2063,423 @@ func TestFeeLogSourceWithoutConfigurationReusesPrimaryAndNeverDials(t *testing.T
 	cleanup()
 	if primary.closed {
 		t.Fatal("primary closed by optional log helper")
+	}
+}
+
+// Offline research tests reuse the independently saved mainnet receipt/getters.
+// They do not assert that allocation rules or a current BOLD APR were found.
+func boldResearchAuditFixture(t *testing.T) (*types.Receipt, map[uint64][]interface{}) {
+	t.Helper()
+	raw, err := os.ReadFile("../../../examples/stakedao-bold-route-audit.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var audit struct {
+		Reads []struct {
+			Method string
+			Args   []string
+			Values []json.RawMessage
+		}
+		Transaction struct {
+			Hash         common.Hash
+			Block        uint64
+			BlockHash    common.Hash
+			RelevantLogs []*types.Log
+		}
+	}
+	if err := json.Unmarshal(raw, &audit); err != nil {
+		t.Fatal(err)
+	}
+	receipt := &types.Receipt{Status: 1, TxHash: audit.Transaction.Hash, BlockNumber: new(big.Int).SetUint64(audit.Transaction.Block), BlockHash: audit.Transaction.BlockHash, Logs: audit.Transaction.RelevantLogs}
+	if len(receipt.Logs) == 0 {
+		t.Fatal("empty saved receipt")
+	}
+	receipt.TransactionIndex = receipt.Logs[0].TxIndex
+	getters := map[uint64][]interface{}{}
+	for _, read := range audit.Reads {
+		if read.Method != "incentives" {
+			continue
+		}
+		id, ok := new(big.Int).SetString(read.Args[0], 10)
+		if !ok || len(read.Values) != 9 {
+			t.Fatal("invalid saved getter")
+		}
+		v := make([]interface{}, 9)
+		for i, raw := range read.Values {
+			var text string
+			if err := json.Unmarshal(raw, &text); err != nil {
+				t.Fatal(err)
+			}
+			if i == 0 || i == 1 || i == 6 || i == 8 {
+				v[i] = common.HexToAddress(text)
+			} else {
+				n, ok := new(big.Int).SetString(text, 10)
+				if !ok {
+					t.Fatal("invalid integer")
+				}
+				v[i] = n
+			}
+		}
+		getters[id.Uint64()] = v
+	}
+	return receipt, getters
+}
+
+func TestBOLDResearchRealReceiptAndGetterBinding(t *testing.T) {
+	parsed, err := abi.JSON(strings.NewReader(boldCampaignResearchABI))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Events["IncentiveAdded"].ID.Hex() != "0x6ff2feb1912bfc5e0f8e6b7e8f9c30db612efb5337419b4da8099d27d2bf8863" || parsed.Events["RewardsPulledToMerkle"].ID.Hex() != "0xc5f8cc03d66c0e8fafb19862f551957745c71666872c958050c021f785d9561d" {
+		t.Fatal("ABI event signatures differ from mainnet receipt")
+	}
+	receipt, getters := boldResearchAuditFixture(t)
+	entries := map[uint64]types.Log{}
+	for _, l := range receipt.Logs {
+		if l.Address != boldCampaignDistributor {
+			continue
+		}
+		id, match, err := boldResearchCampaignEvent(*l, parsed.Events["IncentiveAdded"])
+		if err != nil || !match {
+			t.Fatalf("saved event rejected: %v", err)
+		}
+		if err := boldResearchCompareEvent(*l, parsed.Events["IncentiveAdded"], getters[id]); err != nil {
+			t.Fatal(err)
+		}
+		entries[id] = *l
+	}
+	if len(entries) != 2 {
+		t.Fatal("expected independently audited IDs 2593 and 2594")
+	}
+	if err := boldResearchVerifyFunding(receipt, entries, parsed); err != nil {
+		t.Fatalf("verified transfer conservation rejected: %v", err)
+	}
+	for _, mode := range []string{"missing_transfer", "wrong_return", "wrong_block", "missing_campaign", "duplicate_log", "multiple_pulls", "other_gauge_pull", "removed", "wrong_getter"} {
+		t.Run(mode, func(t *testing.T) {
+			r, values := boldResearchAuditFixture(t)
+			e := map[uint64]types.Log{2593: entries[2593], 2594: entries[2594]}
+			switch mode {
+			case "missing_transfer":
+				r.Logs = r.Logs[:len(r.Logs)-1]
+			case "wrong_return":
+				r.Logs[len(r.Logs)-1].Data[31] ^= 1
+			case "wrong_block":
+				r.Logs[0].BlockHash = common.HexToHash("0xbad")
+			case "missing_campaign":
+				delete(e, 2594)
+			case "duplicate_log":
+				r.Logs = append(r.Logs, r.Logs[0])
+			case "removed":
+				r.Logs[0].Removed = true
+			case "multiple_pulls", "other_gauge_pull":
+				for _, l := range r.Logs {
+					if l.Address == boldRouteRouter {
+						copy := *l
+						copy.Index = 900
+						copy.Topics = append([]common.Hash(nil), l.Topics...)
+						if mode == "other_gauge_pull" {
+							copy.Topics[1] = common.HexToHash("0xbad")
+						}
+						r.Logs = append(r.Logs, &copy)
+						break
+					}
+				}
+			case "wrong_getter":
+				v := values[2593]
+				v[7] = big.NewInt(1)
+				if err := boldResearchCompareEvent(e[2593], parsed.Events["IncentiveAdded"], v); err == nil {
+					t.Fatal("getter/event mismatch accepted")
+				}
+				return
+			}
+			if err := boldResearchVerifyFunding(r, e, parsed); err == nil {
+				t.Fatal("unproven funding accepted")
+			}
+		})
+	}
+}
+
+type boldInspectorFixture struct {
+	receipt     *types.Receipt
+	getters     map[uint64][]interface{}
+	scans       []ethereum.FilterQuery
+	mode        string
+	headerReads map[uint64]int
+}
+
+func newBoldInspectorFixture(t *testing.T) *boldInspectorFixture {
+	r, getters := boldResearchAuditFixture(t)
+	f := &boldInspectorFixture{receipt: r, getters: getters, headerReads: map[uint64]int{}}
+	h, _ := f.HeaderByNumber(context.Background(), r.BlockNumber)
+	// Keep real event payloads; use synthetic headers so no live RPC is needed.
+	r.BlockHash = h.Hash()
+	for _, l := range r.Logs {
+		l.BlockHash = r.BlockHash
+	}
+	f.headerReads = map[uint64]int{}
+	return f
+}
+func (f *boldInspectorFixture) ChainID(context.Context) (*big.Int, error) {
+	if f.mode == "wrong_chain" {
+		return big.NewInt(10), nil
+	}
+	return big.NewInt(1), nil
+}
+func (f *boldInspectorFixture) HeaderByNumber(_ context.Context, n *big.Int) (*types.Header, error) {
+	if n == nil {
+		return nil, errors.New("test requires explicit block")
+	}
+	h := &types.Header{Number: new(big.Int).Set(n), Time: 1795185215}
+	f.headerReads[n.Uint64()]++
+	if f.mode == "reorg" && len(f.scans) > 0 {
+		h.Extra = []byte("reorganized")
+	}
+	return h, nil
+}
+func (f *boldInspectorFixture) TransactionReceipt(_ context.Context, tx common.Hash) (*types.Receipt, error) {
+	if tx != f.receipt.TxHash {
+		return nil, errors.New("wrong transaction")
+	}
+	return f.receipt, nil
+}
+func (f *boldInspectorFixture) FilterLogs(_ context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
+	f.scans = append(f.scans, q)
+	if f.mode == "provider_error" {
+		return nil, errors.New("https://rpc.invalid/secret-key unavailable")
+	}
+	if f.mode == "empty" {
+		return []types.Log{}, nil
+	}
+	logs := []types.Log{}
+	for _, l := range f.receipt.Logs {
+		if l.Address == boldRouteRouter || l.Address == boldCampaignDistributor {
+			if l.BlockNumber >= q.FromBlock.Uint64() && l.BlockNumber <= q.ToBlock.Uint64() {
+				logs = append(logs, *l)
+			}
+		}
+	}
+	return logs, nil
+}
+func (f *boldInspectorFixture) CallContract(_ context.Context, msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	if block == nil || block.Uint64() != f.receipt.BlockNumber.Uint64()+10 || msg.To == nil || *msg.To != stakeDAOMulticallAddress {
+		return nil, errors.New("wrong snapshot or target")
+	}
+	aggregate, _ := abi.JSON(strings.NewReader(stakeDAOMulticallABI))
+	v, err := aggregate.Methods["aggregate3"].Inputs.Unpack(msg.Data[4:])
+	if err != nil {
+		return nil, err
+	}
+	calls := *abi.ConvertType(v[0], new([]multicallInput)).(*[]multicallInput)
+	results := []multicallOutput{}
+	for _, call := range calls {
+		found := false
+		for _, raw := range []string{protocolControllerABI, rewardRouteABI, boldCampaignResearchABI, erc20DecimalsABI} {
+			a, _ := abi.JSON(strings.NewReader(raw))
+			method, err := a.MethodById(call.CallData[:4])
+			if err != nil {
+				continue
+			}
+			args, _ := method.Inputs.Unpack(call.CallData[4:])
+			var output []interface{}
+			switch method.Name {
+			case "gauge":
+				output = []interface{}{common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad"), common.HexToAddress("0xefc6516323fbd28e80b85a497b65a86243a54b3e"), boldRouteReceiver, [4]byte{0xc7, 0x15, 0xe3, 0x73}, false}
+			case "rewardVault":
+				output = []interface{}{common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad")}
+			case "rewardRouter":
+				output = []interface{}{boldRouteRouter}
+			case "legacyRewardReceiver":
+				output = []interface{}{boldRouteLegacy}
+			case "PROTOCOL_CONTROLLER":
+				output = []interface{}{common.HexToAddress(PROTOCOL_CONTROLLER_ETH_ARB)}
+			case "merkleDistributor":
+				target := boldRouteExecutor
+				if f.mode == "route_changed" {
+					target = common.HexToAddress("0xbad")
+				}
+				output = []interface{}{target}
+			case "nbIncentives":
+				output = []interface{}{big.NewInt(2595)}
+			case "root", "ipfsHash":
+				output = []interface{}{[32]byte(common.HexToHash("0x1234"))}
+			case "decimals":
+				output = []interface{}{uint8(18)}
+			case "incentives":
+				output = f.getters[args[0].(*big.Int).Uint64()]
+			}
+			if output == nil {
+				return nil, errors.New("unhandled getter")
+			}
+			encoded, err := method.Outputs.Pack(output...)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, multicallOutput{Success: true, ReturnData: encoded})
+			found = true
+			break
+		}
+		if !found {
+			return nil, errors.New("unhandled selector")
+		}
+	}
+	return aggregate.Methods["aggregate3"].Outputs.Pack(results)
+}
+
+func TestBOLDInspectorIsBoundedAndLeavesUnknownAllocationUnknown(t *testing.T) {
+	for _, mode := range []string{"success", "provider_error", "route_changed", "reorg", "empty", "wrong_chain"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newBoldInspectorFixture(t)
+			f.mode = mode
+			b := f.receipt.BlockNumber.Uint64()
+			r, err := NewBOLDCampaignInspector(f, f, nil).Inspect(context.Background(), b, b+10)
+			if mode == "provider_error" || mode == "route_changed" || mode == "reorg" || mode == "wrong_chain" {
+				if err == nil || r != nil || strings.Contains(err.Error(), "secret-key") {
+					t.Fatalf("failed scan leaked/became zero: %+v %v", r, err)
+				}
+				return
+			}
+			if err != nil || !r.ScanComplete || r.CurrentAPR != nil || r.BlockNumber != b+10 || r.RPCRequests > boldResearchMaxRPC || len(f.scans) != 1 {
+				t.Fatalf("invalid bounded result: %+v %v", r, err)
+			}
+			if mode == "empty" {
+				if len(r.Campaigns) != 0 || r.Status != "no_verified_campaigns_in_creation_window" {
+					t.Fatal("empty creation window became zero APR")
+				}
+				return
+			}
+			if len(r.Campaigns) != 2 {
+				t.Fatal("real campaign records missing")
+			}
+			for _, c := range r.Campaigns {
+				if c.FundingStatus != "verified_router_campaign_funding" || c.AllocationStatus != "unavailable" || c.HistoricalAPR != nil || c.Reasons[0] != "allocation_rules_unverified" || c.PeriodStatus != "expired_funding_period" {
+					t.Fatalf("funding became a payout/APR: %+v", c)
+				}
+			}
+		})
+	}
+	f := newBoldInspectorFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := NewBOLDCampaignInspector(f, f, nil).Inspect(ctx, 1, 2); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancel ignored")
+	}
+	for _, bounds := range [][2]uint64{{0, 1}, {2, 1}, {1, 240001}} {
+		if _, err := NewBOLDCampaignInspector(f, f, nil).Inspect(context.Background(), bounds[0], bounds[1]); err == nil {
+			t.Fatal("unbounded/invalid request accepted")
+		}
+	}
+}
+
+type boldAllocationResolverFunc func(context.Context, BOLDCampaignReport, BOLDCampaignRecord) (BOLDAllocationEvidence, error)
+
+func (f boldAllocationResolverFunc) ResolveBOLDAllocation(ctx context.Context, r BOLDCampaignReport, c BOLDCampaignRecord) (BOLDAllocationEvidence, error) {
+	return f(ctx, r, c)
+}
+
+func TestBOLDInspectorOptionalResolverKeepsHistoricalEstimateSeparate(t *testing.T) {
+	f := newBoldInspectorFixture(t)
+	resolver := boldAllocationResolverFunc(func(_ context.Context, r BOLDCampaignReport, c BOLDCampaignRecord) (BOLDAllocationEvidence, error) {
+		if c.ID == 2594 {
+			return BOLDAllocationEvidence{}, errors.New("https://rpc.invalid/secret-key allocation unavailable")
+		}
+		return BOLDAllocationEvidence{CampaignID: c.ID, SnapshotHash: r.BlockHash, Vault: r.Vault, Start: c.Start, End: c.End,
+			NetRewardRaw: "1000000000000000000", RewardUnitUSD: "1", CapitalUSDSeconds: "31536000",
+			RulesReference: "SYNTHETIC_TEST_ONLY_not_verified_real_allocation", ValuationReference: "test-only", EvidenceHash: common.HexToHash("0x123")}, nil
+	})
+	b := f.receipt.BlockNumber.Uint64()
+	r, err := NewBOLDCampaignInspector(f, f, resolver).Inspect(context.Background(), b, b+10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.CurrentAPR != nil || r.Status != "funding_verified_with_historical_estimates" || r.Campaigns[0].HistoricalAPR == nil || *r.Campaigns[0].HistoricalAPR != "100" || r.Campaigns[1].HistoricalAPR != nil || r.Campaigns[1].Reasons[0] != "allocation_evidence_unavailable" {
+		t.Fatalf("historical partial estimate mislabeled: %+v", r)
+	}
+	encoded, _ := json.Marshal(r)
+	if strings.Contains(string(encoded), "secret-key") {
+		t.Fatal("resolver error leaked")
+	}
+	// The resolver can perform lengthy reads; recheck the snapshot afterwards.
+	f = newBoldInspectorFixture(t)
+	changing := boldAllocationResolverFunc(func(ctx context.Context, r BOLDCampaignReport, c BOLDCampaignRecord) (BOLDAllocationEvidence, error) {
+		f.mode = "reorg"
+		return resolver(ctx, r, c)
+	})
+	if r, err := NewBOLDCampaignInspector(f, f, changing).Inspect(context.Background(), b, b+10); err == nil || r != nil {
+		t.Fatal("snapshot changed during resolution accepted")
+	}
+}
+
+func TestBOLDHistoricalAPRRequiresPeriodAttributionAndCapitalIntegral(t *testing.T) {
+	r := BOLDCampaignReport{ScanComplete: true, BlockHash: common.HexToHash("0x123"), BlockTimestamp: 1000,
+		Vault: common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad"), Gauge: boldRouteGauge, Token: boldRouteToken, Distributor: boldCampaignDistributor}
+	c := BOLDCampaignRecord{ID: 1, Start: 100, End: 200, AmountRaw: "10000000000000000000", FundingStatus: "verified_router_campaign_funding"}
+	e := BOLDAllocationEvidence{CampaignID: 1, SnapshotHash: r.BlockHash, Vault: r.Vault, Start: 100, End: 200,
+		NetRewardRaw: "1000000000000000000", RewardUnitUSD: "2", CapitalUSDSeconds: "63072000", RulesReference: "test-fixture-only-not-real-rules", ValuationReference: "test-only", EvidenceHash: common.HexToHash("0xabc")}
+	// $2 / ($630720 average capital * 100s), annualized -> exactly 100%.
+	got, err := CalculateBOLDHistoricalAPR(r, c, e)
+	if err != nil || got != "100" || r.CurrentAPR != nil {
+		t.Fatalf("wrong units/annualization: %s %v", got, err)
+	}
+	for _, mode := range []string{"missing_rules", "wrong_vault", "wrong_campaign", "wrong_block", "wrong_period", "overspend", "negative", "no_capital", "no_price", "missing_provenance", "future_period", "no_funding_proof"} {
+		x, campaign, report := e, c, r
+		switch mode {
+		case "missing_rules":
+			x.RulesReference = ""
+		case "wrong_vault":
+			x.Vault = boldRouteGauge
+		case "wrong_campaign":
+			x.CampaignID++
+		case "wrong_block":
+			x.SnapshotHash = common.Hash{}
+		case "wrong_period":
+			x.End++
+		case "overspend":
+			x.NetRewardRaw = "11000000000000000000"
+		case "negative":
+			x.NetRewardRaw = "-1"
+		case "no_capital":
+			x.CapitalUSDSeconds = "0"
+		case "no_price":
+			x.RewardUnitUSD = "0"
+		case "missing_provenance":
+			x.EvidenceHash = common.Hash{}
+		case "future_period":
+			report.BlockTimestamp = 199
+		case "no_funding_proof":
+			campaign.FundingStatus = "unavailable"
+		}
+		if _, err := CalculateBOLDHistoricalAPR(report, campaign, x); err == nil {
+			t.Fatalf("invalid allocation accepted: %s", mode)
+		}
+	}
+	e.NetRewardRaw = "0"
+	if got, err := CalculateBOLDHistoricalAPR(r, c, e); err != nil || got != "0" {
+		t.Fatal("verified zero allocation lost")
+	}
+}
+
+func TestBOLDClaimProofUsesDoubleHashAndCannotProveCampaignAttribution(t *testing.T) {
+	addressType, _ := abi.NewType("address", "", nil)
+	integerType, _ := abi.NewType("uint256", "", nil)
+	args := abi.Arguments{{Type: addressType}, {Type: addressType}, {Type: integerType}}
+	account := common.HexToAddress("0x1234")
+	amount := big.NewInt(123456)
+	encoded, err := args.Pack(account, boldRouteToken, amount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := crypto.Keccak256Hash(crypto.Keccak256(encoded))
+	sibling := common.HexToHash("0x123")
+	var root common.Hash
+	if strings.Compare(leaf.Hex(), sibling.Hex()) < 0 {
+		root = crypto.Keccak256Hash(leaf[:], sibling[:])
+	} else {
+		root = crypto.Keccak256Hash(sibling[:], leaf[:])
+	}
+	if !VerifyBOLDClaimProof(root, account, boldRouteToken, amount, []common.Hash{sibling}) {
+		t.Fatal("valid Solidity-compatible proof rejected")
+	}
+	if VerifyBOLDClaimProof(root, account, boldRouteToken, big.NewInt(123457), []common.Hash{sibling}) || VerifyBOLDClaimProof(crypto.Keccak256Hash(encoded), account, boldRouteToken, amount, nil) || VerifyBOLDClaimProof(root, account, boldRouteGauge, amount, []common.Hash{sibling}) || VerifyBOLDClaimProof(root, account, boldRouteToken, new(big.Int).Lsh(big.NewInt(1), 256), nil) {
+		t.Fatal("incorrect leaf/root/token/amount accepted")
 	}
 }
