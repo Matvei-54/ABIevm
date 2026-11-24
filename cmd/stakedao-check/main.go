@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,11 +14,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"ABIevm/internal/service/prices"
 	"ABIevm/internal/service/stakedao"
 	dto "ABIevm/internal/service/stakedao/dto"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 // Manual sample candidates from gaugesMainFromController in the user's original
@@ -33,6 +36,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
 		// Transport errors can include a provider URL with its access token.
 		message := err.Error()
 		if endpoint := os.Getenv("STAKEDAO_ETHEREUM_RPC_URL"); endpoint != "" {
@@ -49,15 +55,28 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	flags.SetOutput(diagnostics)
 	limit := flags.Int("limit", 1, "maximum pools to check (1–5)")
 	gaugeList := flags.String("gauges", sampleGauges, "1–5 gauge addresses, comma-separated; checked against current Controller state")
-	from := flags.Uint64("from", 0, "optional first registration block; requires -to")
+	from := flags.Uint64("from", 0, "first registration block (requires -to), or first campaign creation block with -bold-campaigns")
 	to := flags.Uint64("to", 0, "optional last registration block; requires -from; at most 100 blocks")
 	filename := flags.String("output", "", "save JSON to this file only after a successful check")
 	withDiagnostics := flags.Bool("diagnostics", false, "check the standard 2/5 pools or explicit -gauges with price provenance and PoolUtilities comparison")
-	blockNumber := flags.Uint64("block", 0, "diagnostics snapshot block; implies strict prices; default latest")
+	blockNumber := flags.Uint64("block", 0, "diagnostics snapshot block (implies strict prices), or required final block with -bold-campaigns")
 	strictPrices := flags.Bool("strict-prices", false, "diagnostics only: read all prices at the snapshot block in an isolated cache")
 	weethFeeDays := flags.Int("weeth-fee-days", 0, "optional snapshot-parameter fee APR estimate for the explicit weETH gauge only: 1, 7 or 30 days")
+	boldCampaigns := flags.Bool("bold-campaigns", false, "isolated BOLD campaign funding check; requires explicit -from and -block; no server, prices or database")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *boldCampaigns {
+		invalid := flags.NArg() != 0
+		flags.Visit(func(f *flag.Flag) {
+			if f.Name != "bold-campaigns" && f.Name != "from" && f.Name != "block" && f.Name != "output" {
+				invalid = true
+			}
+		})
+		if invalid || *from == 0 || *blockNumber < *from || *blockNumber-*from >= 240000 {
+			return fmt.Errorf("use -bold-campaigns -from FIRST -block LAST [-output FILE]; positive inclusive range, at most 240000 blocks; no other flags")
+		}
+		return runBOLDCampaigns(ctx, *from, *blockNumber, *filename, output, diagnostics)
 	}
 	if *weethFeeDays != 0 && !*withDiagnostics {
 		return fmt.Errorf("-weeth-fee-days requires -diagnostics and the explicit weETH gauge")
@@ -152,6 +171,51 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 		return err
 	}
 	return saveResult(*filename, buffer.Bytes(), diagnostics)
+}
+
+// This is a manual entry point to the isolated module, not a service integration.
+// The inspector keeps allocation unknown until a reviewed resolver exists.
+func runBOLDCampaigns(ctx context.Context, from, block uint64, filename string, output, diagnostics io.Writer) error {
+	stateURL := strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_RPC_URL"))
+	logsURL := strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_LOGS_RPC_URL"))
+	if stateURL == "" {
+		return fmt.Errorf("set STAKEDAO_ETHEREUM_RPC_URL in this terminal or this IDE Run Configuration")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	state, err := ethclient.DialContext(ctx, stateURL)
+	if err != nil {
+		return fmt.Errorf("BOLD state RPC connection failed; check STAKEDAO_ETHEREUM_RPC_URL")
+	}
+	defer state.Close()
+	logs := state
+	if logsURL != "" && logsURL != stateURL {
+		logs, err = ethclient.DialContext(ctx, logsURL)
+		if err != nil {
+			return fmt.Errorf("BOLD logs RPC connection failed; check STAKEDAO_ETHEREUM_LOGS_RPC_URL")
+		}
+		defer logs.Close()
+		fmt.Fprintln(diagnostics, "Using the configured logs RPC for events; the primary RPC reads contract state.")
+	} else {
+		fmt.Fprintln(diagnostics, "Using the primary RPC for state and events; no separate logs endpoint configured.")
+	}
+	fmt.Fprintf(diagnostics, "BOLD/USDC: creation blocks %d–%d; at most 5 RPC/sec, 300 calls, 2 minutes.\n", from, block)
+	report, err := stakedao.NewBOLDCampaignInspector(state, logs, nil).Inspect(ctx, from, block)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(diagnostics, "Checked %d campaign(s); %d RPC calls. Allocation rules remain unverified; APR is not calculated.\n", len(report.Campaigns), report.RPCRequests)
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(report); err != nil {
+		return err
+	}
+	if filename != "" {
+		return saveResult(filename, buffer.Bytes(), diagnostics)
+	}
+	_, err = output.Write(buffer.Bytes())
+	return err
 }
 
 func saveResult(filename string, data []byte, diagnostics io.Writer) error {
