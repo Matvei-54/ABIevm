@@ -175,6 +175,102 @@
                 }
             }
         },
+        "/reservesStakedao/{network}/bold-campaigns": {
+            "get": {
+                "description": "Отдельный исследовательский запуск boldCampaigns.go: события кампаний, incentives(id), receipt и сверка финансирования на указанном блоке. Без основного расчёта пулов, цен и Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, таймаут 2 минуты. Неподтверждённые правила распределения оставляют historicalApr/currentApr null.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "StakeDao"
+                ],
+                "summary": "Проверить кампании дополнительных наград BOLD/USDC",
+                "operationId": "getStakeDaoBOLDCampaigns",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ethereum"
+                        ],
+                        "type": "string",
+                        "description": "Поддерживаемая сеть",
+                        "name": "network",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "26450710",
+                        "example": "26450710",
+                        "description": "Первый блок создания кампаний, включительно",
+                        "name": "fromBlock",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "26456929",
+                        "example": "26456929",
+                        "description": "Конечный блок и snapshot состояния, включительно",
+                        "name": "block",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/stakedao.BOLDCampaignReport"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "408": {
+                        "description": "Request Timeout",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "504": {
+                        "description": "Gateway Timeout",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/reservesStakedao/{network}/diagnostics": {
             "get": {
                 "description": "Стандартные 2/5 пулов или произвольные 1–5 gauge, без истории регистраций и Postgres. Состав APR, цены, торговая APY поддержанных моделей, маршрут наград BOLD. weethFeeDays отдельно включает скан swaps и оценку fee APR только для weETH/WETH. Не более 5 RPC/с и 300 попыток.",
@@ -1354,6 +1450,159 @@
                 },
                 "windowDays": {
                     "type": "integer"
+                }
+            }
+        },
+        "stakedao.BOLDAllocationEvidence": {
+            "type": "object",
+            "properties": {
+                "campaignId": {
+                    "type": "integer"
+                },
+                "capitalUsdSeconds": {
+                    "description": "integral of eligible vault capital, USD * seconds",
+                    "type": "string"
+                },
+                "end": {
+                    "type": "integer"
+                },
+                "evidenceHash": {
+                    "type": "string"
+                },
+                "netRewardRaw": {
+                    "type": "string"
+                },
+                "rewardUnitUsd": {
+                    "type": "string"
+                },
+                "rulesReference": {
+                    "type": "string"
+                },
+                "snapshotHash": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "integer"
+                },
+                "valuationReference": {
+                    "type": "string"
+                },
+                "vault": {
+                    "type": "string"
+                }
+            }
+        },
+        "stakedao.BOLDCampaignRecord": {
+            "type": "object",
+            "properties": {
+                "allocation": {
+                    "$ref": "#/definitions/stakedao.BOLDAllocationEvidence"
+                },
+                "allocationStatus": {
+                    "type": "string"
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "amountRaw": {
+                    "type": "string"
+                },
+                "creationBlock": {
+                    "type": "integer"
+                },
+                "end": {
+                    "type": "integer"
+                },
+                "fundingStatus": {
+                    "type": "string"
+                },
+                "historicalApr": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "logIndex": {
+                    "type": "integer"
+                },
+                "periodStatus": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "start": {
+                    "type": "integer"
+                },
+                "transactionHash": {
+                    "type": "string"
+                }
+            }
+        },
+        "stakedao.BOLDCampaignReport": {
+            "type": "object",
+            "properties": {
+                "blockHash": {
+                    "type": "string"
+                },
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "blockTimestamp": {
+                    "type": "integer"
+                },
+                "campaigns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/stakedao.BOLDCampaignRecord"
+                    }
+                },
+                "coverage": {
+                    "description": "creation blocks, NOT full reward periods",
+                    "type": "string"
+                },
+                "currentApr": {
+                    "description": "historical observations are never current APR",
+                    "type": "string"
+                },
+                "distributor": {
+                    "type": "string"
+                },
+                "fromBlock": {
+                    "type": "integer"
+                },
+                "gauge": {
+                    "type": "string"
+                },
+                "ipfsHash": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "root": {
+                    "type": "string"
+                },
+                "rpcRequests": {
+                    "type": "integer"
+                },
+                "scanComplete": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                },
+                "vault": {
+                    "type": "string"
                 }
             }
         }

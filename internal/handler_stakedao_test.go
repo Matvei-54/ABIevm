@@ -5,6 +5,7 @@ import (
 	"ABIevm/internal/service/stakedao"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -417,4 +418,145 @@ func newStakeDAOTestServer(priceService prices.Provider) *Server {
 	handler.stakeDao = stakedao.NewStakeDAOService(priceService)
 	server.routes(handler)
 	return server
+}
+
+func TestBOLDCampaignSwaggerRouteIsSeparateAndReturnsShareableJSON(t *testing.T) {
+	t.Setenv("STAKEDAO_ETHEREUM_RPC_URL", "https://must-not-connect.invalid")
+	store := &unavailableRegistry{}
+	handler := NewHandlerWithRegistry(store)
+	server := &Server{e: echo.New()}
+	server.routes(handler)
+	swagger := httptest.NewRecorder()
+	server.e.ServeHTTP(swagger, httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil))
+	var spec struct {
+		Paths map[string]struct {
+			Get struct {
+				OperationID string `json:"operationId"`
+				Parameters  []struct {
+					Name     string
+					Required bool
+					Default  interface{}
+				}
+			}
+		}
+		Definitions map[string]struct {
+			Properties map[string]struct{ Type string }
+		}
+	}
+	if swagger.Code != 200 || json.Unmarshal(swagger.Body.Bytes(), &spec) != nil {
+		t.Fatalf("Swagger document unavailable: %d", swagger.Code)
+	}
+	operation := spec.Paths["/reservesStakedao/{network}/bold-campaigns"].Get
+	if operation.OperationID != "getStakeDaoBOLDCampaigns" || len(operation.Parameters) != 3 || spec.Definitions["stakedao.BOLDCampaignReport"].Properties["blockHash"].Type != "string" {
+		t.Fatal("Swagger is missing the callable BOLD method or correct JSON hash type")
+	}
+	for _, p := range operation.Parameters {
+		if !p.Required || p.Name != "network" && p.Default == nil {
+			t.Fatal("Swagger is missing required parameters or historical example defaults")
+		}
+	}
+	called := 0
+	handler.boldCampaigns = func(_ context.Context, network string, from, block uint64) (*stakedao.BOLDCampaignReport, error) {
+		called++
+		if network != "ethereum" || from != 26450710 || block != 26456929 {
+			t.Fatal("incorrect selection forwarded")
+		}
+		return &stakedao.BOLDCampaignReport{ScanComplete: true, FromBlock: from, BlockNumber: block, Status: "funding_verified_allocation_unavailable",
+			Gauge: common.HexToAddress("0x07a01471fa544d9c6531b631e6a96a79a9ad05e9"),
+			Campaigns: []stakedao.BOLDCampaignRecord{
+				{ID: 2593, FundingStatus: "verified_router_campaign_funding", AllocationStatus: "unavailable", Reasons: []string{"allocation_rules_unverified"}},
+				{ID: 2594, FundingStatus: "verified_router_campaign_funding", AllocationStatus: "unavailable", Reasons: []string{"allocation_rules_unverified"}},
+			}}, nil
+	}
+	const path = "/reservesStakedao/ethereum/bold-campaigns?fromBlock=26450710&block=26456929"
+	response := httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	var report stakedao.BOLDCampaignReport
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &report) != nil || len(report.Campaigns) != 2 || report.Campaigns[0].ID != 2593 || report.Campaigns[1].ID != 2594 || report.CurrentAPR != nil || called != 1 || store.called {
+		t.Fatalf("research route did not return its isolated report: %d %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"historicalApr":null`) || !strings.Contains(response.Body.String(), `"currentApr":null`) || strings.Contains(response.Body.String(), `"pools"`) || !strings.HasPrefix(response.Header().Get("Content-Type"), "application/json") {
+		t.Fatal("nullable research JSON was mixed with pool response")
+	}
+	for _, query := range []string{"", "fromBlock=1", "block=2", "fromBlock=0&block=1", "fromBlock=-1&block=2", "fromBlock=2&block=1", "fromBlock=1&block=240001", "fromBlock=1&block=0x10", "fromBlock=1&block=latest", "fromBlock=1&block=18446744073709551616", "fromBlock=1&block=2&block=3", "fromBlock=1&fromBlock=2&block=3"} {
+		response = httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/ethereum/bold-campaigns?"+query, nil))
+		if response.Code != 400 || called != 1 {
+			t.Fatalf("invalid selection reached RPC: %s -> %d", query, response.Code)
+		}
+	}
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/reservesStakedao/base/bold-campaigns?fromBlock=1&block=2", nil))
+	if response.Code != 400 || called != 1 {
+		t.Fatal("unsupported network reached inspector")
+	}
+	for _, tc := range []struct {
+		err    error
+		status int
+		reason string
+	}{
+		{errors.New("https://provider.invalid/private-token: internal RPC message"), 502, "bold_campaign_check_failed"},
+		{context.DeadlineExceeded, 504, "request_timeout"},
+		{context.Canceled, 408, "request_canceled"},
+		{stakedao.ErrBOLDCampaignRPCConfig, 503, "bold_campaign_rpc_not_configured"},
+		{stakedao.ErrBOLDCampaignInvalidRequest, 400, "bold_campaign_invalid_request"},
+	} {
+		handler.boldCampaigns = func(context.Context, string, uint64, uint64) (*stakedao.BOLDCampaignReport, error) {
+			return nil, tc.err
+		}
+		response = httptest.NewRecorder()
+		server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		var body map[string]string
+		json.Unmarshal(response.Body.Bytes(), &body)
+		if response.Code != tc.status || body["reason"] != tc.reason || strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), "provider.invalid") {
+			t.Fatalf("unsafe/incorrect failure: %d %s", response.Code, response.Body.String())
+		}
+	}
+	handler.boldCampaigns = func(context.Context, string, uint64, uint64) (*stakedao.BOLDCampaignReport, error) {
+		return &stakedao.BOLDCampaignReport{ScanComplete: true, FromBlock: 26450710, BlockNumber: 26456928}, nil
+	}
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	if response.Code != 502 || !strings.Contains(response.Body.String(), "bold_campaign_response_mismatch") {
+		t.Fatal("mismatched snapshot accepted")
+	}
+	if store.called {
+		t.Fatal("campaign inspection touched registry")
+	}
+}
+
+func TestBOLDCampaignRouteUsesRealInspectorAndRedactsRPCFailure(t *testing.T) {
+	var calls atomic.Int32
+	rpc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID     json.RawMessage
+			Method string
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+			return
+		}
+		calls.Add(1)
+		if req.Method != "eth_chainId" {
+			t.Errorf("unexpected method %s", req.Method)
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"jsonrpc": "2.0", "id": req.ID, "error": map[string]interface{}{"code": -32000, "message": "https://provider.invalid/private-token unavailable"}})
+	}))
+	defer rpc.Close()
+	t.Setenv("STAKEDAO_ETHEREUM_RPC_URL", rpc.URL+"/private-token")
+	t.Setenv("STAKEDAO_ETHEREUM_LOGS_RPC_URL", "")
+	store := &unavailableRegistry{}
+	server := NewServerWithRegistry(store)
+	const path = "/reservesStakedao/ethereum/bold-campaigns?fromBlock=26450710&block=26456929"
+	response := httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	if response.Code != 502 || calls.Load() != 1 || store.called || !strings.Contains(response.Body.String(), "bold_campaign_chain_mismatch_or_unavailable") || strings.Contains(response.Body.String(), "private-token") {
+		t.Fatalf("real inspector failure not exposed safely: %d %s", response.Code, response.Body.String())
+	}
+	t.Setenv("STAKEDAO_ETHEREUM_RPC_URL", "")
+	response = httptest.NewRecorder()
+	server.e.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	if response.Code != 503 || calls.Load() != 1 || !strings.Contains(response.Body.String(), "bold_campaign_rpc_not_configured") {
+		t.Fatal("missing RPC configuration triggered a request")
+	}
 }

@@ -659,6 +659,108 @@ definitions:
       windowDays:
         type: integer
     type: object
+  stakedao.BOLDAllocationEvidence:
+    properties:
+      campaignId:
+        type: integer
+      capitalUsdSeconds:
+        description: integral of eligible vault capital, USD * seconds
+        type: string
+      end:
+        type: integer
+      evidenceHash:
+        type: string
+      netRewardRaw:
+        type: string
+      rewardUnitUsd:
+        type: string
+      rulesReference:
+        type: string
+      snapshotHash:
+        type: string
+      start:
+        type: integer
+      valuationReference:
+        type: string
+      vault:
+        type: string
+    type: object
+  stakedao.BOLDCampaignRecord:
+    properties:
+      allocation:
+        $ref: '#/definitions/stakedao.BOLDAllocationEvidence'
+      allocationStatus:
+        type: string
+      amount:
+        type: string
+      amountRaw:
+        type: string
+      creationBlock:
+        type: integer
+      end:
+        type: integer
+      fundingStatus:
+        type: string
+      historicalApr:
+        type: string
+      id:
+        type: integer
+      logIndex:
+        type: integer
+      periodStatus:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      start:
+        type: integer
+      transactionHash:
+        type: string
+    type: object
+  stakedao.BOLDCampaignReport:
+    properties:
+      blockHash:
+        type: string
+      blockNumber:
+        type: integer
+      blockTimestamp:
+        type: integer
+      campaigns:
+        items:
+          $ref: '#/definitions/stakedao.BOLDCampaignRecord'
+        type: array
+      coverage:
+        description: creation blocks, NOT full reward periods
+        type: string
+      currentApr:
+        description: historical observations are never current APR
+        type: string
+      distributor:
+        type: string
+      fromBlock:
+        type: integer
+      gauge:
+        type: string
+      ipfsHash:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      root:
+        type: string
+      rpcRequests:
+        type: integer
+      scanComplete:
+        type: boolean
+      status:
+        type: string
+      token:
+        type: string
+      vault:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
@@ -781,6 +883,76 @@ paths:
               type: string
             type: object
       summary: Получить пулы StakeDAO из блокчейна
+      tags:
+      - StakeDao
+  /reservesStakedao/{network}/bold-campaigns:
+    get:
+      description: 'Отдельный исследовательский запуск boldCampaigns.go: события кампаний,
+        incentives(id), receipt и сверка финансирования на указанном блоке. Без основного
+        расчёта пулов, цен и Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, таймаут
+        2 минуты. Неподтверждённые правила распределения оставляют historicalApr/currentApr
+        null.'
+      operationId: getStakeDaoBOLDCampaigns
+      parameters:
+      - description: Поддерживаемая сеть
+        enum:
+        - ethereum
+        in: path
+        name: network
+        required: true
+        type: string
+      - default: "26450710"
+        description: Первый блок создания кампаний, включительно
+        example: "26450710"
+        in: query
+        name: fromBlock
+        required: true
+        type: string
+      - default: "26456929"
+        description: Конечный блок и snapshot состояния, включительно
+        example: "26456929"
+        in: query
+        name: block
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/stakedao.BOLDCampaignReport'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "408":
+          description: Request Timeout
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "504":
+          description: Gateway Timeout
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Проверить кампании дополнительных наград BOLD/USDC
       tags:
       - StakeDao
   /reservesStakedao/{network}/diagnostics:

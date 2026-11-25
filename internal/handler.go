@@ -33,6 +33,7 @@ type Handler struct {
 	abiLoadFetcher *AbiLoadFetcher
 	curveService   *internal.CurveService
 	stakeDao       *stakedao.StakeDAOService
+	boldCampaigns  func(context.Context, string, uint64, uint64) (*stakedao.BOLDCampaignReport, error)
 }
 
 func NewHandler() *Handler { return NewHandlerWithRegistry(nil) }
@@ -45,6 +46,7 @@ func NewHandlerWithRegistry(store stakedao.RegistryStore) *Handler {
 		abiLoadFetcher: NewAbiLoadFetcher(),
 		curveService:   internal.NewCurveService(),
 		stakeDao:       stakedao.NewStakeDAOServiceWithRegistry(tokenPrices, store),
+		boldCampaigns:  stakedao.InspectBOLDCampaigns,
 	}
 }
 
@@ -285,6 +287,55 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("requested block %d differs from calculation block %d", options.BlockNumber, result.BlockNumber)})
 	}
 	return c.JSON(http.StatusOK, result)
+}
+
+// @Summary      Проверить кампании дополнительных наград BOLD/USDC
+// @ID           getStakeDaoBOLDCampaigns
+// @Description  Отдельный исследовательский запуск boldCampaigns.go: события кампаний, incentives(id), receipt и сверка финансирования на указанном блоке. Без основного расчёта пулов, цен и Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, таймаут 2 минуты. Неподтверждённые правила распределения оставляют historicalApr/currentApr null.
+// @Tags         StakeDao
+// @Produce      json
+// @Param        network path string true "Поддерживаемая сеть" Enums(ethereum)
+// @Param        fromBlock query string true "Первый блок создания кампаний, включительно" default(26450710) example(26450710)
+// @Param        block query string true "Конечный блок и snapshot состояния, включительно" default(26456929) example(26456929)
+// @Success      200 {object} stakedao.BOLDCampaignReport
+// @Failure      400 {object} map[string]string
+// @Failure      408 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Failure      503 {object} map[string]string
+// @Failure      504 {object} map[string]string
+// @Router       /reservesStakedao/{network}/bold-campaigns [get]
+func (h *Handler) HandleGetStakeDaoBOLDCampaigns(c echo.Context) error {
+	if c.Param("network") != "ethereum" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "BOLD campaigns currently support only ethereum", "reason": "unsupported_network"})
+	}
+	from, fromErr := strconv.ParseUint(c.QueryParam("fromBlock"), 10, 64)
+	block, blockErr := strconv.ParseUint(c.QueryParam("block"), 10, 64)
+	if fromErr != nil || blockErr != nil || stakedao.ValidateBOLDCampaignRange(from, block) != nil || len(c.QueryParams()["fromBlock"]) != 1 || len(c.QueryParams()["block"]) != 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "fromBlock and block must be positive decimal block numbers; inclusive range must contain at most 240000 blocks", "reason": "bold_campaign_invalid_request"})
+	}
+	inspect := h.boldCampaigns
+	if inspect == nil {
+		inspect = stakedao.InspectBOLDCampaigns
+	}
+	report, err := inspect(c.Request().Context(), c.Param("network"), from, block)
+	if err != nil {
+		status := http.StatusBadGateway
+		switch {
+		case errors.Is(err, stakedao.ErrUnsupportedNetwork), errors.Is(err, stakedao.ErrBOLDCampaignInvalidRequest):
+			status = http.StatusBadRequest
+		case errors.Is(err, stakedao.ErrBOLDCampaignRPCConfig):
+			status = http.StatusServiceUnavailable
+		case errors.Is(err, context.DeadlineExceeded):
+			status = http.StatusGatewayTimeout
+		case errors.Is(err, context.Canceled):
+			status = http.StatusRequestTimeout
+		}
+		return c.JSON(status, map[string]string{"error": "BOLD/USDC campaign check failed", "reason": stakedao.BOLDCampaignFailureReason(err)})
+	}
+	if report == nil || !report.ScanComplete || report.BlockNumber != block || report.FromBlock != from {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "BOLD campaign check returned an incomplete or mismatched snapshot", "reason": "bold_campaign_response_mismatch"})
+	}
+	return c.JSON(http.StatusOK, report)
 }
 
 func parseStakeDAOGauges(text string) ([]common.Address, error) {

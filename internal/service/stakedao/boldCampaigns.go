@@ -1,10 +1,11 @@
 package stakedao
 
-// Isolated BOLD/USDC research module. Nothing in the service/HTTP path calls it.
+// Isolated BOLD/USDC research module. Only explicit research CLI/HTTP calls run
+// it; ordinary pool loading and APR/APY calculations never invoke this module.
 // Usage: NewBOLDCampaignInspector(stateRPC, logsRPC, nil).Inspect(ctx, from, block).
 // Both clients can be *ethclient.Client; caller owns their lifetime. State calls
 // require historical eth_call, log calls need the requested eth_getLogs range.
-// No API, database, transactions, background jobs or automatic RPC fallback.
+// No external data API, database, transactions, background jobs or automatic RPC fallback.
 //
 // Sources: verified CampaignRewardsDistributor + UniversalRewardDistributor at
 // https://etherscan.io/address/0xd4898a378ea555595c4e7dbde722b134a3f346d1#code
@@ -17,10 +18,12 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
+	"ABIevm/internal/rpcclient"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -43,6 +46,78 @@ const (
 	boldResearchMaxReceipts  = 32
 	boldResearchMaxRPC       = 300
 )
+
+// Only local, fixed reason codes have this type. Provider error strings never do.
+type boldCampaignFailure string
+
+func (e boldCampaignFailure) Error() string { return string(e) }
+
+var (
+	ErrBOLDCampaignInvalidRequest = boldCampaignFailure("bold_campaign_invalid_request")
+	ErrBOLDCampaignRPCConfig      = boldCampaignFailure("bold_campaign_rpc_not_configured")
+)
+
+func ValidateBOLDCampaignRange(from, block uint64) error {
+	if from == 0 || block < from || (block-from)/1500+1 > boldResearchMaxRanges {
+		return ErrBOLDCampaignInvalidRequest
+	}
+	return nil
+}
+
+// BOLDCampaignFailureReason is safe to return in HTTP JSON. It does not expose
+// RPC URLs, access tokens, arbitrary provider messages or resolver errors.
+func BOLDCampaignFailureReason(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "request_timeout"
+	case errors.Is(err, context.Canceled):
+		return "request_canceled"
+	case errors.Is(err, ErrUnsupportedNetwork):
+		return "unsupported_network"
+	}
+	var failure boldCampaignFailure
+	if errors.As(err, &failure) {
+		return string(failure)
+	}
+	return "bold_campaign_check_failed"
+}
+
+// InspectBOLDCampaigns is the explicit HTTP/manual entry point. It reads only
+// the existing RPC environment settings; no registry, price service or APR
+// aggregation is involved. Both transports also share the application limiter.
+func InspectBOLDCampaigns(ctx context.Context, network string, from, block uint64) (*BOLDCampaignReport, error) {
+	if network != "ethereum" {
+		return nil, ErrUnsupportedNetwork
+	}
+	if err := ValidateBOLDCampaignRange(from, block); err != nil {
+		return nil, err
+	}
+	stateURL := strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_RPC_URL"))
+	logsURL := strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_LOGS_RPC_URL"))
+	if stateURL == "" {
+		return nil, ErrBOLDCampaignRPCConfig
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	state, err := rpcclient.DialContext(ctx, stateURL)
+	if err != nil {
+		return nil, boldCampaignFailure("bold_campaign_state_rpc_unavailable")
+	}
+	defer state.Close()
+	logs := state
+	if logsURL != "" && logsURL != stateURL {
+		logs, err = rpcclient.DialContext(ctx, logsURL)
+		if err != nil {
+			return nil, boldCampaignFailure("bold_campaign_logs_rpc_unavailable")
+		}
+		defer logs.Close()
+	}
+	report, err := NewBOLDCampaignInspector(state, logs, nil).Inspect(ctx, from, block)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return report, err
+}
 
 type BOLDCampaignStateReader interface {
 	ChainID(context.Context) (*big.Int, error)
@@ -70,8 +145,8 @@ type BOLDAllocationResolver interface {
 // campaign funding. Snapshot-price conversion yields a historical ESTIMATE.
 type BOLDAllocationEvidence struct {
 	CampaignID         uint64         `json:"campaignId"`
-	SnapshotHash       common.Hash    `json:"snapshotHash"`
-	Vault              common.Address `json:"vault"`
+	SnapshotHash       common.Hash    `json:"snapshotHash" swaggertype:"string"`
+	Vault              common.Address `json:"vault" swaggertype:"string"`
 	Start              uint64         `json:"start"`
 	End                uint64         `json:"end"`
 	NetRewardRaw       string         `json:"netRewardRaw"`
@@ -79,7 +154,7 @@ type BOLDAllocationEvidence struct {
 	CapitalUSDSeconds  string         `json:"capitalUsdSeconds"` // integral of eligible vault capital, USD * seconds
 	RulesReference     string         `json:"rulesReference"`
 	ValuationReference string         `json:"valuationReference"`
-	EvidenceHash       common.Hash    `json:"evidenceHash"`
+	EvidenceHash       common.Hash    `json:"evidenceHash" swaggertype:"string"`
 }
 
 type BOLDCampaignRecord struct {
@@ -90,7 +165,7 @@ type BOLDCampaignRecord struct {
 	Amount           string                  `json:"amount"`
 	PeriodStatus     string                  `json:"periodStatus"`
 	CreationBlock    uint64                  `json:"creationBlock"`
-	TransactionHash  common.Hash             `json:"transactionHash"`
+	TransactionHash  common.Hash             `json:"transactionHash" swaggertype:"string"`
 	LogIndex         uint                    `json:"logIndex"`
 	FundingStatus    string                  `json:"fundingStatus"`
 	AllocationStatus string                  `json:"allocationStatus"`
@@ -103,17 +178,17 @@ type BOLDCampaignReport struct {
 	Status         string               `json:"status"`
 	BlockNumber    uint64               `json:"blockNumber"`
 	BlockTimestamp uint64               `json:"blockTimestamp"`
-	BlockHash      common.Hash          `json:"blockHash"`
+	BlockHash      common.Hash          `json:"blockHash" swaggertype:"string"`
 	FromBlock      uint64               `json:"fromBlock"`
 	Coverage       string               `json:"coverage"` // creation blocks, NOT full reward periods
 	ScanComplete   bool                 `json:"scanComplete"`
 	RPCRequests    int                  `json:"rpcRequests"`
-	Vault          common.Address       `json:"vault"`
-	Gauge          common.Address       `json:"gauge"`
-	Token          common.Address       `json:"token"`
-	Distributor    common.Address       `json:"distributor"`
-	Root           common.Hash          `json:"root"`
-	IPFSHash       common.Hash          `json:"ipfsHash"`
+	Vault          common.Address       `json:"vault" swaggertype:"string"`
+	Gauge          common.Address       `json:"gauge" swaggertype:"string"`
+	Token          common.Address       `json:"token" swaggertype:"string"`
+	Distributor    common.Address       `json:"distributor" swaggertype:"string"`
+	Root           common.Hash          `json:"root" swaggertype:"string"`
+	IPFSHash       common.Hash          `json:"ipfsHash" swaggertype:"string"`
 	Campaigns      []BOLDCampaignRecord `json:"campaigns"`
 	CurrentAPR     *string              `json:"currentApr"` // historical observations are never current APR
 	Reasons        []string             `json:"reasons"`
@@ -137,8 +212,8 @@ func NewBOLDCampaignInspector(state BOLDCampaignStateReader, logs BOLDCampaignLo
 // This budget covers the built-in reader; a future resolver must separately
 // honour the application's RPC limits if it performs additional network reads.
 func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64) (*BOLDCampaignReport, error) {
-	if a == nil || a.state == nil || a.logs == nil || from == 0 || block < from || (block-from)/1500+1 > boldResearchMaxRanges {
-		return nil, errors.New("bold_campaign_invalid_request")
+	if a == nil || a.state == nil || a.logs == nil || ValidateBOLDCampaignRange(from, block) != nil {
+		return nil, ErrBOLDCampaignInvalidRequest
 	}
 	r := &BOLDCampaignReport{Status: "unavailable", FromBlock: from, BlockNumber: block,
 		Coverage: "campaign_creations_in_requested_blocks_only", Vault: common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad"),
@@ -151,7 +226,7 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 		}
 		chain, err := readChain(ctx)
 		if err != nil || chain == nil || chain.Cmp(big.NewInt(1)) != 0 {
-			return nil, errors.New("bold_campaign_chain_mismatch_or_unavailable")
+			return nil, boldCampaignFailure("bold_campaign_chain_mismatch_or_unavailable")
 		}
 	}
 	first, err := s.header(ctx, a.state.HeaderByNumber, from)
@@ -166,7 +241,7 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 	for _, h := range []*types.Header{first, end} {
 		other, err := s.header(ctx, a.logs.HeaderByNumber, h.Number.Uint64())
 		if err != nil || other.Hash() != h.Hash() {
-			return nil, errors.New("bold_campaign_log_source_mismatch")
+			return nil, boldCampaignFailure("bold_campaign_log_source_mismatch")
 		}
 	}
 	if err := s.readRoute(ctx); err != nil {
@@ -185,10 +260,10 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 		logs, err := a.logs.FilterLogs(ctx, ethereum.FilterQuery{FromBlock: new(big.Int).SetUint64(start), ToBlock: new(big.Int).SetUint64(through),
 			Addresses: []common.Address{boldRouteRouter, boldCampaignDistributor}, Topics: [][]common.Hash{{added.ID, pulled.ID}}})
 		if err != nil {
-			return nil, errors.New("bold_campaign_log_history_unavailable")
+			return nil, boldCampaignFailure("bold_campaign_log_history_unavailable")
 		}
 		if len(logs) > boldResearchMaxEvents-len(seen) {
-			return nil, errors.New("bold_campaign_event_limit")
+			return nil, boldCampaignFailure("bold_campaign_event_limit")
 		}
 		for _, l := range logs {
 			if err := boldResearchValidateLog(l, start, through); err != nil {
@@ -197,7 +272,7 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 			key := l.TxHash.Hex() + ":" + new(big.Int).SetUint64(uint64(l.Index)).String()
 			if old, exists := seen[key]; exists {
 				if !boldResearchSameLog(old, l) {
-					return nil, errors.New("bold_campaign_conflicting_logs")
+					return nil, boldCampaignFailure("bold_campaign_conflicting_logs")
 				}
 				continue
 			}
@@ -211,17 +286,17 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 					continue
 				}
 				if id >= s.count {
-					return nil, errors.New("bold_campaign_id_outside_snapshot_registry")
+					return nil, boldCampaignFailure("bold_campaign_id_outside_snapshot_registry")
 				}
 				if _, duplicate := entries[id]; duplicate {
-					return nil, errors.New("bold_campaign_duplicate_id")
+					return nil, boldCampaignFailure("bold_campaign_duplicate_id")
 				}
 				entries[id] = l
 				if len(entries) > boldResearchMaxCampaigns {
-					return nil, errors.New("bold_campaign_count_limit")
+					return nil, boldCampaignFailure("bold_campaign_count_limit")
 				}
 			} else if l.Address != boldRouteRouter || l.Topics[0] != pulled.ID {
-				return nil, errors.New("bold_campaign_unexpected_event")
+				return nil, boldCampaignFailure("bold_campaign_unexpected_event")
 			}
 		}
 		if through == block {
@@ -248,7 +323,7 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 			id := ids[start+j]
 			c, match, valid := decodeBoldCampaign(v, id, end.Time)
 			if !valid {
-				return nil, errors.New("bold_campaign_invalid_getter")
+				return nil, boldCampaignFailure("bold_campaign_invalid_getter")
 			}
 			if !match {
 				continue
@@ -274,18 +349,18 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 		receipt := receipts[c.TransactionHash]
 		if receipt == nil {
 			if len(receipts) >= boldResearchMaxReceipts {
-				return nil, errors.New("bold_campaign_receipt_limit")
+				return nil, boldCampaignFailure("bold_campaign_receipt_limit")
 			}
 			if err := s.reserve(ctx); err != nil {
 				return nil, err
 			}
 			receipt, err = a.state.TransactionReceipt(ctx, c.TransactionHash)
 			if err != nil || receipt == nil || receipt.Status != types.ReceiptStatusSuccessful || receipt.TxHash != c.TransactionHash || receipt.BlockNumber == nil || !receipt.BlockNumber.IsUint64() || receipt.BlockNumber.Uint64() != c.CreationBlock {
-				return nil, errors.New("bold_campaign_receipt_unavailable_or_invalid")
+				return nil, boldCampaignFailure("bold_campaign_receipt_unavailable_or_invalid")
 			}
 			h, err := s.header(ctx, a.state.HeaderByNumber, c.CreationBlock)
 			if err != nil || h.Hash() != receipt.BlockHash {
-				return nil, errors.New("bold_campaign_receipt_block_mismatch")
+				return nil, boldCampaignFailure("bold_campaign_receipt_block_mismatch")
 			}
 			if err := boldResearchVerifyFunding(receipt, verifiedEntries, parsed); err != nil {
 				return nil, err
@@ -299,7 +374,7 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 		for _, before := range []*types.Header{first, end} {
 			after, err := s.header(ctx, readHeader, before.Number.Uint64())
 			if err != nil || after.Hash() != before.Hash() {
-				return nil, errors.New("bold_campaign_snapshot_changed")
+				return nil, boldCampaignFailure("bold_campaign_snapshot_changed")
 			}
 		}
 	}
@@ -339,7 +414,7 @@ func (a *BOLDCampaignInspector) Inspect(ctx context.Context, from, block uint64)
 	if a.allocation != nil {
 		checked, err := s.header(ctx, a.state.HeaderByNumber, block)
 		if err != nil || checked.Hash() != r.BlockHash {
-			return nil, errors.New("bold_campaign_snapshot_changed")
+			return nil, boldCampaignFailure("bold_campaign_snapshot_changed")
 		}
 	}
 	return r, nil
@@ -355,20 +430,20 @@ func CalculateBOLDHistoricalAPR(r BOLDCampaignReport, c BOLDCampaignRecord, e BO
 		r.Gauge != boldRouteGauge || r.Token != boldRouteToken || r.Distributor != boldCampaignDistributor || r.Vault != common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad") ||
 		e.SnapshotHash != r.BlockHash || e.CampaignID != c.ID || e.Vault != r.Vault || e.Start != c.Start || e.End != c.End ||
 		e.EvidenceHash == (common.Hash{}) || strings.TrimSpace(e.RulesReference) == "" || strings.TrimSpace(e.ValuationReference) == "" {
-		return "", errors.New("allocation_evidence_unverified_or_mismatched")
+		return "", boldCampaignFailure("allocation_evidence_unverified_or_mismatched")
 	}
 	if e.End <= e.Start || e.End > r.BlockTimestamp {
-		return "", errors.New("allocation_period_not_completed")
+		return "", boldCampaignFailure("allocation_period_not_completed")
 	}
 	net, ok := new(big.Int).SetString(e.NetRewardRaw, 10)
 	funded, fundedOK := new(big.Int).SetString(c.AmountRaw, 10)
 	if !ok || !fundedOK || net.Sign() < 0 || funded.Sign() < 0 || funded.BitLen() > 256 || net.Cmp(funded) > 0 {
-		return "", errors.New("allocation_reward_exceeds_funding_or_invalid")
+		return "", boldCampaignFailure("allocation_reward_exceeds_funding_or_invalid")
 	}
 	price, priceErr := decimal.NewFromString(e.RewardUnitUSD)
 	capital, capitalErr := decimal.NewFromString(e.CapitalUSDSeconds)
 	if priceErr != nil || capitalErr != nil || !price.IsPositive() || !capital.IsPositive() {
-		return "", errors.New("allocation_price_or_capital_integral_missing")
+		return "", boldCampaignFailure("allocation_price_or_capital_integral_missing")
 	}
 	return decimal.NewFromBigInt(net, -18).Mul(price).Mul(decimal.NewFromInt(31536000)).Mul(decimal.NewFromInt(100)).Div(capital).String(), nil
 }
@@ -408,7 +483,7 @@ func (s *boldResearchRun) reserve(ctx context.Context) error {
 		return err
 	}
 	if s.report.RPCRequests >= boldResearchMaxRPC {
-		return errors.New("bold_campaign_rpc_budget_exceeded")
+		return boldCampaignFailure("bold_campaign_rpc_budget_exceeded")
 	}
 	if delay := time.Until(s.next); delay > 0 {
 		timer := time.NewTimer(delay)
@@ -430,7 +505,7 @@ func (s *boldResearchRun) header(ctx context.Context, read func(context.Context,
 	}
 	h, err := read(ctx, new(big.Int).SetUint64(n))
 	if err != nil || h == nil || h.Number == nil || !h.Number.IsUint64() || h.Number.Uint64() != n {
-		return nil, errors.New("bold_campaign_header_unavailable")
+		return nil, boldCampaignFailure("bold_campaign_header_unavailable")
 	}
 	return h, nil
 }
@@ -442,42 +517,42 @@ func (s *boldResearchRun) batch(ctx context.Context, reads []snapshotRead) ([][]
 	for i, read := range reads {
 		parsed, err := abi.JSON(strings.NewReader(read.abiJSON))
 		if err != nil {
-			return nil, errors.New("bold_campaign_invalid_abi")
+			return nil, boldCampaignFailure("bold_campaign_invalid_abi")
 		}
 		parsers[i] = parsed
 		data, err := parsed.Pack(read.method, read.args...)
 		if err != nil {
-			return nil, errors.New("bold_campaign_invalid_call")
+			return nil, boldCampaignFailure("bold_campaign_invalid_call")
 		}
 		inputs[i] = multicallInput{Target: read.target, AllowFailure: true, CallData: data}
 	}
 	data, err := a.Pack("aggregate3", inputs)
 	if err != nil {
-		return nil, errors.New("bold_campaign_invalid_multicall")
+		return nil, boldCampaignFailure("bold_campaign_invalid_multicall")
 	}
 	if err := s.reserve(ctx); err != nil {
 		return nil, err
 	}
 	data, err = s.owner.state.CallContract(ctx, ethereum.CallMsg{To: &stakeDAOMulticallAddress, Data: data}, new(big.Int).SetUint64(s.report.BlockNumber))
 	if err != nil {
-		return nil, errors.New("bold_campaign_contract_state_unavailable")
+		return nil, boldCampaignFailure("bold_campaign_contract_state_unavailable")
 	}
 	out, err := a.Unpack("aggregate3", data)
 	if err != nil || len(out) != 1 {
-		return nil, errors.New("bold_campaign_invalid_multicall_output")
+		return nil, boldCampaignFailure("bold_campaign_invalid_multicall_output")
 	}
 	items := *abi.ConvertType(out[0], new([]multicallOutput)).(*[]multicallOutput)
 	if len(items) != len(reads) {
-		return nil, errors.New("bold_campaign_invalid_multicall_output")
+		return nil, boldCampaignFailure("bold_campaign_invalid_multicall_output")
 	}
 	values := make([][]interface{}, len(reads))
 	for i, item := range items {
 		if !item.Success {
-			return nil, errors.New("bold_campaign_getter_unavailable")
+			return nil, boldCampaignFailure("bold_campaign_getter_unavailable")
 		}
 		values[i], err = parsers[i].Unpack(reads[i].method, item.ReturnData)
 		if err != nil {
-			return nil, errors.New("bold_campaign_invalid_getter_output")
+			return nil, boldCampaignFailure("bold_campaign_invalid_getter_output")
 		}
 	}
 	return values, nil
@@ -497,24 +572,24 @@ func (s *boldResearchRun) readRoute(ctx context.Context) error {
 		return err
 	}
 	if len(v[0]) != 5 || v[0][0] != r.Vault || v[0][1] != common.HexToAddress("0xefc6516323fbd28e80b85a497b65a86243a54b3e") || v[0][2] != boldRouteReceiver || v[0][3] != [4]byte{0xc7, 0x15, 0xe3, 0x73} || v[0][4] != false {
-		return errors.New("bold_campaign_registration_mismatch_or_shutdown")
+		return boldCampaignFailure("bold_campaign_registration_mismatch_or_shutdown")
 	}
 	for i, expected := range []common.Address{r.Vault, boldRouteRouter, boldRouteLegacy, controller, boldRouteExecutor} {
 		if len(v[i+1]) != 1 || v[i+1][0] != expected {
-			return errors.New("bold_campaign_reward_route_changed")
+			return boldCampaignFailure("bold_campaign_reward_route_changed")
 		}
 	}
 	if len(v[6]) != 1 || len(v[7]) != 1 || len(v[8]) != 1 {
-		return errors.New("bold_campaign_invalid_metadata")
+		return boldCampaignFailure("bold_campaign_invalid_metadata")
 	}
 	n, ok := v[6][0].(*big.Int)
 	root, rootOK := v[7][0].([32]byte)
 	ipfs, ipfsOK := v[8][0].([32]byte)
 	if !ok || n == nil || !n.IsUint64() || !rootOK || !ipfsOK {
-		return errors.New("bold_campaign_invalid_metadata")
+		return boldCampaignFailure("bold_campaign_invalid_metadata")
 	}
 	if len(v[9]) != 1 || v[9][0] != uint8(18) {
-		return errors.New("bold_campaign_reward_decimals_changed")
+		return boldCampaignFailure("bold_campaign_reward_decimals_changed")
 	}
 	s.count, r.Root, r.IPFSHash = n.Uint64(), root, ipfs
 	return nil
@@ -522,7 +597,7 @@ func (s *boldResearchRun) readRoute(ctx context.Context) error {
 
 func boldResearchValidateLog(l types.Log, from, through uint64) error {
 	if l.Removed || l.BlockNumber < from || l.BlockNumber > through || l.BlockHash == (common.Hash{}) || l.TxHash == (common.Hash{}) || len(l.Topics) == 0 {
-		return errors.New("bold_campaign_invalid_log")
+		return boldCampaignFailure("bold_campaign_invalid_log")
 	}
 	return nil
 }
@@ -545,16 +620,16 @@ func boldResearchAddress(h common.Hash) (common.Address, bool) {
 
 func boldResearchCampaignEvent(l types.Log, event abi.Event) (uint64, bool, error) {
 	if l.Address != boldCampaignDistributor || len(l.Topics) != 4 || l.Topics[0] != event.ID || len(l.Data) != 160 {
-		return 0, false, errors.New("bold_campaign_invalid_event")
+		return 0, false, boldCampaignFailure("bold_campaign_invalid_event")
 	}
 	g, gok := boldResearchAddress(l.Topics[2])
 	t, tok := boldResearchAddress(l.Topics[3])
 	id := new(big.Int).SetBytes(l.Topics[1][:])
 	if !gok || !tok || !id.IsUint64() {
-		return 0, false, errors.New("bold_campaign_invalid_event")
+		return 0, false, boldCampaignFailure("bold_campaign_invalid_event")
 	}
 	if _, err := event.Inputs.NonIndexed().Unpack(l.Data); err != nil {
-		return 0, false, errors.New("bold_campaign_invalid_event")
+		return 0, false, boldCampaignFailure("bold_campaign_invalid_event")
 	}
 	return id.Uint64(), g == boldRouteGauge && t == boldRouteToken, nil
 }
@@ -562,14 +637,14 @@ func boldResearchCampaignEvent(l types.Log, event abi.Event) (uint64, bool, erro
 func boldResearchCompareEvent(l types.Log, event abi.Event, v []interface{}) error {
 	data, err := event.Inputs.NonIndexed().Pack(v[8], v[2], v[3], v[4], v[7])
 	if err != nil || !bytes.Equal(data, l.Data) {
-		return errors.New("bold_campaign_event_getter_mismatch")
+		return boldCampaignFailure("bold_campaign_event_getter_mismatch")
 	}
 	return nil
 }
 
 func boldResearchVerifyFunding(receipt *types.Receipt, entries map[uint64]types.Log, parsed abi.ABI) error {
 	if len(receipt.Logs) > boldResearchMaxEvents {
-		return errors.New("bold_campaign_receipt_log_limit")
+		return boldCampaignFailure("bold_campaign_receipt_log_limit")
 	}
 	pulledEvent, addedEvent := parsed.Events["RewardsPulledToMerkle"], parsed.Events["IncentiveAdded"]
 	transfer := crypto.Keccak256Hash([]byte("Transfer(address,address,uint256)"))
@@ -578,34 +653,34 @@ func boldResearchVerifyFunding(receipt *types.Receipt, entries map[uint64]types.
 	seen := map[uint]bool{}
 	for _, lp := range receipt.Logs {
 		if lp == nil {
-			return errors.New("bold_campaign_invalid_receipt_log")
+			return boldCampaignFailure("bold_campaign_invalid_receipt_log")
 		}
 		l := *lp
 		if err := boldResearchValidateLog(l, receipt.BlockNumber.Uint64(), receipt.BlockNumber.Uint64()); err != nil {
 			return err
 		}
 		if l.BlockHash != receipt.BlockHash || l.TxHash != receipt.TxHash || l.TxIndex != receipt.TransactionIndex || seen[l.Index] {
-			return errors.New("bold_campaign_receipt_identity_mismatch")
+			return boldCampaignFailure("bold_campaign_receipt_identity_mismatch")
 		}
 		seen[l.Index] = true
 		if l.Address == boldRouteRouter && l.Topics[0] == pulledEvent.ID {
 			if len(l.Topics) != 3 || len(l.Data) != 32 {
-				return errors.New("bold_campaign_invalid_router_event")
+				return boldCampaignFailure("bold_campaign_invalid_router_event")
 			}
 			g, gok := boldResearchAddress(l.Topics[1])
 			token, tok := boldResearchAddress(l.Topics[2])
 			if !gok || !tok {
-				return errors.New("bold_campaign_invalid_router_event")
+				return boldCampaignFailure("bold_campaign_invalid_router_event")
 			}
 			if token != boldRouteToken {
 				continue
 			}
 			if g != boldRouteGauge {
-				return errors.New("bold_campaign_ambiguous_router_pull")
+				return boldCampaignFailure("bold_campaign_ambiguous_router_pull")
 			}
 			n := new(big.Int).SetBytes(l.Data)
 			if n.Sign() <= 0 || n.BitLen() > 128 {
-				return errors.New("bold_campaign_invalid_router_amount")
+				return boldCampaignFailure("bold_campaign_invalid_router_amount")
 			}
 			pulls++
 			pulled.Add(pulled, n)
@@ -617,29 +692,29 @@ func boldResearchVerifyFunding(receipt *types.Receipt, entries map[uint64]types.
 			}
 			if !match {
 				if common.BytesToAddress(l.Topics[3][12:]) == boldRouteToken {
-					return errors.New("bold_campaign_ambiguous_funding")
+					return boldCampaignFailure("bold_campaign_ambiguous_funding")
 				}
 				continue
 			}
 			expected, exists := entries[id]
 			if !exists || !boldResearchSameLog(expected, l) {
-				return errors.New("bold_campaign_incomplete_or_conflicting_history")
+				return boldCampaignFailure("bold_campaign_incomplete_or_conflicting_history")
 			}
 			v, _ := addedEvent.Inputs.NonIndexed().Unpack(l.Data)
 			if v[0] != boldRouteExecutor {
-				return errors.New("bold_campaign_unreviewed_funding_manager")
+				return boldCampaignFailure("bold_campaign_unreviewed_funding_manager")
 			}
 			funded.Add(funded, v[4].(*big.Int))
 			campaigns++
 		}
 		if l.Address == boldRouteToken && l.Topics[0] == transfer {
 			if len(l.Topics) != 3 || len(l.Data) != 32 {
-				return errors.New("bold_campaign_invalid_transfer")
+				return boldCampaignFailure("bold_campaign_invalid_transfer")
 			}
 			from, fok := boldResearchAddress(l.Topics[1])
 			to, tok := boldResearchAddress(l.Topics[2])
 			if !fok || !tok {
-				return errors.New("bold_campaign_invalid_transfer")
+				return boldCampaignFailure("bold_campaign_invalid_transfer")
 			}
 			n := new(big.Int).SetBytes(l.Data)
 			switch {
@@ -652,12 +727,12 @@ func boldResearchVerifyFunding(receipt *types.Receipt, entries map[uint64]types.
 			case from == boldRouteExecutor && to == boldRouteReceiver:
 				returned.Add(returned, n)
 			case from == boldRouteExecutor || to == boldRouteExecutor || from == boldRouteRouter || to == boldRouteRouter:
-				return errors.New("bold_campaign_unreviewed_transfer_path")
+				return boldCampaignFailure("bold_campaign_unreviewed_transfer_path")
 			}
 		}
 	}
 	if pulls != 1 || campaigns == 0 || pulled.Cmp(intoRouter) != 0 || pulled.Cmp(intoExecutor) != 0 || funded.Cmp(intoDistributor) != 0 || new(big.Int).Add(funded, returned).Cmp(pulled) != 0 {
-		return errors.New("bold_campaign_funding_not_reconciled")
+		return boldCampaignFailure("bold_campaign_funding_not_reconciled")
 	}
 	return nil
 }
