@@ -1,0 +1,425 @@
+{
+  "checkedOn": "2026-11-25",
+  "sourceRepository": "https://github.com/stake-dao/merkl-toolkit",
+  "sourceCommit": "84f2afdc9c2ac8d8f665c5219d0da348aa26e444",
+  "snapshot": {
+    "blockNumber": 26456929,
+    "blockHash": "0xd2da74c4e0a32e8f7cb17f967333aa00c77abfa3827e3e59ef7b0fe3e643c892",
+    "root": "0xbeafd406e6d206e131a4a37f4fa5fdc6e895422dcb1ff391bc8a54ff6c2d0af8",
+    "rootSource": "User responseBoldCapaings_1795623573048.json; not a fresh RPC read",
+    "ipfsHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "publication": {
+    "timestamp": 1795176071,
+    "dataBlockNumber": 26456172,
+    "merkleFile": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795176071/merkle.json"
+  },
+  "verification": {
+    "method": "Independent Go double-keccak Solidity ABI leaves, sorted-pair proofs, full tree rebuilt in published leaf order; Python integer payout and cumulative-delta reconciliation",
+    "rootMatchesUserSnapshot": true,
+    "fullRebuiltTreeMatches": true,
+    "accounts": 1162,
+    "allTokenProofsVerified": 2731,
+    "boldProofsVerified": 31,
+    "boldCumulativeAmountsUnchangedFromPayoutRoundToTargetRoot": true,
+    "campaignUserDeltasExactlyMatchPublishedCumulativeLeafChanges": true,
+    "vaultIsDirectBOLDClaimAccount": false,
+    "underlyingShareTransferHistoryIndependentlyReplayed": false
+  },
+  "campaigns": [
+    {
+      "id": 2593,
+      "vault": "0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad",
+      "gauge": "0x07a01471fa544d9c6531b631e6a96a79a9ad05e9",
+      "token": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+      "start": 1795023887,
+      "end": 1795046483,
+      "durationSeconds": 22596,
+      "fundedRaw": "10162926236299420784",
+      "rateRawPerSecond": "449766606315251",
+      "allocatedRaw": "10162926236299411596",
+      "allocatedTokens": "10.162926236299411596",
+      "recipients": 5,
+      "integerRateRemainderRaw": "9188",
+      "publishedWeightsAndPayoutArithmeticVerified": true
+    },
+    {
+      "id": 2594,
+      "vault": "0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad",
+      "gauge": "0x07a01471fa544d9c6531b631e6a96a79a9ad05e9",
+      "token": "0x6440f144b7e50d6a8439336510312d2f54beb01d",
+      "start": 1795046543,
+      "end": 1795110167,
+      "durationSeconds": 63624,
+      "fundedRaw": "349080457011333255452",
+      "rateRawPerSecond": "5486616009860009",
+      "allocatedRaw": "349080457011333212616",
+      "allocatedTokens": "349.080457011333212616",
+      "recipients": 15,
+      "integerRateRemainderRaw": "42836",
+      "publishedWeightsAndPayoutArithmeticVerified": true
+    }
+  ],
+  "totals": {
+    "fundedRaw": "359243383247632676236",
+    "allocatedRaw": "359243383247632624212",
+    "integerRateRemainderRaw": "52024",
+    "uniqueCampaignRecipients": 15
+  },
+  "sources": [
+    {
+      "path": "data/distributions/1795176071/merkle.json",
+      "url": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795176071/merkle.json",
+      "sha256": "ef0e0e2180465aefd5ba3e2be44feb59424d063732a8e5f2437a4f81c128f755"
+    },
+    {
+      "path": "data/distributions/1795176071/distribution.json",
+      "url": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795176071/distribution.json",
+      "sha256": "322b54668be80c5475ec74566fb60fe27154faf4c424cf2d3aa3807785f24f6c"
+    },
+    {
+      "path": "data/distributions/1795111271/distribution.json",
+      "url": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795111271/distribution.json",
+      "sha256": "d1c5497a4d04af943f81057bfbe1dd51ddc15fbe214f93d656a3469aa33afe77"
+    },
+    {
+      "path": "data/distributions/1795111271/gauges/0x543D3Ee7Cfa494E8ffCC18364D130C8eED4B90ad.json",
+      "url": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795111271/gauges/0x543D3Ee7Cfa494E8ffCC18364D130C8eED4B90ad.json",
+      "sha256": "b7b42db4dbe8cc7dfdfb3394d14a6720dce22a4b5a6a3e5bfc85bdf249986051"
+    },
+    {
+      "path": "data/distributions/1795089695/merkle.json",
+      "url": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795089695/merkle.json",
+      "sha256": "37585aed8224c09037df19892c19315a65d900b3ed36a7ba21d024a45d67e81b"
+    },
+    {
+      "path": "data/distributions/1795111271/merkle.json",
+      "url": "https://raw.githubusercontent.com/stake-dao/merkl-toolkit/84f2afdc9c2ac8d8f665c5219d0da348aa26e444/data/distributions/1795111271/merkle.json",
+      "sha256": "63166c248da2d8b1a7b4c77097e40aa5a69cf1318234e6a1d160ef3d2b02929f"
+    }
+  ],
+  "recipientDeltaProofs": [
+    {
+      "account": "0x01e246880e3d59f1af2f404a456026af5577b4a8",
+      "campaignsAllocatedRaw": "14471564992127017",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "14471564992127017",
+      "cumulativeAtTargetRootRaw": "14471564992127017",
+      "targetRootProof": [
+        "0x4021aa4c9548fe73e0cf99a99296114ec575be5c8c215f737af69fa6e01ef10a",
+        "0xea6080c52c3504b061f52428450ccee29008f176fd85ae72cf302a9d23089db6",
+        "0xdbc7ffaccac2eb5eb10ee8cdc653e075f300e2c947f38f9cc4f8f1bf590b9c9f",
+        "0x396920a0b71ce159e405e82123bafa9fc4ff8c10fd1ed29c97985c0e6f262fe8",
+        "0x62f46ecccd8e3bcde7a48481a6f1decd5ba0cfb9121ec4c6d9073e35032267b4",
+        "0x5e28347137c9ae7dab7eec2557a012f0555a234b39ab19f2bfa5c49326e401f7",
+        "0xfe17e3ac2f8a782948d8d3da8be4d80f66a14567b31128a88bff069887241ade",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x07d398f9cbf0f07db51ae4c4105f38824821aa48",
+      "campaignsAllocatedRaw": "11932983166720958399",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "11932983166720958399",
+      "cumulativeAtTargetRootRaw": "11932983166720958399",
+      "targetRootProof": [
+        "0x1e17510c9018ec36b8c2f284ed157855331b4e237ade37d502a0175cd5e1a7b1",
+        "0xd6b25a9dcda4414984830b5466924b2eaa6c177c4a09749d89c36a346bdc8c0b",
+        "0x2d28e1dfb7f3dd761854d605248c3fa5584cb1502d68145522d1e4efd71d30f5",
+        "0x14f6ca8bccb2f1331cac67d02d6708f319a32dd3e3400ce2d53a9e21f583c7ff",
+        "0x4a4994821801e0c42753f8795eeb750bd498aa94b27c2de2ba8b9b03293c1cba",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x0c599bf4b3db0f1089e095214e22ef1f3d75819b",
+      "campaignsAllocatedRaw": "3458171312365539562",
+      "cumulativeBeforeRaw": "26917620215293922843",
+      "cumulativeAfterRaw": "30375791527659462405",
+      "cumulativeAtTargetRootRaw": "30375791527659462405",
+      "targetRootProof": [
+        "0x456c8502c2f6ab11923a224d3d9802492d1165d6c0cee6eb8c0d64ac3e8bdf2e",
+        "0x4893ab96eb2f4569012c105d31fe87427e86a4ece40da7be0f1bc316a1d6ed7a",
+        "0x1244f85f0bdbb0035b1f9e92682281fd58b540b7babe515eb689c66167af1fe3",
+        "0x29c795a6902f7660cd1046cc476e5c1b0ab75033e94197690911a157c85a547c",
+        "0xa4ef0b10e7ce37fff8812be8f5b18de8338d3fcaa08d436c2f5e178b53a9bf56",
+        "0x974999b05f3a5032f5b03867cda64c0909a21b4fa56ac36f130c93177966362b",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x114b2f6cfff22d1ab14b94de3dc869816af2617b",
+      "campaignsAllocatedRaw": "9215324903996914599",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "9215324903996914599",
+      "cumulativeAtTargetRootRaw": "9215324903996914599",
+      "targetRootProof": [
+        "0x1ae20cda6d0fd3968da08f7805f029bc841db9bfdd20f20a83954bcd7e7f5f38",
+        "0x3ae221f94ec3dd30670c3371f6bc04203706c9f598097d1e2871979287a9d36e",
+        "0x3bae01972aeeb78145d25bc67415a0a1659adc0e28ccaf718539a3cd4c239ac4",
+        "0x14f6ca8bccb2f1331cac67d02d6708f319a32dd3e3400ce2d53a9e21f583c7ff",
+        "0x4a4994821801e0c42753f8795eeb750bd498aa94b27c2de2ba8b9b03293c1cba",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x140babc00370d3954fccdf0be68492d87a831eb6",
+      "campaignsAllocatedRaw": "2066026000456044999",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "2066026000456044999",
+      "cumulativeAtTargetRootRaw": "2066026000456044999",
+      "targetRootProof": [
+        "0x9fe63e57aceb35e40a5f555f1065ad54b9e697cd9760bda42022367e1a478895",
+        "0x114d7317214d3036b9488a71a0d404b339dd6ff59a4947a3c5afb2bd359a13be",
+        "0xae8ccbd296f4b4962eca1652d8d9799a86f3dce6f399a78b1af060d02f55f0c3",
+        "0x321e7c622a7be840554cb37b0081b6b40f15dad887e7ed831a7b1acdca023dd3",
+        "0x2ac5a1bb379274c8346f89601e358fe0e615a01cafd41190ec00295be48d9765",
+        "0x5e28347137c9ae7dab7eec2557a012f0555a234b39ab19f2bfa5c49326e401f7",
+        "0xfe17e3ac2f8a782948d8d3da8be4d80f66a14567b31128a88bff069887241ade",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x16ef04260ca959c75bd8d4247874517c9cf74d12",
+      "campaignsAllocatedRaw": "3161858867886445314",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "3161858867886445314",
+      "cumulativeAtTargetRootRaw": "3161858867886445314",
+      "targetRootProof": [
+        "0x3f7f5f28e57486863afb7f436fcf74a6b7e1e4958537e931b2b75ad59b1f4779",
+        "0x9f614f6f0f3ea728e7eab242d8202c5c6f6dfbfb92b0d33261be1f7d878dbb96",
+        "0x44c1a636219d453550f164c7740637c6ac0d9362cfbebbcd556c5477eb4c715c",
+        "0x7dbe9f35c5cf44175328ea18d9e63adcc963351519e41bfa3e161d09b67eaee5",
+        "0x2ac5a1bb379274c8346f89601e358fe0e615a01cafd41190ec00295be48d9765",
+        "0x5e28347137c9ae7dab7eec2557a012f0555a234b39ab19f2bfa5c49326e401f7",
+        "0xfe17e3ac2f8a782948d8d3da8be4d80f66a14567b31128a88bff069887241ade",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x27ce87b944e744eb415168d4da672a2135c4b06e",
+      "campaignsAllocatedRaw": "3769571719225909055",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "3769571719225909055",
+      "cumulativeAtTargetRootRaw": "3769571719225909055",
+      "targetRootProof": [
+        "0xa2947b7a46ad061cff3bed786e0b18d7f03a712f8c360718def31a68ce2ec524",
+        "0xa2d76dc7e55210c89bf579548227c57a38daccd800a98fb29a8a9c81ee042d27",
+        "0x575d2136b1f99338aacbde95d15039439250cc60115d947746cce7266b25cda3",
+        "0x50a7688c8f3eee4a834bc0a1fd66bfe2f05db1900d357360a4e7fb8129ec6222",
+        "0x4a4994821801e0c42753f8795eeb750bd498aa94b27c2de2ba8b9b03293c1cba",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x6cafe7d50b15334aba3b345e431a66e6c2f365f6",
+      "campaignsAllocatedRaw": "9668351031306762052",
+      "cumulativeBeforeRaw": "147945189650214017265",
+      "cumulativeAfterRaw": "157613540681520779317",
+      "cumulativeAtTargetRootRaw": "157613540681520779317",
+      "targetRootProof": [
+        "0xaba5cdbc6ac5aae6c371ade09235e28c27ed874ca776c0f69ea37176f31c2de5",
+        "0x3eff62b6895a7e6666d9b4ead29e69e1c29da7acb3f8f4ae31e1178d58108b87",
+        "0x4704d35e0b4d2d649f235039e146631b03abd44bb99571d2413de8269061a15c",
+        "0xb69c9213d18d14c8fcbeb45b97b62c7b4d50cf89329586d6bb8f8073c8f6d1df",
+        "0xa1209274b8d56bdd3e76ca1eb7475f91af777cc6f6732d4e36f2c4f48566b885",
+        "0x974999b05f3a5032f5b03867cda64c0909a21b4fa56ac36f130c93177966362b",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x915762adf03ddf5cfb10ac32e881c52ed0f59897",
+      "campaignsAllocatedRaw": "1509172677274688806",
+      "cumulativeBeforeRaw": "34599638426665697477",
+      "cumulativeAfterRaw": "36108811103940386283",
+      "cumulativeAtTargetRootRaw": "36108811103940386283",
+      "targetRootProof": [
+        "0xf1d038023c589d2625784925247d92c2d8cb214d0025ccf8effe0e4ac0c1fcc0",
+        "0xc01d62a7b13fdba151f63471b89cb1fa2f6e2c56319ee33f2ed5cb35797005d4",
+        "0x2d28e1dfb7f3dd761854d605248c3fa5584cb1502d68145522d1e4efd71d30f5",
+        "0x14f6ca8bccb2f1331cac67d02d6708f319a32dd3e3400ce2d53a9e21f583c7ff",
+        "0x4a4994821801e0c42753f8795eeb750bd498aa94b27c2de2ba8b9b03293c1cba",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0x9966956efc8576cf50dc7d21d712b258afd39b29",
+      "campaignsAllocatedRaw": "338004332072952143",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "338004332072952143",
+      "cumulativeAtTargetRootRaw": "338004332072952143",
+      "targetRootProof": [
+        "0xa6ca149422888d29ea886266e132be2f40d42bfc0dca5ccbb3be985286bac7ce",
+        "0x2b1c929e2a28c8cd2de257b32701b2f018903b7024656f15727e2d8f1064a57a",
+        "0xf29671ccf6ba5c4bd920e8e26bed3e1047f051d61a8d76257cf14d885f7b405e",
+        "0x7939de00919aa898b641eb80935770ceb5281ff184a2ad6f2032d6cd08eca188",
+        "0x62f46ecccd8e3bcde7a48481a6f1decd5ba0cfb9121ec4c6d9073e35032267b4",
+        "0x5e28347137c9ae7dab7eec2557a012f0555a234b39ab19f2bfa5c49326e401f7",
+        "0xfe17e3ac2f8a782948d8d3da8be4d80f66a14567b31128a88bff069887241ade",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0xa8fc3e362f3e5d3b03a0f670703a00518f950a7e",
+      "campaignsAllocatedRaw": "2448093488012032425",
+      "cumulativeBeforeRaw": "45506124649154271925",
+      "cumulativeAfterRaw": "47954218137166304350",
+      "cumulativeAtTargetRootRaw": "47954218137166304350",
+      "targetRootProof": [
+        "0x563c7befbb2b4254739b43e4668d952d2f2aa5809e7876ce8fee50ad2e385305",
+        "0x9d64fde9678afc5bda3604f38f65a3884921c8f67987f89d35c96a07017f1464",
+        "0x44c1a636219d453550f164c7740637c6ac0d9362cfbebbcd556c5477eb4c715c",
+        "0x7dbe9f35c5cf44175328ea18d9e63adcc963351519e41bfa3e161d09b67eaee5",
+        "0x2ac5a1bb379274c8346f89601e358fe0e615a01cafd41190ec00295be48d9765",
+        "0x5e28347137c9ae7dab7eec2557a012f0555a234b39ab19f2bfa5c49326e401f7",
+        "0xfe17e3ac2f8a782948d8d3da8be4d80f66a14567b31128a88bff069887241ade",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0xc9b7411fd802bdfa055cfd469d1aecac2ac64394",
+      "campaignsAllocatedRaw": "524449796696310502",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "524449796696310502",
+      "cumulativeAtTargetRootRaw": "524449796696310502",
+      "targetRootProof": [
+        "0x94351afdc5ea171308b98e74038ebdacfc8859fa62d8a050018df8277eab5b1b",
+        "0x013778e77369267f23be76c981dd0db5854fa321d69a5134e4c009eaa7e67d97",
+        "0xf29671ccf6ba5c4bd920e8e26bed3e1047f051d61a8d76257cf14d885f7b405e",
+        "0x7939de00919aa898b641eb80935770ceb5281ff184a2ad6f2032d6cd08eca188",
+        "0x62f46ecccd8e3bcde7a48481a6f1decd5ba0cfb9121ec4c6d9073e35032267b4",
+        "0x5e28347137c9ae7dab7eec2557a012f0555a234b39ab19f2bfa5c49326e401f7",
+        "0xfe17e3ac2f8a782948d8d3da8be4d80f66a14567b31128a88bff069887241ade",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0xc9c80e8481c2b6f979afc155bc3f979cfad19c56",
+      "campaignsAllocatedRaw": "299148006154037748318",
+      "cumulativeBeforeRaw": "8986970408404150763826",
+      "cumulativeAfterRaw": "9286118414558188512144",
+      "cumulativeAtTargetRootRaw": "9286118414558188512144",
+      "targetRootProof": [
+        "0xd2aa94b345e96a572200afdf045236511dab6b74a6a724efecc815a3ece49207",
+        "0x88de3e4724324829603eccc8ff89a4eb8d64e32f7bf157a92ff9f705c3ab342f",
+        "0x369d615ff3c2230b77320256080b9a8d0e990ad5e41fbbecf458fd965abd0843",
+        "0xe2cc661ff5ee94f29811299ca3237a85d4e0ad47545380338584b98a6d1912c6",
+        "0x08d19cfbe31d0c64a4418fc6feb4e22f3af3619b2770fec05fbeef73c669683b",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0xdde618e658ecce50809ce03913f65dd18e11ce64",
+      "campaignsAllocatedRaw": "5613340449329939309",
+      "cumulativeBeforeRaw": "64213958953958103933",
+      "cumulativeAfterRaw": "69827299403288043242",
+      "cumulativeAtTargetRootRaw": "69827299403288043242",
+      "targetRootProof": [
+        "0x57a4e8908f1eab1eb8d42eea4575bb3b739877c9f404d0fcc4fe6875b68b3073",
+        "0xc47355882552a606346f72176a250203a2af6473fcc08f2edfdbca1498ee24d0",
+        "0x369d615ff3c2230b77320256080b9a8d0e990ad5e41fbbecf458fd965abd0843",
+        "0xe2cc661ff5ee94f29811299ca3237a85d4e0ad47545380338584b98a6d1912c6",
+        "0x08d19cfbe31d0c64a4418fc6feb4e22f3af3619b2770fec05fbeef73c669683b",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    },
+    {
+      "account": "0xf7c40919a01780fe6f477c1535de0a969854bb48",
+      "campaignsAllocatedRaw": "6375557783258251712",
+      "cumulativeBeforeRaw": "0",
+      "cumulativeAfterRaw": "6375557783258251712",
+      "cumulativeAtTargetRootRaw": "6375557783258251712",
+      "targetRootProof": [
+        "0x113957ef8967829d743e3869400720f41af07aed07c9c7b715a606998ecdc641",
+        "0xdb3c9dcce2a53d500f48433207670f1714884ce209473d6a4e13c7b6c36b23c6",
+        "0x575d2136b1f99338aacbde95d15039439250cc60115d947746cce7266b25cda3",
+        "0x50a7688c8f3eee4a834bc0a1fd66bfe2f05db1900d357360a4e7fb8129ec6222",
+        "0x4a4994821801e0c42753f8795eeb750bd498aa94b27c2de2ba8b9b03293c1cba",
+        "0x2e84344ce73a3730dd934dcf43ac0b6bd8d592d647f5cb4619676b7111ec13be",
+        "0xb1f33fee2e517a6106d75bc4ef66c6463244484c7506a56420bfd2ef6f66a32d",
+        "0xb47a189265cd4449f402a37dfb919ec6917beac428876f63368cdad933b70fa4",
+        "0x22776d3f0fc9da732d816a8301901f9eb33bc49a9085acc06d793d25f2ec48cb",
+        "0xc5eee1e290816bc251c1dbc2a2621b2efddfadad38216e47aed17b325ea9a247",
+        "0x3f49fa89927356d856aa231ac8d984fde70d37a7078c8bdf83aec43105207caf",
+        "0xa2d6a4ca13f69666452f9c34f15fec20edb53df29fef8a3d5d1929ba0d833f25"
+      ]
+    }
+  ],
+  "limits": [
+    "No runtime API/RPC fallback or new BOLDAllocationResolver was added.",
+    "Merkle inclusion proves authorised cumulative entitlements, not the correctness of historical eligibility weights.",
+    "Published weight and payout arithmetic were checked; historical share transfers were not replayed independently.",
+    "Historical USD price and capital integral are still needed for an APR estimate.",
+    "Completed campaigns do not establish a current forward APR."
+  ]
+}
