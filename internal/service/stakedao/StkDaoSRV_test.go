@@ -2205,6 +2205,8 @@ type boldInspectorFixture struct {
 	scans       []ethereum.FilterQuery
 	mode        string
 	headerReads map[uint64]int
+	root        common.Hash
+	snapshot    uint64
 }
 
 func newBoldInspectorFixture(t *testing.T) *boldInspectorFixture {
@@ -2261,7 +2263,11 @@ func (f *boldInspectorFixture) FilterLogs(_ context.Context, q ethereum.FilterQu
 	return logs, nil
 }
 func (f *boldInspectorFixture) CallContract(_ context.Context, msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
-	if block == nil || block.Uint64() != f.receipt.BlockNumber.Uint64()+10 || msg.To == nil || *msg.To != stakeDAOMulticallAddress {
+	snapshot := f.snapshot
+	if snapshot == 0 {
+		snapshot = f.receipt.BlockNumber.Uint64() + 10
+	}
+	if block == nil || block.Uint64() != snapshot || msg.To == nil || *msg.To != stakeDAOMulticallAddress {
 		return nil, errors.New("wrong snapshot or target")
 	}
 	aggregate, _ := abi.JSON(strings.NewReader(stakeDAOMulticallABI))
@@ -2301,7 +2307,11 @@ func (f *boldInspectorFixture) CallContract(_ context.Context, msg ethereum.Call
 			case "nbIncentives":
 				output = []interface{}{big.NewInt(2595)}
 			case "root", "ipfsHash":
-				output = []interface{}{[32]byte(common.HexToHash("0x1234"))}
+				value := common.HexToHash("0x1234")
+				if method.Name == "root" && f.root != (common.Hash{}) {
+					value = f.root
+				}
+				output = []interface{}{[32]byte(value)}
 			case "decimals":
 				output = []interface{}{uint8(18)}
 			case "incentives":
@@ -2481,5 +2491,282 @@ func TestBOLDClaimProofUsesDoubleHashAndCannotProveCampaignAttribution(t *testin
 	}
 	if VerifyBOLDClaimProof(root, account, boldRouteToken, big.NewInt(123457), []common.Hash{sibling}) || VerifyBOLDClaimProof(crypto.Keccak256Hash(encoded), account, boldRouteToken, amount, nil) || VerifyBOLDClaimProof(root, account, boldRouteGauge, amount, []common.Hash{sibling}) || VerifyBOLDClaimProof(root, account, boldRouteToken, new(big.Int).Lsh(big.NewInt(1), 256), nil) {
 		t.Fatal("incorrect leaf/root/token/amount accepted")
+	}
+}
+
+func TestBOLDReviewedPublicationVerifiesProofsAndExactPayouts(t *testing.T) {
+	p, err := reviewedBOLDPublication()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Proofs) != 15 || len(p.Campaigns) != 2 || p.Campaigns[0].AllocatedRaw != "10162926236299411596" || p.Campaigns[1].AllocatedRaw != "349080457011333212616" {
+		t.Fatal("reviewed allocations missing")
+	}
+	if _, err := decodeBOLDPublication([]byte(strings.Replace(boldReviewedPublicationJSON, "10162926236299411596", "10162926236299411597", 1))); err == nil {
+		t.Fatal("modified publication accepted")
+	}
+}
+
+func boldReviewedTestReport(t *testing.T) (BOLDCampaignReport, BOLDCampaignRecord) {
+	t.Helper()
+	p, err := reviewedBOLDPublication()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := BOLDCampaignReport{ScanComplete: true, Root: p.Root, BlockNumber: 26456929, BlockTimestamp: 1795185215, BlockHash: common.HexToHash("0x1234"), Vault: common.HexToAddress("0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad"), Gauge: boldRouteGauge, Token: boldRouteToken, Distributor: boldCampaignDistributor}
+	item := p.Campaigns[0]
+	c := BOLDCampaignRecord{ID: item.ID, Start: item.Start, End: item.End, AmountRaw: item.FundedRaw, FundingStatus: "verified_router_campaign_funding"}
+	return r, c
+}
+
+func TestBOLDPublishedResolverUsesHistoricalCapitalAndKeepsVerifiedAllocationOnFailure(t *testing.T) {
+	r, c := boldReviewedTestReport(t)
+	point := func(_ context.Context, ts uint64) (BOLDHistoricalSample, error) {
+		tvl := decimal.NewFromInt(100).Add(decimal.NewFromInt(200).Mul(decimal.NewFromInt(int64(ts - c.Start))).Div(decimal.NewFromInt(int64(c.End - c.Start))))
+		return BOLDHistoricalSample{RequestedTimestamp: ts, TVLUSD: tvl.String(), RewardUSD: "2", LPUSD: "1", AssetAmount: tvl.String()}, nil
+	}
+	resolver := &boldPublishedResolver{sampleOverride: point}
+	e, err := resolver.ResolveBOLDAllocation(context.Background(), r, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := CalculateBOLDHistoricalAPR(r, c, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, _ := new(big.Int).SetString(e.NetRewardRaw, 10)
+	numerator := new(big.Int).Mul(n, big.NewInt(2*31536000*100))
+	denominator := new(big.Int).Mul(big.NewInt(1000000000000000000), big.NewInt(int64(200*(c.End-c.Start))))
+	want := new(big.Rat).SetFrac(numerator, denominator)
+	actual, ok := new(big.Rat).SetString(got)
+	if !ok {
+		t.Fatal(got)
+	}
+	difference, _ := new(big.Rat).Sub(actual, want).Float64()
+	if math.Abs(difference) > 1e-12 || e.Valuation == nil || *e.Valuation.AverageCapitalUSD != "200" || *e.Valuation.AverageRewardUSD != "2" || e.Publication.Recipients != 5 || r.CurrentAPR != nil {
+		t.Fatalf("incorrect historical annualization: %s %+v", got, e)
+	}
+	for _, mode := range []string{"unknown_root", "wrong_period", "unavailable_price"} {
+		report, campaign := r, c
+		res := &boldPublishedResolver{sampleOverride: point}
+		switch mode {
+		case "unknown_root":
+			report.Root = common.HexToHash("0xbad")
+		case "wrong_period":
+			campaign.End++
+		case "unavailable_price":
+			res.sampleOverride = func(context.Context, uint64) (BOLDHistoricalSample, error) {
+				return BOLDHistoricalSample{}, boldCampaignFailure("historical_price_unavailable")
+			}
+		}
+		partial, err := res.ResolveBOLDAllocation(context.Background(), report, campaign)
+		if err == nil {
+			t.Fatalf("invalid historical evidence accepted: %s", mode)
+		}
+		if mode == "unavailable_price" && (partial.Publication == nil || partial.NetRewardRaw == "" || partial.CapitalUSDSeconds != "" || partial.Valuation.Status != "unavailable") {
+			t.Fatal("price failure erased verified allocation or fabricated capital")
+		}
+	}
+	points := []BOLDHistoricalSample{{RequestedTimestamp: 10, TVLUSD: "0", RewardUSD: "1"}, {RequestedTimestamp: 20, TVLUSD: "0", RewardUSD: "1"}, {RequestedTimestamp: 30, TVLUSD: "0", RewardUSD: "1"}}
+	if _, _, err := integrateBOLDHistory(points, 10, 30); err == nil {
+		t.Fatal("zero capital produced APR")
+	}
+	points[0].TVLUSD, points[1].TVLUSD, points[2].TVLUSD = "100", "100", "1000"
+	capital, _, err := integrateBOLDHistory(points, 10, 30)
+	if err != nil || capital.String() != "6500" {
+		t.Fatal("trapezoidal capital weights were replaced by a simple sample average")
+	}
+}
+
+const boldHistoricalFixtureABI = `[
+{"type":"function","name":"asset","inputs":[],"outputs":[{"type":"address"}]},
+{"type":"function","name":"totalAssets","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"decimals","inputs":[],"outputs":[{"type":"uint8"}]},
+{"type":"function","name":"N_COINS","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"is_meta","inputs":[{"type":"address"}],"outputs":[{"type":"bool"}]},
+{"type":"function","name":"totalSupply","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"coins","inputs":[{"type":"uint256"}],"outputs":[{"type":"address"}]},
+{"type":"function","name":"balances","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"stored_rates","inputs":[],"outputs":[{"type":"uint256[]"}]},
+{"type":"function","name":"ma_exp_time","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"ma_last_time","inputs":[],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"price_oracle","inputs":[{"type":"uint256"}],"outputs":[{"type":"uint256"}]},
+{"type":"function","name":"getFeed","inputs":[{"type":"address"},{"type":"address"}],"outputs":[{"type":"address"}]},
+{"type":"function","name":"latestRoundData","inputs":[],"outputs":[{"type":"uint80"},{"type":"int256"},{"type":"uint256"},{"type":"uint256"},{"type":"uint80"}]}
+]`
+
+type boldHistoricalRPCFixture struct {
+	*boldInspectorFixture
+	historicalCalls []uint64
+	priceMode       string
+}
+
+func (f *boldHistoricalRPCFixture) HeaderByNumber(_ context.Context, n *big.Int) (*types.Header, error) {
+	if n == nil || !n.IsUint64() || n.Uint64() > 26456929 {
+		return nil, errors.New("unexpected header")
+	}
+	h := &types.Header{Number: new(big.Int).Set(n), Time: 1795185215 - (26456929-n.Uint64())*12}
+	if f.priceMode == "reorganized" {
+		h.Extra = []byte("changed")
+	}
+	return h, nil
+}
+func (f *boldHistoricalRPCFixture) CallContract(ctx context.Context, msg ethereum.CallMsg, b *big.Int) ([]byte, error) {
+	if b == nil || msg.To == nil {
+		return nil, errors.New("explicit block/target required")
+	}
+	a, _ := abi.JSON(strings.NewReader(boldHistoricalFixtureABI))
+	evaluate := func(target common.Address, data []byte) ([]byte, error) {
+		m, err := a.MethodById(data[:4])
+		if err != nil {
+			return nil, err
+		}
+		args, _ := m.Inputs.Unpack(data[4:])
+		h, _ := f.HeaderByNumber(ctx, b)
+		var values []interface{}
+		lp := common.HexToAddress("0xefc6516323fbd28e80b85a497b65a86243a54b3e")
+		usdc := common.HexToAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+		feed := common.HexToAddress("0x123")
+		units := func(n int64) *big.Int { return new(big.Int).Mul(big.NewInt(n), big.NewInt(1000000000000000000)) }
+		switch m.Name {
+		case "asset":
+			values = []interface{}{lp}
+		case "totalAssets":
+			values = []interface{}{units(100)}
+		case "decimals":
+			d := uint8(18)
+			if target == usdc {
+				d = 6
+			}
+			if target == feed {
+				d = 8
+			}
+			values = []interface{}{d}
+		case "is_meta":
+			values = []interface{}{false}
+		case "N_COINS":
+			values = []interface{}{big.NewInt(2)}
+		case "totalSupply":
+			values = []interface{}{units(1100000)}
+		case "coins":
+			coin := boldRouteToken
+			if args[0].(*big.Int).Sign() != 0 {
+				coin = usdc
+			}
+			values = []interface{}{coin}
+		case "balances":
+			n := units(600000)
+			if args[0].(*big.Int).Sign() != 0 {
+				n = big.NewInt(500000000000)
+			}
+			values = []interface{}{n}
+		case "stored_rates":
+			values = []interface{}{[]*big.Int{units(1), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)}}
+		case "ma_exp_time":
+			values = []interface{}{big.NewInt(600)}
+		case "ma_last_time":
+			ts := h.Time
+			if f.priceMode == "stale" {
+				ts -= 3 * 3600
+			}
+			values = []interface{}{new(big.Int).SetUint64(ts)}
+		case "price_oracle":
+			values = []interface{}{units(1)}
+		case "getFeed":
+			values = []interface{}{feed}
+		case "latestRoundData":
+			ts := new(big.Int).SetUint64(h.Time)
+			values = []interface{}{big.NewInt(1), big.NewInt(100000000), ts, ts, big.NewInt(1)}
+		default:
+			return nil, errors.New("unexpected historical getter")
+		}
+		return m.Outputs.Pack(values...)
+	}
+	if *msg.To != stakeDAOMulticallAddress {
+		f.historicalCalls = append(f.historicalCalls, b.Uint64())
+		return evaluate(*msg.To, msg.Data)
+	}
+	aggregate, _ := abi.JSON(strings.NewReader(stakeDAOMulticallABI))
+	values, err := aggregate.Methods["aggregate3"].Inputs.Unpack(msg.Data[4:])
+	if err != nil {
+		return nil, err
+	}
+	calls := *abi.ConvertType(values[0], new([]multicallInput)).(*[]multicallInput)
+	if len(calls) != 3 {
+		return f.boldInspectorFixture.CallContract(ctx, msg, b)
+	}
+	outputs := []multicallOutput{}
+	for _, c := range calls {
+		encoded, err := evaluate(c.Target, c.CallData)
+		if err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, multicallOutput{Success: true, ReturnData: encoded})
+	}
+	f.historicalCalls = append(f.historicalCalls, b.Uint64())
+	return aggregate.Methods["aggregate3"].Outputs.Pack(outputs)
+}
+
+func TestBOLDHistoricalSamplerReadsRealPriceServiceAtPastBlock(t *testing.T) {
+	base := newBoldInspectorFixture(t)
+	f := &boldHistoricalRPCFixture{boldInspectorFixture: base}
+	r, c := boldReviewedTestReport(t)
+	run := &boldResearchRun{owner: NewBOLDCampaignInspector(f, base, nil), report: &r}
+	resolver := &boldPublishedResolver{run: run, headers: map[uint64]*types.Header{}, samples: map[uint64]BOLDHistoricalSample{}, anchors: map[uint64]common.Hash{}}
+	point, err := resolver.sample(context.Background(), c.Start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if point.RewardUSD != "1" || point.LPUSD != "1" || point.TVLUSD != "100" || point.BlockNumber >= r.BlockNumber || point.BlockTimestamp > c.Start || c.Start-point.BlockTimestamp > 12 || point.LPPriceSource != "curve_stableswap_ng_nav" || point.RewardPriceSource != "curve_ema_usd" {
+		t.Fatalf("not a historical contract valuation: %+v", point)
+	}
+	for _, b := range f.historicalCalls {
+		if b != point.BlockNumber {
+			t.Fatal("historical price call used another block")
+		}
+	}
+	before := r.RPCRequests
+	if _, err := resolver.sample(context.Background(), c.Start); err != nil || r.RPCRequests != before {
+		t.Fatal("immutable sample cache missed")
+	}
+	if err := resolver.verifyAnchors(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.priceMode = "reorganized"
+	if err := resolver.verifyAnchors(context.Background()); err == nil {
+		t.Fatal("historical reorg accepted")
+	}
+	// Leave reserve capacity for rechecking hashes even after pricing is cut off.
+	r.RPCRequests = boldHistoricalReadLimit
+	if _, err := (boldHistoricalCaller{run, point.BlockNumber}).CallContract(context.Background(), ethereum.CallMsg{}, big.NewInt(int64(point.BlockNumber))); err == nil || r.RPCRequests != boldHistoricalReadLimit {
+		t.Fatal("historical reads consumed verification reserve")
+	}
+}
+
+func TestBOLDPublishedInspectorEndToEndHistoricalEstimates(t *testing.T) {
+	base := newBoldInspectorFixture(t)
+	p, err := reviewedBOLDPublication()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base.root = p.Root
+	base.snapshot = 26456929
+	f := &boldHistoricalRPCFixture{boldInspectorFixture: base}
+	h, _ := f.HeaderByNumber(context.Background(), base.receipt.BlockNumber)
+	base.receipt.BlockHash = h.Hash()
+	for _, l := range base.receipt.Logs {
+		l.BlockHash = h.Hash()
+	}
+	report, err := NewBOLDPublishedCampaignInspector(f, f).Inspect(context.Background(), 26450710, 26456929)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.CurrentAPR != nil || report.Status != "funding_verified_with_historical_estimates" || len(report.Campaigns) != 2 || report.RPCRequests > 300 {
+		t.Fatalf("invalid integrated estimate: %+v", report)
+	}
+	for _, c := range report.Campaigns {
+		if c.HistoricalAPR == nil || c.Allocation == nil || c.Allocation.Publication == nil || c.Allocation.Valuation.Status != "estimate_available" || len(c.Allocation.Valuation.Samples) != 3 || *c.Allocation.Valuation.AverageCapitalUSD != "100" {
+			t.Fatalf("historical evidence incomplete: %+v", c)
+		}
 	}
 }

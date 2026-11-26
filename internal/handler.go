@@ -291,7 +291,7 @@ func (h *Handler) HandleGetStakeDaoDiagnostics(c echo.Context) error {
 
 // @Summary      Проверить кампании дополнительных наград BOLD/USDC
 // @ID           getStakeDaoBOLDCampaigns
-// @Description  Отдельный исследовательский запуск boldCampaigns.go: события кампаний, incentives(id), receipt и сверка финансирования на указанном блоке. Без основного расчёта пулов, цен и Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, таймаут 2 минуты. Неподтверждённые правила распределения оставляют historicalApr/currentApr null.
+// @Description  Отдельный запуск boldCampaigns.go: сверка финансирования, подтверждённая публикация для зарегистрированного Merkle root и оценка historicalApr по историческим ценам BOLD/LP и TVL начала/середины/конца кампании. Трапеции по 3 точкам — приближение, не точный интеграл, не текущий APR и не APY. Не входит в основной расчёт пулов; без Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, 2 минуты. При неизвестном root или недоступной истории причина в campaigns.reasons, historicalApr=null; currentApr всегда null.
 // @Tags         StakeDao
 // @Produce      json
 // @Param        network path string true "Поддерживаемая сеть" Enums(ethereum)

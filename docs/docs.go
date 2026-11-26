@@ -188,7 +188,7 @@ const docTemplate = `{
         },
         "/reservesStakedao/{network}/bold-campaigns": {
             "get": {
-                "description": "Отдельный исследовательский запуск boldCampaigns.go: события кампаний, incentives(id), receipt и сверка финансирования на указанном блоке. Без основного расчёта пулов, цен и Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, таймаут 2 минуты. Неподтверждённые правила распределения оставляют historicalApr/currentApr null.",
+                "description": "Отдельный запуск boldCampaigns.go: сверка финансирования, подтверждённая публикация для зарегистрированного Merkle root и оценка historicalApr по историческим ценам BOLD/LP и TVL начала/середины/конца кампании. Трапеции по 3 точкам — приближение, не точный интеграл, не текущий APR и не APY. Не входит в основной расчёт пулов; без Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, 2 минуты. При неизвестном root или недоступной истории причина в campaigns.reasons, historicalApr=null; currentApr всегда null.",
                 "produces": [
                     "application/json"
                 ],
@@ -1471,7 +1471,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "capitalUsdSeconds": {
-                    "description": "integral of eligible vault capital, USD * seconds",
+                    "description": "measured or explicitly modeled eligible capital, USD * seconds",
                     "type": "string"
                 },
                 "end": {
@@ -1482,6 +1482,9 @@ const docTemplate = `{
                 },
                 "netRewardRaw": {
                     "type": "string"
+                },
+                "publication": {
+                    "$ref": "#/definitions/stakedao.BOLDPublicationEvidence"
                 },
                 "rewardUnitUsd": {
                     "type": "string"
@@ -1494,6 +1497,9 @@ const docTemplate = `{
                 },
                 "start": {
                     "type": "integer"
+                },
+                "valuation": {
+                    "$ref": "#/definitions/stakedao.BOLDHistoricalValuation"
                 },
                 "valuationReference": {
                     "type": "string"
@@ -1613,6 +1619,114 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "vault": {
+                    "type": "string"
+                }
+            }
+        },
+        "stakedao.BOLDHistoricalSample": {
+            "type": "object",
+            "properties": {
+                "assetAmount": {
+                    "type": "string"
+                },
+                "blockHash": {
+                    "type": "string"
+                },
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "blockTimestamp": {
+                    "type": "integer"
+                },
+                "lpPriceContract": {
+                    "type": "string"
+                },
+                "lpPriceSource": {
+                    "type": "string"
+                },
+                "lpUsd": {
+                    "type": "string"
+                },
+                "requestedTimestamp": {
+                    "type": "integer"
+                },
+                "rewardPriceContract": {
+                    "type": "string"
+                },
+                "rewardPriceSource": {
+                    "type": "string"
+                },
+                "rewardUsd": {
+                    "type": "string"
+                },
+                "tvlUsd": {
+                    "type": "string"
+                }
+            }
+        },
+        "stakedao.BOLDHistoricalValuation": {
+            "type": "object",
+            "properties": {
+                "assumptions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "averageCapitalUsd": {
+                    "type": "string"
+                },
+                "averageRewardUsd": {
+                    "type": "string"
+                },
+                "capitalUsdSeconds": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "rewardValueUsd": {
+                    "type": "string"
+                },
+                "samples": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/stakedao.BOLDHistoricalSample"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "stakedao.BOLDPublicationEvidence": {
+            "type": "object",
+            "properties": {
+                "allocatedAmount": {
+                    "type": "string"
+                },
+                "commit": {
+                    "type": "string"
+                },
+                "distributionUrl": {
+                    "type": "string"
+                },
+                "merkleUrl": {
+                    "type": "string"
+                },
+                "proofsVerified": {
+                    "type": "integer"
+                },
+                "recipients": {
+                    "type": "integer"
+                },
+                "root": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

@@ -62,7 +62,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	blockNumber := flags.Uint64("block", 0, "diagnostics snapshot block (implies strict prices), or required final block with -bold-campaigns")
 	strictPrices := flags.Bool("strict-prices", false, "diagnostics only: read all prices at the snapshot block in an isolated cache")
 	weethFeeDays := flags.Int("weeth-fee-days", 0, "optional snapshot-parameter fee APR estimate for the explicit weETH gauge only: 1, 7 or 30 days")
-	boldCampaigns := flags.Bool("bold-campaigns", false, "isolated BOLD campaign funding check; requires explicit -from and -block; no server, prices or database")
+	boldCampaigns := flags.Bool("bold-campaigns", false, "isolated BOLD publication and historical price/capital check; requires -from and -block; no server or database")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -174,7 +174,8 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 }
 
 // This is a manual entry point to the isolated module, not a service integration.
-// The inspector keeps allocation unknown until a reviewed resolver exists.
+// Only the registered reviewed root enables allocation/valuation; other roots
+// remain unknown. Results never change the main pool APR/APY response.
 func runBOLDCampaigns(ctx context.Context, from, block uint64, filename string, output, diagnostics io.Writer) error {
 	stateURL := strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_RPC_URL"))
 	logsURL := strings.TrimSpace(os.Getenv("STAKEDAO_ETHEREUM_LOGS_RPC_URL"))
@@ -200,11 +201,11 @@ func runBOLDCampaigns(ctx context.Context, from, block uint64, filename string, 
 		fmt.Fprintln(diagnostics, "Using the primary RPC for state and events; no separate logs endpoint configured.")
 	}
 	fmt.Fprintf(diagnostics, "BOLD/USDC: creation blocks %d–%d; at most 5 RPC/sec, 300 calls, 2 minutes.\n", from, block)
-	report, err := stakedao.NewBOLDCampaignInspector(state, logs, nil).Inspect(ctx, from, block)
+	report, err := stakedao.NewBOLDPublishedCampaignInspector(state, logs).Inspect(ctx, from, block)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(diagnostics, "Checked %d campaign(s); %d RPC calls. Allocation rules remain unverified; APR is not calculated.\n", len(report.Campaigns), report.RPCRequests)
+	fmt.Fprintf(diagnostics, "Checked %d campaign(s); %d RPC calls; status=%s. Historical estimates remain separate from current APR.\n", len(report.Campaigns), report.RPCRequests, report.Status)
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
 	encoder.SetIndent("", "  ")
