@@ -177,7 +177,7 @@
         },
         "/reservesStakedao/{network}/bold-campaigns": {
             "get": {
-                "description": "Отдельный запуск boldCampaigns.go: сверка финансирования, подтверждённая публикация для зарегистрированного Merkle root и оценка historicalApr по историческим ценам BOLD/LP и TVL начала/середины/конца кампании. Трапеции по 3 точкам — приближение, не точный интеграл, не текущий APR и не APY. Не входит в основной расчёт пулов; без Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, 2 минуты. При неизвестном root или недоступной истории причина в campaigns.reasons, historicalApr=null; currentApr всегда null.",
+                "description": "Отдельный запуск boldCampaigns.go: сверка финансирования, подтверждённая публикация для зарегистрированного Merkle root и оценка historicalApr по историческим ценам BOLD/LP и капиталу из Deposit/Withdraw vault. allocation.valuation.assetHistory содержит события, LP-seconds и сверки с totalAssets начала/середины/конца. resumeVault без mint не увеличивает капитал. USD-цены интерполируются между 3 точками: это оценка, не текущий APR и не APY. Не входит в основной расчёт пулов; без Postgres. До 240000 блоков, 5 RPC/с, 300 RPC, 2 минуты. При неизвестном root, недоступной истории или несовпадении балансов причина в campaigns.reasons, historicalApr=null; currentApr всегда null. До 4096 событий и 16 блоков с событиями капитала на запрос.",
                 "produces": [
                     "application/json"
                 ],
@@ -1498,6 +1498,93 @@
                 }
             }
         },
+        "stakedao.BOLDAssetCheckpoint": {
+            "type": "object",
+            "properties": {
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "matched": {
+                    "type": "boolean"
+                },
+                "observedRaw": {
+                    "type": "string"
+                },
+                "reconstructedRaw": {
+                    "type": "string"
+                }
+            }
+        },
+        "stakedao.BOLDAssetEvent": {
+            "type": "object",
+            "properties": {
+                "assetsAfterRaw": {
+                    "type": "string"
+                },
+                "assetsRaw": {
+                    "type": "string"
+                },
+                "blockHash": {
+                    "type": "string"
+                },
+                "blockNumber": {
+                    "type": "integer"
+                },
+                "blockTimestamp": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "logIndex": {
+                    "type": "integer"
+                },
+                "sharesRaw": {
+                    "type": "string"
+                },
+                "transactionHash": {
+                    "type": "string"
+                },
+                "transactionIndex": {
+                    "type": "integer"
+                }
+            }
+        },
+        "stakedao.BOLDAssetHistory": {
+            "type": "object",
+            "properties": {
+                "checkpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/stakedao.BOLDAssetCheckpoint"
+                    }
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/stakedao.BOLDAssetEvent"
+                    }
+                },
+                "fromBlock": {
+                    "type": "integer"
+                },
+                "lpSeconds": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "scanComplete": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "toBlock": {
+                    "type": "integer"
+                }
+            }
+        },
         "stakedao.BOLDCampaignRecord": {
             "type": "object",
             "properties": {
@@ -1656,6 +1743,9 @@
         "stakedao.BOLDHistoricalValuation": {
             "type": "object",
             "properties": {
+                "assetHistory": {
+                    "$ref": "#/definitions/stakedao.BOLDAssetHistory"
+                },
                 "assumptions": {
                     "type": "array",
                     "items": {

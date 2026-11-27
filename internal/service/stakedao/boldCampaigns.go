@@ -51,6 +51,8 @@ const (
 	boldResearchMaxReceipts  = 32
 	boldResearchMaxRPC       = 300
 	boldHistoricalReadLimit  = boldResearchMaxRPC - 32 // reserve hash-verification calls
+	boldCapitalMaxBlocks     = 16                      // plus at most 12 sample boundary anchors, per request
+	boldCapitalMaxEvents     = 4096
 )
 
 // Only local, fixed reason codes have this type. Provider error strings never do.
@@ -202,7 +204,43 @@ type BOLDHistoricalValuation struct {
 	AverageRewardUSD  *string                `json:"averageRewardUsd"`
 	RewardValueUSD    *string                `json:"rewardValueUsd"`
 	Samples           []BOLDHistoricalSample `json:"samples"`
+	AssetHistory      *BOLDAssetHistory      `json:"assetHistory,omitempty"`
 	Assumptions       []string               `json:"assumptions"`
+}
+
+// This is accounted LP capital, not raw tokens physically held by the vault.
+// RewardVault.totalAssets() == totalSupply(), with assets/shares 1:1. A resume
+// emits Deposit(assets, 0) without creating capital; replay shares in that case.
+// Verified source: https://etherscan.io/address/0x543d3ee7cfa494e8ffcc18364d130c8eed4b90ad#code
+type BOLDAssetHistory struct {
+	Status       string                `json:"status"`
+	Model        string                `json:"model"`
+	FromBlock    uint64                `json:"fromBlock"`
+	ToBlock      uint64                `json:"toBlock"`
+	ScanComplete bool                  `json:"scanComplete"`
+	LPSeconds    *string               `json:"lpSeconds"`
+	Events       []BOLDAssetEvent      `json:"events"`
+	Checkpoints  []BOLDAssetCheckpoint `json:"checkpoints"`
+}
+
+type BOLDAssetEvent struct {
+	Kind             string      `json:"kind"`
+	BlockNumber      uint64      `json:"blockNumber"`
+	BlockTimestamp   uint64      `json:"blockTimestamp"`
+	BlockHash        common.Hash `json:"blockHash" swaggertype:"string"`
+	TransactionHash  common.Hash `json:"transactionHash" swaggertype:"string"`
+	TransactionIndex uint        `json:"transactionIndex"`
+	LogIndex         uint        `json:"logIndex"`
+	AssetsRaw        string      `json:"assetsRaw"`
+	SharesRaw        string      `json:"sharesRaw"`
+	AssetsAfterRaw   string      `json:"assetsAfterRaw"`
+}
+
+type BOLDAssetCheckpoint struct {
+	BlockNumber      uint64 `json:"blockNumber"`
+	ObservedRaw      string `json:"observedRaw"`
+	ReconstructedRaw string `json:"reconstructedRaw"`
+	Matched          bool   `json:"matched"`
 }
 
 type BOLDCampaignRecord struct {
@@ -972,10 +1010,11 @@ func decodeBOLDPublication(raw []byte) (*boldReviewedPublication, error) {
 }
 
 type boldPublishedResolver struct {
-	run     *boldResearchRun
-	headers map[uint64]*types.Header
-	samples map[uint64]BOLDHistoricalSample
-	anchors map[uint64]common.Hash
+	run         *boldResearchRun
+	headers     map[uint64]*types.Header
+	samples     map[uint64]BOLDHistoricalSample
+	anchors     map[uint64]common.Hash
+	assetBlocks map[uint64]bool
 	// Optional internal test seam; production always reads historical contracts.
 	sampleOverride func(context.Context, uint64) (BOLDHistoricalSample, error)
 }
@@ -1018,8 +1057,8 @@ func (v *boldPublishedResolver) ResolveBOLDAllocation(ctx context.Context, r BOL
 	if !found {
 		return e, boldCampaignFailure("campaign_not_in_registered_publication")
 	}
-	h := &BOLDHistoricalValuation{Status: "unavailable", Model: "three_point_trapezoidal_historical_tvl", Samples: []BOLDHistoricalSample{}, Assumptions: []string{
-		"historical_state_at_or_before_each_sample_timestamp", "linear_interpolation_between_three_samples", "uniform_earned_reward_rate_within_campaign", "published_eligibility_weights_not_independently_replayed", "no_upstream_or_vault_reward_double_counting", "historical_estimate_not_current_apr_not_apy"}}
+	h := &BOLDHistoricalValuation{Status: "unavailable", Model: "event_replayed_assets_with_three_point_price_interpolation", Samples: []BOLDHistoricalSample{}, Assumptions: []string{
+		"historical_state_at_or_before_each_sample_timestamp", "piecewise_constant_accounted_lp_from_vault_events", "linear_lp_and_reward_usd_prices_between_three_samples", "uniform_earned_reward_rate_within_campaign", "published_eligibility_weights_not_independently_replayed", "no_upstream_or_vault_reward_double_counting", "historical_estimate_not_current_apr_not_apy"}}
 	e.Valuation = h
 	if c.End <= c.Start || c.End > r.BlockTimestamp {
 		return e, boldCampaignFailure("allocation_period_not_completed")
@@ -1031,12 +1070,16 @@ func (v *boldPublishedResolver) ResolveBOLDAllocation(ctx context.Context, r BOL
 		}
 		h.Samples = append(h.Samples, point)
 	}
-	capital, price, err := integrateBOLDHistory(h.Samples, c.Start, c.End)
+	h.AssetHistory = &BOLDAssetHistory{Status: "unavailable", Model: "reviewed_reward_vault_1_to_1_deposit_withdraw", Events: []BOLDAssetEvent{}, Checkpoints: []BOLDAssetCheckpoint{}}
+	if err := v.readAssetHistory(ctx, r.Vault, h.Samples, h.AssetHistory); err != nil {
+		return e, err
+	}
+	capital, price, err := integrateBOLDCapital(h.Samples, h.AssetHistory, c.Start, c.End)
 	if err != nil {
 		return e, err
 	}
 	e.CapitalUSDSeconds, e.RewardUnitUSD = capital.String(), price.String()
-	e.ValuationReference = "historical_curve_lp_nav_and_bold_ema_usd_trapezoidal_three_point"
+	e.ValuationReference = "reconciled_vault_event_capital_with_three_point_curve_lp_nav_and_bold_ema_usd"
 	average := capital.Div(decimal.NewFromInt(int64(c.End - c.Start))).String()
 	tokens, _ := boldPublicationUint(e.NetRewardRaw)
 	reward := decimal.NewFromBigInt(tokens, -18).Mul(price).String()
@@ -1048,46 +1091,271 @@ func (v *boldPublishedResolver) ResolveBOLDAllocation(ctx context.Context, r BOL
 	return e, nil
 }
 
-func integrateBOLDHistory(points []BOLDHistoricalSample, start, end uint64) (decimal.Decimal, decimal.Decimal, error) {
-	fail := func() (decimal.Decimal, decimal.Decimal, error) {
-		return decimal.Zero, decimal.Zero, boldCampaignFailure("historical_samples_invalid")
+// Only these two events change supply in the reviewed vault. Ordinary Transfer
+// moves existing shares; LP transfers/donations do not change accounted assets.
+const boldCapitalEventABI = `[
+{"type":"event","name":"Deposit","anonymous":false,"inputs":[{"name":"sender","type":"address","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"assets","type":"uint256"},{"name":"shares","type":"uint256"}]},
+{"type":"event","name":"Withdraw","anonymous":false,"inputs":[{"name":"sender","type":"address","indexed":true},{"name":"receiver","type":"address","indexed":true},{"name":"owner","type":"address","indexed":true},{"name":"assets","type":"uint256"},{"name":"shares","type":"uint256"}]}
+]`
+
+func decodeBOLDAssetEvent(l types.Log, vault common.Address, from, to uint64) (BOLDAssetEvent, error) {
+	e := BOLDAssetEvent{BlockNumber: l.BlockNumber, BlockHash: l.BlockHash, TransactionHash: l.TxHash, TransactionIndex: l.TxIndex, LogIndex: l.Index}
+	if err := boldResearchValidateLog(l, from, to); err != nil {
+		return e, err
 	}
-	if len(points) != 3 || end <= start || points[0].RequestedTimestamp != start || points[2].RequestedTimestamp != end {
-		return fail()
+	a, _ := abi.JSON(strings.NewReader(boldCapitalEventABI))
+	event, n := a.Events["Deposit"], 3
+	e.Kind = "deposit"
+	if l.Topics[0] == a.Events["Withdraw"].ID {
+		event, n, e.Kind = a.Events["Withdraw"], 4, "withdraw"
 	}
-	capital, rewardPrice := decimal.Zero, decimal.Zero
+	if l.Address != vault || l.Topics[0] != event.ID || len(l.Topics) != n || len(l.Data) != 64 {
+		return e, boldCampaignFailure("historical_asset_event_invalid")
+	}
+	for _, topic := range l.Topics[1:] {
+		if _, ok := boldResearchAddress(topic); !ok {
+			return e, boldCampaignFailure("historical_asset_event_invalid")
+		}
+	}
+	assets, shares := new(big.Int).SetBytes(l.Data[:32]), new(big.Int).SetBytes(l.Data[32:])
+	e.AssetsRaw, e.SharesRaw = assets.String(), shares.String()
+	if assets.BitLen() > 128 || shares.BitLen() > 128 {
+		return e, boldCampaignFailure("historical_asset_event_model_unsupported")
+	}
+	// resumeVault repositions existing LP and deliberately mints zero shares.
+	if e.Kind == "deposit" && l.Topics[2] == (common.Hash{}) && shares.Sign() == 0 {
+		e.Kind = "resume"
+	} else if assets.Cmp(shares) != 0 || l.Topics[n-1] == (common.Hash{}) {
+		return e, boldCampaignFailure("historical_asset_event_model_unsupported")
+	}
+	return e, nil
+}
+
+func (v *boldPublishedResolver) readAssetHistory(ctx context.Context, vault common.Address, points []BOLDHistoricalSample, history *BOLDAssetHistory) error {
+	if v.run == nil || len(points) != 3 {
+		return boldCampaignFailure("historical_asset_history_unavailable")
+	}
+	history.FromBlock, history.ToBlock = points[0].BlockNumber+1, points[2].BlockNumber
+	if history.ToBlock < points[0].BlockNumber || history.ToBlock-points[0].BlockNumber > 240000 {
+		return boldCampaignFailure("historical_asset_history_range_exceeded")
+	}
+	// Logs cover a period earlier than the funding scan. Bind both history ends
+	// to the state RPC, including empty history; no fallback to a different fork.
+	for _, p := range []BOLDHistoricalSample{points[0], points[2]} {
+		if v.run.report.RPCRequests >= boldHistoricalReadLimit {
+			return boldCampaignFailure("bold_campaign_rpc_budget_exceeded")
+		}
+		h, err := v.run.header(ctx, v.run.owner.logs.HeaderByNumber, p.BlockNumber)
+		if err != nil {
+			return boldCampaignFailure("historical_asset_logs_unavailable")
+		}
+		if h.Hash() != p.BlockHash {
+			return boldCampaignFailure("historical_asset_history_reorganized")
+		}
+	}
+	a, _ := abi.JSON(strings.NewReader(boldCapitalEventABI))
+	seen := map[string]types.Log{}
+	logs := []types.Log{}
+	for from := history.FromBlock; from <= history.ToBlock; {
+		to := from + 1499
+		if to > history.ToBlock {
+			to = history.ToBlock
+		}
+		if v.run.report.RPCRequests >= boldHistoricalReadLimit {
+			return boldCampaignFailure("bold_campaign_rpc_budget_exceeded")
+		}
+		if err := v.run.reserve(ctx); err != nil {
+			return err
+		}
+		batch, err := v.run.owner.logs.FilterLogs(ctx, ethereum.FilterQuery{FromBlock: new(big.Int).SetUint64(from), ToBlock: new(big.Int).SetUint64(to), Addresses: []common.Address{vault}, Topics: [][]common.Hash{{a.Events["Deposit"].ID, a.Events["Withdraw"].ID}}})
+		if err != nil {
+			return boldCampaignFailure("historical_asset_logs_unavailable")
+		}
+		if len(batch) > boldCapitalMaxEvents {
+			return boldCampaignFailure("historical_asset_event_limit_exceeded")
+		}
+		for _, l := range batch {
+			if _, err := decodeBOLDAssetEvent(l, vault, from, to); err != nil {
+				return err
+			}
+			// A log index is unique across the whole block, not just its transaction.
+			key := new(big.Int).SetUint64(l.BlockNumber).String() + ":" + new(big.Int).SetUint64(uint64(l.Index)).String()
+			if prior, ok := seen[key]; ok {
+				if !boldResearchSameLog(prior, l) {
+					return boldCampaignFailure("historical_asset_event_conflict")
+				}
+				continue
+			}
+			seen[key] = l
+			logs = append(logs, l)
+			if len(logs) > boldCapitalMaxEvents {
+				return boldCampaignFailure("historical_asset_event_limit_exceeded")
+			}
+		}
+		from = to + 1
+	}
+	sort.Slice(logs, func(i, j int) bool {
+		if logs[i].BlockNumber != logs[j].BlockNumber {
+			return logs[i].BlockNumber < logs[j].BlockNumber
+		}
+		return logs[i].Index < logs[j].Index
+	})
+	if v.assetBlocks == nil {
+		v.assetBlocks = map[uint64]bool{}
+	}
+	for _, l := range logs {
+		if !v.assetBlocks[l.BlockNumber] && len(v.assetBlocks) >= boldCapitalMaxBlocks {
+			return boldCampaignFailure("historical_asset_block_limit_exceeded")
+		}
+		h, err := v.readHeader(ctx, l.BlockNumber)
+		if err != nil {
+			return err
+		}
+		if h.Hash() != l.BlockHash || h.Time <= points[0].RequestedTimestamp || h.Time > points[2].RequestedTimestamp {
+			return boldCampaignFailure("historical_asset_event_block_mismatch")
+		}
+		v.assetBlocks[l.BlockNumber] = true
+		v.anchors[l.BlockNumber] = h.Hash()
+		e, _ := decodeBOLDAssetEvent(l, vault, history.FromBlock, history.ToBlock)
+		e.BlockTimestamp = h.Time
+		history.Events = append(history.Events, e)
+	}
+	history.ScanComplete = true
+	return nil
+}
+
+// Exact integer LP replay at observed block times. Only USD prices are
+// interpolated. No three-point interpolation of asset balances is permitted.
+func integrateBOLDCapital(points []BOLDHistoricalSample, history *BOLDAssetHistory, start, end uint64) (decimal.Decimal, decimal.Decimal, error) {
+	fail := func(code string) (decimal.Decimal, decimal.Decimal, error) {
+		return decimal.Zero, decimal.Zero, boldCampaignFailure(code)
+	}
+	if history == nil || !history.ScanComplete || len(points) != 3 || end <= start || points[0].RequestedTimestamp != start || points[2].RequestedTimestamp != end {
+		return fail("historical_samples_invalid")
+	}
+	lpPrices := make([]decimal.Decimal, 3)
+	rewardPrices := make([]decimal.Decimal, 3)
+	amounts := make([]*big.Int, 3)
 	for i, p := range points {
-		tvl, err := decimal.NewFromString(p.TVLUSD)
-		if err != nil || tvl.IsNegative() {
-			return fail()
+		var err error
+		lpPrices[i], err = decimal.NewFromString(p.LPUSD)
+		if err != nil || !lpPrices[i].IsPositive() {
+			return fail("historical_samples_invalid")
 		}
-		price, err := decimal.NewFromString(p.RewardUSD)
-		if err != nil || !price.IsPositive() {
-			return fail()
+		rewardPrices[i], err = decimal.NewFromString(p.RewardUSD)
+		if err != nil || !rewardPrices[i].IsPositive() {
+			return fail("historical_samples_invalid")
 		}
-		if i == 0 {
+		amount, err := decimal.NewFromString(p.AssetAmount)
+		if err != nil || amount.IsNegative() || !amount.Shift(18).Equal(amount.Shift(18).Truncate(0)) {
+			return fail("historical_samples_invalid")
+		}
+		amounts[i] = amount.Shift(18).BigInt()
+		if amounts[i].BitLen() > 128 || (i > 0 && (p.RequestedTimestamp <= points[i-1].RequestedTimestamp || p.BlockNumber < points[i-1].BlockNumber)) {
+			return fail("historical_samples_invalid")
+		}
+	}
+	current := new(big.Int).Set(amounts[0])
+	check := func(i int) bool {
+		matched := current.Cmp(amounts[i]) == 0
+		history.Checkpoints = append(history.Checkpoints, BOLDAssetCheckpoint{BlockNumber: points[i].BlockNumber, ObservedRaw: amounts[i].String(), ReconstructedRaw: current.String(), Matched: matched})
+		return matched
+	}
+	check(0)
+	cursor := 0
+	for i := 1; i < 3; i++ {
+		for cursor < len(history.Events) && history.Events[cursor].BlockNumber <= points[i].BlockNumber {
+			e := &history.Events[cursor]
+			if e.BlockNumber <= points[0].BlockNumber || e.BlockNumber > points[2].BlockNumber || e.BlockTimestamp <= start || e.BlockTimestamp > end {
+				return fail("historical_asset_event_block_mismatch")
+			}
+			if cursor > 0 {
+				q := history.Events[cursor-1]
+				if e.BlockNumber < q.BlockNumber || e.BlockTimestamp < q.BlockTimestamp || (e.BlockNumber == q.BlockNumber && (e.LogIndex <= q.LogIndex || e.TransactionIndex < q.TransactionIndex || e.BlockTimestamp != q.BlockTimestamp)) {
+					return fail("historical_asset_event_order_invalid")
+				}
+			}
+			n, err := boldPublicationUint(e.SharesRaw)
+			if err != nil {
+				return fail("historical_asset_event_invalid")
+			}
+			assets, err := boldPublicationUint(e.AssetsRaw)
+			if err != nil || n.BitLen() > 128 || assets.BitLen() > 128 {
+				return fail("historical_asset_event_invalid")
+			}
+			switch e.Kind {
+			case "deposit":
+				if assets.Cmp(n) != 0 {
+					return fail("historical_asset_event_model_unsupported")
+				}
+				current.Add(current, n)
+			case "withdraw":
+				if assets.Cmp(n) != 0 {
+					return fail("historical_asset_event_model_unsupported")
+				}
+				current.Sub(current, n)
+			case "resume":
+				if n.Sign() != 0 {
+					return fail("historical_asset_event_model_unsupported")
+				}
+			default:
+				return fail("historical_asset_event_model_unsupported")
+			}
+			if current.Sign() < 0 || current.BitLen() > 128 {
+				return fail("historical_asset_balance_invalid")
+			}
+			e.AssetsAfterRaw = current.String()
+			cursor++
+		}
+		if !check(i) {
+			return fail("historical_assets_not_reconciled")
+		}
+	}
+	if cursor != len(history.Events) {
+		return fail("historical_asset_event_order_invalid")
+	}
+	// Split at price knots and every event time, preserving sudden LP changes.
+	times := []uint64{start, points[1].RequestedTimestamp, end}
+	for _, e := range history.Events {
+		times = append(times, e.BlockTimestamp)
+	}
+	sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
+	usdAt := func(t uint64) decimal.Decimal {
+		i := 0
+		if t > points[1].RequestedTimestamp {
+			i = 1
+		}
+		offset := decimal.NewFromInt(int64(t - points[i].RequestedTimestamp))
+		span := decimal.NewFromInt(int64(points[i+1].RequestedTimestamp - points[i].RequestedTimestamp))
+		return lpPrices[i].Add(lpPrices[i+1].Sub(lpPrices[i]).Mul(offset).DivRound(span, 36))
+	}
+	capital, lpSeconds := decimal.Zero, decimal.Zero
+	current.Set(amounts[0])
+	cursor = 0
+	for i := 1; i < len(times); i++ {
+		left, right := times[i-1], times[i]
+		if right == left {
 			continue
 		}
-		q := points[i-1]
-		if p.RequestedTimestamp <= q.RequestedTimestamp {
-			return fail()
+		for cursor < len(history.Events) && history.Events[cursor].BlockTimestamp <= left {
+			current.SetString(history.Events[cursor].AssetsAfterRaw, 10)
+			cursor++
 		}
-		previousTVL, err := decimal.NewFromString(q.TVLUSD)
-		if err != nil {
-			return fail()
-		}
-		previousPrice, err := decimal.NewFromString(q.RewardUSD)
-		if err != nil {
-			return fail()
-		}
-		seconds := decimal.NewFromBigInt(new(big.Int).SetUint64(p.RequestedTimestamp-q.RequestedTimestamp), 0)
-		capital = capital.Add(previousTVL.Add(tvl).Mul(seconds).Div(decimal.NewFromInt(2)))
-		rewardPrice = rewardPrice.Add(previousPrice.Add(price).Mul(seconds).Div(decimal.NewFromInt(2)))
+		weight := decimal.NewFromBigInt(current, -18).Mul(decimal.NewFromInt(int64(right - left)))
+		lpSeconds = lpSeconds.Add(weight)
+		capital = capital.Add(weight.Mul(usdAt(left).Add(usdAt(right))).Div(decimal.NewFromInt(2)))
 	}
+	lpText := lpSeconds.String()
+	history.LPSeconds = &lpText
+	history.Status = "reconciled"
 	if !capital.IsPositive() {
-		return decimal.Zero, decimal.Zero, boldCampaignFailure("historical_capital_is_zero")
+		return fail("historical_capital_is_zero")
 	}
-	return capital, rewardPrice.Div(decimal.NewFromBigInt(new(big.Int).SetUint64(end-start), 0)), nil
+	reward := decimal.Zero
+	for i := 1; i < 3; i++ {
+		reward = reward.Add(rewardPrices[i-1].Add(rewardPrices[i]).Mul(decimal.NewFromInt(int64(points[i].RequestedTimestamp - points[i-1].RequestedTimestamp))).Div(decimal.NewFromInt(2)))
+	}
+	return capital, reward.DivRound(decimal.NewFromInt(int64(end-start)), 36), nil
 }
 
 func (v *boldPublishedResolver) readHeader(ctx context.Context, n uint64) (*types.Header, error) {
@@ -1215,7 +1483,7 @@ func (v *boldPublishedResolver) sample(ctx context.Context, t uint64) (BOLDHisto
 		return p, boldCampaignFailure("bold_campaign_rpc_budget_exceeded")
 	}
 	lp := common.HexToAddress("0xefc6516323fbd28e80b85a497b65a86243a54b3e")
-	values, err := v.run.batchAt(ctx, p.BlockNumber, []snapshotRead{readContract(v.run.report.Vault, boldHistoricalVaultABI, "asset"), readContract(v.run.report.Vault, rewardVaultERC4626ABI, "totalAssets"), readContract(lp, erc20DecimalsABI, "decimals")})
+	values, err := v.run.batchAt(ctx, p.BlockNumber, []snapshotRead{readContract(v.run.report.Vault, boldHistoricalVaultABI, "asset"), readContract(v.run.report.Vault, rewardVaultERC4626ABI, "totalAssets"), readContract(lp, erc20DecimalsABI, "decimals"), readContract(v.run.report.Vault, erc20TotalSupplyABI, "totalSupply"), readContract(v.run.report.Vault, rewardVaultERC4626ABI, "convertToAssets", big.NewInt(1000000000000000000))})
 	if err != nil {
 		return p, boldCampaignFailure("historical_vault_state_unavailable")
 	}
@@ -1223,8 +1491,16 @@ func (v *boldPublishedResolver) sample(ctx context.Context, t uint64) (BOLDHisto
 		return p, boldCampaignFailure("historical_asset_identity_mismatch")
 	}
 	n, ok := values[1][0].(*big.Int)
-	if !ok || n == nil || n.Sign() < 0 {
+	if !ok || n == nil || n.Sign() < 0 || n.BitLen() > 128 {
 		return p, boldCampaignFailure("historical_assets_invalid")
+	}
+	if len(values[3]) != 1 || len(values[4]) != 1 {
+		return p, boldCampaignFailure("historical_vault_model_unsupported")
+	}
+	supply, sok := values[3][0].(*big.Int)
+	converted, cok := values[4][0].(*big.Int)
+	if !sok || !cok || supply == nil || converted == nil || supply.Cmp(n) != 0 || converted.Cmp(big.NewInt(1000000000000000000)) != 0 {
+		return p, boldCampaignFailure("historical_vault_model_unsupported")
 	}
 	assets := decimal.NewFromBigInt(n, -18)
 	p.AssetAmount = assets.String()

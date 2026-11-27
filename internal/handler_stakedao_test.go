@@ -440,7 +440,10 @@ func TestBOLDCampaignSwaggerRouteIsSeparateAndReturnsShareableJSON(t *testing.T)
 			}
 		}
 		Definitions map[string]struct {
-			Properties map[string]struct{ Type string }
+			Properties map[string]struct {
+				Type string
+				Ref  string `json:"$ref"`
+			}
 		}
 	}
 	if swagger.Code != 200 || json.Unmarshal(swagger.Body.Bytes(), &spec) != nil {
@@ -449,6 +452,9 @@ func TestBOLDCampaignSwaggerRouteIsSeparateAndReturnsShareableJSON(t *testing.T)
 	operation := spec.Paths["/reservesStakedao/{network}/bold-campaigns"].Get
 	if operation.OperationID != "getStakeDaoBOLDCampaigns" || len(operation.Parameters) != 3 || spec.Definitions["stakedao.BOLDCampaignReport"].Properties["blockHash"].Type != "string" {
 		t.Fatal("Swagger is missing the callable BOLD method or correct JSON hash type")
+	}
+	if spec.Definitions["stakedao.BOLDHistoricalValuation"].Properties["assetHistory"].Ref != "#/definitions/stakedao.BOLDAssetHistory" || spec.Definitions["stakedao.BOLDAssetCheckpoint"].Properties["matched"].Type != "boolean" || spec.Definitions["stakedao.BOLDAssetEvent"].Properties["transactionHash"].Type != "string" {
+		t.Fatal("Swagger lost capital history schemas")
 	}
 	for _, p := range operation.Parameters {
 		if !p.Required || p.Name != "network" && p.Default == nil {
@@ -464,7 +470,7 @@ func TestBOLDCampaignSwaggerRouteIsSeparateAndReturnsShareableJSON(t *testing.T)
 		return &stakedao.BOLDCampaignReport{ScanComplete: true, FromBlock: from, BlockNumber: block, Status: "funding_verified_allocation_unavailable",
 			Gauge: common.HexToAddress("0x07a01471fa544d9c6531b631e6a96a79a9ad05e9"),
 			Campaigns: []stakedao.BOLDCampaignRecord{
-				{ID: 2593, FundingStatus: "verified_router_campaign_funding", AllocationStatus: "unavailable", Reasons: []string{"allocation_rules_unverified"}},
+				{ID: 2593, FundingStatus: "verified_router_campaign_funding", AllocationStatus: "published_allocation_verified", Reasons: []string{"historical_assets_not_reconciled"}, Allocation: &stakedao.BOLDAllocationEvidence{Valuation: &stakedao.BOLDHistoricalValuation{Status: "unavailable", AssetHistory: &stakedao.BOLDAssetHistory{Status: "unavailable", ScanComplete: true, Checkpoints: []stakedao.BOLDAssetCheckpoint{{BlockNumber: 26445000, ObservedRaw: "100", ReconstructedRaw: "200", Matched: false}}}}}},
 				{ID: 2594, FundingStatus: "verified_router_campaign_funding", AllocationStatus: "unavailable", Reasons: []string{"allocation_rules_unverified"}},
 			}}, nil
 	}
@@ -477,6 +483,10 @@ func TestBOLDCampaignSwaggerRouteIsSeparateAndReturnsShareableJSON(t *testing.T)
 	}
 	if !strings.Contains(response.Body.String(), `"historicalApr":null`) || !strings.Contains(response.Body.String(), `"currentApr":null`) || strings.Contains(response.Body.String(), `"pools"`) || !strings.HasPrefix(response.Header().Get("Content-Type"), "application/json") {
 		t.Fatal("nullable research JSON was mixed with pool response")
+	}
+	history := report.Campaigns[0].Allocation.Valuation.AssetHistory
+	if history == nil || !history.ScanComplete || len(history.Checkpoints) != 1 || history.Checkpoints[0].Matched || history.Checkpoints[0].ReconstructedRaw != "200" {
+		t.Fatal("capital diagnostic evidence lost in HTTP JSON")
 	}
 	for _, query := range []string{"", "fromBlock=1", "block=2", "fromBlock=0&block=1", "fromBlock=-1&block=2", "fromBlock=2&block=1", "fromBlock=1&block=240001", "fromBlock=1&block=0x10", "fromBlock=1&block=latest", "fromBlock=1&block=18446744073709551616", "fromBlock=1&block=2&block=3", "fromBlock=1&fromBlock=2&block=3"} {
 		response = httptest.NewRecorder()
